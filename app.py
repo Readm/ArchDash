@@ -1,0 +1,313 @@
+import dash
+from dash import html, dcc, callback, Output, Input, State, ctx, MATCH, ALL
+import dash_bootstrap_components as dbc
+from models import CalculationGraph, Node, Parameter
+from typing import Dict, Optional
+
+class IDMapper:
+    """管理 Model ID 到 Dash ID 和 HTML ID 的映射"""
+    def __init__(self):
+        self._node_mapping: Dict[str, Dict] = {}
+
+    def register_node(self, node_id: str, name: str) -> None:
+        """注册节点 ID 映射"""
+        self._node_mapping[node_id] = {
+            "name": name,
+            "dash_id": {"type": "node", "index": node_id},
+            "html_id": f"node-{node_id}"
+        }
+
+    def get_dash_id(self, node_id: str) -> Dict:
+        """获取 Dash ID"""
+        return self._node_mapping[node_id]["dash_id"]
+
+    def get_html_id(self, node_id: str) -> str:
+        """获取 HTML ID"""
+        return self._node_mapping[node_id]["html_id"]
+
+    def get_node_name(self, node_id: str) -> str:
+        """获取节点名称"""
+        return self._node_mapping[node_id]["name"]
+
+    def get_node_id_from_dash(self, dash_id: Dict) -> Optional[str]:
+        """从 Dash ID 获取节点 ID"""
+        try:
+            return dash_id["index"]
+        except (KeyError, TypeError):
+            return None
+
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+
+# 全局数据模型
+graph = CalculationGraph()
+id_mapper = IDMapper()
+
+# 画布更新函数
+def update_canvas(node_data):
+    canvas_content = []
+    for i in range(node_data["columns"]):
+        col_content = []
+        for node_id, data in node_data["nodes"].items():
+            if data["col"] == i:
+                node_name = id_mapper.get_node_name(node_id)
+                # 获取参数列表
+                node = graph.nodes.get(node_id)
+                param_rows = []
+                if node and hasattr(node, "parameters"):
+                    for i, param in enumerate(node.parameters):
+                        param_rows.append(
+                            html.Tr([
+                                html.Td(
+                                    dcc.Input(
+                                        id={"type": "param-name", "node": node_id, "index": i},
+                                        value=param.name,
+                                        style={"width": "100%", "border": "none", "background": "transparent", "fontWeight": "bold"}
+                                    ),
+                                    style={"paddingRight": "8px", "width": "50%"}
+                                ),
+                                html.Td(
+                                    dcc.Input(
+                                        id={"type": "param-value", "node": node_id, "index": i},
+                                        value=str(param.value),
+                                        style={"width": "100%", "border": "none", "background": "transparent"}
+                                    ),
+                                    style={"width": "50%"}
+                                )
+                            ])
+                        )
+                param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.95em", "marginTop": "4px"}) if param_rows else None
+                node_div = html.Div(
+                    [
+                        html.Div([
+                            html.Div(f"节点: {node_name}", className="node-name"),
+                            html.Button("⋮", id={"type": "node-menu", "index": node_id}, className="btn btn-sm btn-link", style={"float": "right", "padding": "0 4px"})
+                        ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
+                        param_table,
+                        html.Div(id=f"node-content-{node_id}", className="node-content")
+                    ],
+                    className="p-2 border m-2 node-container",
+                    id=id_mapper.get_dash_id(node_id),  # Dash Pattern-Matching ID
+                    **{"data-col": data["col"], "data-html-id": id_mapper.get_html_id(node_id)}
+                )
+                col_content.append(node_div)
+        canvas_content.append(dbc.Col(col_content, width=12 // node_data["columns"]))
+    return dbc.Row(canvas_content)
+
+app.layout = dbc.Container([
+    html.H1("ArchDash", className="text-center my-4"),
+    dbc.Row([
+        dbc.Col([
+            html.Div([
+                html.Label("节点名称："),
+                dcc.Input(id="node-name", type="text", placeholder="请输入节点名称"),
+                html.Button("添加节点", id="add-node-button", className="btn btn-primary mt-2"),
+            ]),
+        ], width=6),
+        dbc.Col([
+            html.Div(id="output-result", className="mt-4"),
+        ], width=6),
+    ]),
+    dbc.Row([
+        dbc.Col([
+            html.Div(id="canvas-container", className="border p-3 mt-4", style={"height": "400px", "background-color": "#f8f9fa"}),
+        ], width=12),
+    ]),
+    dbc.Row([
+        dbc.Col([
+            html.Button("添加列", id="add-column-button", className="btn btn-primary mt-2"),
+        ], width=12),
+    ]),
+    dcc.Store(id="node-data", data={"nodes": {}, "columns": 1}),
+    dcc.Store(id="context-menu-data", data={"node": None, "action": None}),
+    dbc.Modal([
+        dbc.ModalHeader("节点操作"),
+        dbc.ModalBody([
+            dbc.Button("左移", id="move-left", className="btn btn-primary m-2"),
+            dbc.Button("右移", id="move-right", className="btn btn-primary m-2"),
+            dbc.Button("添加参数", id="add-param", className="btn btn-primary m-2"),
+        ]),
+    ], id="context-menu", is_open=False),
+], fluid=True)
+
+# 添加自定义CSS样式
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            .node-container {
+                background-color: white;
+                border-radius: 4px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                transition: all 0.3s ease;
+            }
+            .node-container:hover {
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                cursor: pointer;
+            }
+            .node-name {
+                font-weight: bold;
+                margin-bottom: 4px;
+            }
+            .node-content {
+                font-size: 0.9em;
+                color: #666;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+@callback(
+    Output("output-result", "children"),
+    Output("node-data", "data"),
+    Output("canvas-container", "children"),
+    Output("context-menu", "is_open"),
+    Input("add-node-button", "n_clicks"),
+    Input("add-column-button", "n_clicks"),
+    Input("context-menu-data", "data"),
+    Input("move-left", "n_clicks"),
+    Input("move-right", "n_clicks"),
+    Input("add-param", "n_clicks"),
+    State("node-name", "value"),
+    State("node-data", "data"),
+    prevent_initial_call=True
+)
+def update_output(n_clicks, add_column, context_menu_data, move_left, move_right, add_param, node_name, node_data):
+    if ctx.triggered_id == "add-node-button":
+        if not node_name:
+            return "请输入节点名称", node_data, [], False
+        
+        # 添加节点到数据模型
+        node = Node(name=node_name, description=f"节点 {node_name}")
+        graph.add_node(node)
+        id_mapper.register_node(node.id, node_name)
+        
+        # 更新节点数据
+        node_data["nodes"][node.id] = {"col": 0}
+        
+        # 更新画布
+        return f"节点 {node_name} 已添加", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "add-column-button":
+        node_data["columns"] += 1
+        return f"已添加新列，当前列数: {node_data['columns']}", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "context-menu-data":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        return "请选择操作", node_data, update_canvas(node_data), True
+    
+    elif ctx.triggered_id == "move-left":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        if node_data["nodes"][node_id]["col"] > 0:
+            node_data["nodes"][node_id]["col"] -= 1
+        node_name = id_mapper.get_node_name(node_id)
+        return f"节点 {node_name} 已左移", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "move-right":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        if node_data["nodes"][node_id]["col"] < node_data["columns"] - 1:
+            node_data["nodes"][node_id]["col"] += 1
+        node_name = id_mapper.get_node_name(node_id)
+        return f"节点 {node_name} 已右移", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "add-param":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        node_name = id_mapper.get_node_name(node_id)
+        param = Parameter(name="test_param", value=0.0, unit="V", description=f"参数 {node_name}")
+        graph.nodes[node_id].add_parameter(param)
+        return f"参数 test_param 已添加到节点 {node_name}", node_data, update_canvas(node_data), False
+
+@callback(
+    Output("context-menu-data", "data"),
+    Input({"type": "node-menu", "index": ALL}, "n_clicks"),
+    State({"type": "node-menu", "index": ALL}, "id"),
+    prevent_initial_call=True
+)
+def show_context_menu(menu_clicks_list, menu_ids):
+    if not ctx.triggered_id:
+        return {"node": None, "action": None}
+    
+    # 获取被点击的节点ID
+    triggered_id = ctx.triggered_id
+    if isinstance(triggered_id, dict):
+        if triggered_id["type"] == "node-menu":
+            node_id = triggered_id["index"]
+        else:
+            node_id = None
+    else:
+        import ast
+        try:
+            node_id = ast.literal_eval(triggered_id.replace(".n_clicks", ""))["index"]
+        except Exception:
+            node_id = None
+    
+    if node_id is None:
+        return {"node": None, "action": None}
+    
+    return {"node": node_id, "action": "show-menu"}
+
+# 添加参数更新回调
+@callback(
+    Output("node-data", "data", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
+    Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
+    State("node-data", "data"),
+    prevent_initial_call=True
+)
+def update_parameter(param_names, param_values, node_data):
+    if not ctx.triggered_id:
+        return node_data, update_canvas(node_data)
+    
+    triggered_id = ctx.triggered_id
+    if isinstance(triggered_id, dict):
+        node_id = triggered_id["node"]
+        param_index = triggered_id["index"]
+        param_type = triggered_id["type"]
+        
+        # 获取节点
+        node = graph.nodes.get(node_id)
+        if node and param_index < len(node.parameters):
+            if param_type == "param-name":
+                # 更新参数名
+                new_name = ctx.triggered[0]["value"]
+                if new_name:
+                    node.parameters[param_index].name = new_name
+            elif param_type == "param-value":
+                # 更新参数值
+                new_value = ctx.triggered[0]["value"]
+                try:
+                    # 尝试转换为数字
+                    if '.' in str(new_value):
+                        node.parameters[param_index].value = float(new_value)
+                    else:
+                        node.parameters[param_index].value = int(new_value)
+                except (ValueError, TypeError):
+                    # 如果转换失败，保存为字符串
+                    node.parameters[param_index].value = str(new_value)
+    
+    return node_data, update_canvas(node_data)
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=8050) 

@@ -1,0 +1,2 @@
+# Cursor 规则
+每次修改完代码都要执行测试。pytest test_models.py
