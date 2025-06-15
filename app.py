@@ -3,6 +3,7 @@ from dash import html, dcc, callback, Output, Input, State, ctx, MATCH, ALL
 import dash_bootstrap_components as dbc
 from models import CalculationGraph, Node, Parameter
 from typing import Dict, Optional
+import json
 
 class IDMapper:
     """管理 Model ID 到 Dash ID 和 HTML ID 的映射"""
@@ -61,7 +62,8 @@ def update_canvas(node_data):
                                     dcc.Input(
                                         id={"type": "param-name", "node": node_id, "index": i},
                                         value=param.name,
-                                        style={"width": "100%", "border": "none", "background": "transparent", "fontWeight": "bold"}
+                                        style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
+                                        className="param-input"
                                     ),
                                     style={"paddingRight": "8px", "width": "50%"}
                                 ),
@@ -69,7 +71,8 @@ def update_canvas(node_data):
                                     dcc.Input(
                                         id={"type": "param-value", "node": node_id, "index": i},
                                         value=str(param.value),
-                                        style={"width": "100%", "border": "none", "background": "transparent"}
+                                        style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
+                                        className="param-input"
                                     ),
                                     style={"width": "50%"}
                                 )
@@ -86,8 +89,8 @@ def update_canvas(node_data):
                         html.Div(id=f"node-content-{node_id}", className="node-content")
                     ],
                     className="p-2 border m-2 node-container",
-                    id=id_mapper.get_dash_id(node_id),  # Dash Pattern-Matching ID
-                    **{"data-col": data["col"], "data-html-id": id_mapper.get_html_id(node_id)}
+                    id=id_mapper.get_html_id(node_id),  # 使用HTML ID作为主ID
+                    **{"data-col": data["col"], "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
                 )
                 col_content.append(node_div)
         canvas_content.append(dbc.Col(col_content, width=12 // node_data["columns"]))
@@ -147,7 +150,16 @@ app.index_string = '''
             }
             .node-container:hover {
                 box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                cursor: pointer;
+            }
+            .param-input:hover {
+                border: 1px solid #ddd !important;
+                background: #f8f9fa !important;
+            }
+            .param-input:focus {
+                outline: none !important;
+                border: 2px solid #007bff !important;
+                background: white !important;
+                box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25) !important;
             }
             .node-name {
                 font-weight: bold;
@@ -270,7 +282,6 @@ def show_context_menu(menu_clicks_list, menu_ids):
 # 添加参数更新回调
 @callback(
     Output("node-data", "data", allow_duplicate=True),
-    Output("canvas-container", "children", allow_duplicate=True),
     Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
     Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
     State("node-data", "data"),
@@ -278,7 +289,7 @@ def show_context_menu(menu_clicks_list, menu_ids):
 )
 def update_parameter(param_names, param_values, node_data):
     if not ctx.triggered_id:
-        return node_data, update_canvas(node_data)
+        return node_data
     
     triggered_id = ctx.triggered_id
     if isinstance(triggered_id, dict):
@@ -307,7 +318,8 @@ def update_parameter(param_names, param_values, node_data):
                     # 如果转换失败，保存为字符串
                     node.parameters[param_index].value = str(new_value)
     
-    return node_data, update_canvas(node_data)
+    # 不重新渲染画布，只更新数据
+    return node_data
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050) 
