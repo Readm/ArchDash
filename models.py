@@ -21,15 +21,55 @@ class Parameter:
         calculation_func: 计算函数（字符串形式）
         dependencies: 依赖参数列表
         history: 参数历史记录
+        _graph: 所属的计算图（用于自动更新传播）
     """
     name: str
-    value: T
     unit: str
     description: str = ""
     confidence: float = 1.0
     calculation_func: Optional[str] = None
     dependencies: List['Parameter'] = field(default_factory=list)
     history: List[Dict[str, Any]] = field(default_factory=list)
+    _value: T = 0.0  # 内部值存储
+    _graph: Optional['CalculationGraph'] = field(default=None, repr=False)  # 计算图引用
+    
+    def __init__(self, name: str, value: T = 0.0, unit: str = "", **kwargs):
+        self.name = name
+        self._value = value
+        self.unit = unit
+        self.description = kwargs.get('description', "")
+        self.confidence = kwargs.get('confidence', 1.0)
+        self.calculation_func = kwargs.get('calculation_func', None)
+        self.dependencies = kwargs.get('dependencies', [])
+        self.history = kwargs.get('history', [])
+        self._graph = kwargs.get('_graph', None)
+    
+    @property
+    def value(self) -> T:
+        """获取参数值"""
+        return self._value
+    
+    @value.setter 
+    def value(self, new_value: T):
+        """设置参数值并触发数据流更新"""
+        old_value = self._value
+        self._value = new_value
+        
+        # 如果值确实发生了变化并且有关联的计算图，触发更新传播
+        if old_value != new_value and self._graph is not None:
+            try:
+                update_result = self._graph.propagate_updates(self)
+                if update_result:
+                    print(f"🔄 数据流更新: {self.name} 值从 {old_value} 变为 {new_value}")
+                    for update_info in update_result:
+                        param = update_info['param']
+                        print(f"   └── {param.name}: {update_info['old_value']} → {update_info['new_value']}")
+            except Exception as e:
+                print(f"⚠️ 更新传播失败: {e}")
+    
+    def set_graph(self, graph: 'CalculationGraph'):
+        """设置参数所属的计算图"""
+        self._graph = graph
     
     def validate(self) -> bool:
         """验证参数值是否有效"""
@@ -67,16 +107,28 @@ class Parameter:
             if dep.value is None:
                 raise ValueError(f"依赖参数 {dep.name} 的值缺失")
         
+        # 设置较为宽松的计算环境，允许常用模块和函数
+        import math
+        import builtins
+        
+        # 创建安全但功能完整的全局环境
+        safe_globals = {
+            '__builtins__': builtins.__dict__.copy(),  # 允许所有内置函数
+            'math': math,
+            'datetime': datetime,
+        }
+        
         local_env = {
-            'self': self,
             'dependencies': self.dependencies,
             'value': self.value,
-            'datetime': datetime
+            'datetime': datetime,
+            'self': self
         }
+        
         try:
             # 如果计算函数是字符串，则使用exec执行
             if isinstance(self.calculation_func, str):
-                exec(self.calculation_func, {"__builtins__": {}}, local_env)
+                exec(self.calculation_func, safe_globals, local_env)
                 result = local_env.get('result', None)
                 if result is None:
                     raise ValueError("计算函数未设置result变量作为输出")
@@ -187,6 +239,10 @@ class CalculationGraph:
     def __init__(self):
         self.nodes = {}
         self.dependencies = {}
+        # 新增：反向依赖图，记录哪些参数依赖于当前参数
+        self._dependents_map = {}  # param_id -> [dependent_param_ids]
+        # 新增：所有参数的全局映射，便于快速查找
+        self._all_parameters = {}  # param_id -> parameter_object
 
     def add_node(self, node: Node) -> None:
         if node.id in self.nodes:
@@ -198,6 +254,179 @@ class CalculationGraph:
                 raise ValueError(f"Node with name '{node.name}' already exists.")
         
         self.nodes[node.id] = node
+        
+        # 将节点的所有参数添加到全局参数映射，并设置graph引用
+        for param in node.parameters:
+            param_id = id(param)  # 使用内存地址作为唯一ID
+            self._all_parameters[param_id] = param
+            self._dependents_map[param_id] = []
+            # 为参数设置计算图引用，启用自动数据流更新
+            param.set_graph(self)
+        
+        # 构建反向依赖图
+        self._rebuild_dependency_graph()
+
+    def add_parameter_to_node(self, node_id: str, param: 'Parameter'):
+        """向现有节点添加参数"""
+        if node_id in self.nodes:
+            node = self.nodes[node_id]
+            node.add_parameter(param)
+            
+            # 添加到全局参数映射
+            param_id = id(param)
+            self._all_parameters[param_id] = param
+            self._dependents_map[param_id] = []
+            # 设置graph引用
+            param.set_graph(self)
+            
+            # 重新构建依赖图
+            self._rebuild_dependency_graph()
+
+    def update_parameter_dependencies(self, param):
+        """更新单个参数的依赖关系"""
+        param_id = id(param)
+        
+        # 确保参数在全局映射中
+        if param_id not in self._all_parameters:
+            self._all_parameters[param_id] = param
+            self._dependents_map[param_id] = []
+            # 设置graph引用
+            param.set_graph(self)
+        
+        # 重新构建依赖图
+        self._rebuild_dependency_graph()
+
+    def _rebuild_dependency_graph(self):
+        """重新构建反向依赖图"""
+        # 清空现有的反向依赖图
+        for param_id in self._dependents_map:
+            self._dependents_map[param_id] = []
+        
+        # 遍历所有参数，构建反向依赖关系
+        for param_id, param in self._all_parameters.items():
+            for dependency in param.dependencies:
+                dep_id = id(dependency)
+                if dep_id in self._dependents_map:
+                    if param_id not in self._dependents_map[dep_id]:
+                        self._dependents_map[dep_id].append(param_id)
+
+    def propagate_updates(self, changed_param, visited=None):
+        """传播更新：当参数值改变时，更新所有依赖它的参数
+        
+        Args:
+            changed_param: 值发生改变的参数
+            visited: 已访问的参数集合，用于避免循环更新
+        
+        Returns:
+            list: 所有被更新的参数列表
+        """
+        if visited is None:
+            visited = set()
+        
+        param_id = id(changed_param)
+        updated_params = []
+        
+        # 避免循环更新
+        if param_id in visited:
+            return updated_params
+        
+        visited.add(param_id)
+        
+        # 获取所有依赖于当前参数的参数
+        dependent_param_ids = self._dependents_map.get(param_id, [])
+        
+        # 按拓扑顺序更新依赖参数
+        for dependent_id in dependent_param_ids:
+            if dependent_id in self._all_parameters:
+                dependent_param = self._all_parameters[dependent_id]
+                
+                # 只有当参数有计算函数时才进行重新计算
+                if dependent_param.calculation_func:
+                    try:
+                        old_value = dependent_param.value
+                        new_value = dependent_param.calculate()
+                        
+                        updated_params.append({
+                            'param': dependent_param,
+                            'old_value': old_value,
+                            'new_value': new_value
+                        })
+                        
+                        # 如果值确实发生了变化，继续传播更新
+                        if old_value != new_value:
+                            cascaded_updates = self.propagate_updates(dependent_param, visited.copy())
+                            updated_params.extend(cascaded_updates)
+                            
+                    except Exception as e:
+                        # 记录计算错误，但不中断整个更新流程
+                        print(f"警告：参数 {dependent_param.name} 计算失败: {e}")
+        
+        return updated_params
+
+    def set_parameter_value(self, param, new_value):
+        """设置参数值并触发更新传播
+        
+        Args:
+            param: 要更新的参数对象
+            new_value: 新的参数值
+        
+        Returns:
+            dict: 更新结果，包含被影响的所有参数
+        """
+        old_value = param.value
+        param.value = new_value
+        
+        # 记录主参数的变化
+        update_result = {
+            'primary_change': {
+                'param': param,
+                'old_value': old_value,
+                'new_value': new_value
+            },
+            'cascaded_updates': [],
+            'total_updated_params': 1
+        }
+        
+        # 传播更新
+        cascaded_updates = self.propagate_updates(param)
+        update_result['cascaded_updates'] = cascaded_updates
+        update_result['total_updated_params'] += len(cascaded_updates)
+        
+        return update_result
+
+    def get_dependency_chain(self, param):
+        """获取参数的完整依赖链信息
+        
+        Args:
+            param: 参数对象
+            
+        Returns:
+            dict: 包含依赖链信息的字典
+        """
+        param_id = id(param)
+        
+        def get_dependents_recursive(param_id, depth=0, max_depth=10):
+            if depth > max_depth:  # 防止过深递归
+                return []
+                
+            dependents = []
+            dependent_ids = self._dependents_map.get(param_id, [])
+            
+            for dep_id in dependent_ids:
+                if dep_id in self._all_parameters:
+                    dependent = self._all_parameters[dep_id]
+                    dependents.append({
+                        'param': dependent,
+                        'depth': depth,
+                        'children': get_dependents_recursive(dep_id, depth + 1, max_depth)
+                    })
+            
+            return dependents
+        
+        return {
+            'root_param': param,
+            'dependents': get_dependents_recursive(param_id)
+        }
 
     def get_node(self, node_id: str) -> Optional[Node]:
         return self.nodes.get(node_id)
