@@ -321,4 +321,56 @@ def test_serialization():
     
     # 测试计算功能是否正常
     new_graph.calculate_all()
-    assert new_graph.nodes["test_node"].parameters["param2"].value == 20.0  # 10.0 * 2 
+    assert new_graph.nodes["test_node"].parameters["param2"].value == 20.0  # 10.0 * 2
+
+def test_duplicate_node_name_prevention():
+    """测试计算图中阻止重名节点的功能"""
+    graph = CalculationGraph()
+    
+    # 创建第一个节点
+    node1 = Node("TestNode", "第一个测试节点")
+    graph.add_node(node1)
+    
+    # 验证节点已成功添加
+    assert len(graph.nodes) == 1
+    assert node1.id in graph.nodes
+    
+    # 尝试添加相同名称的节点（应该被阻止）
+    node2 = Node("TestNode", "第二个测试节点")  # 相同的名称
+    
+    with pytest.raises(ValueError, match="Node with name 'TestNode' already exists."):
+        graph.add_node(node2)
+    
+    # 验证第二个节点没有被添加
+    assert len(graph.nodes) == 1
+    assert node2.id not in graph.nodes
+    
+    # 添加不同名称的节点（应该成功）
+    node3 = Node("DifferentNode", "不同名称的节点")
+    graph.add_node(node3)
+    
+    # 验证不同名称的节点成功添加
+    assert len(graph.nodes) == 2
+    assert node3.id in graph.nodes
+    
+    print("✅ 计算图重名节点检查功能正常工作")
+
+def test_node_id_duplicate_prevention():
+    """测试计算图中阻止重复ID节点的功能（现有功能验证）"""
+    graph = CalculationGraph()
+    
+    # 创建第一个节点
+    node1 = Node("Node1", "第一个节点")
+    graph.add_node(node1)
+    
+    # 创建具有相同ID的节点
+    node2 = Node("Node2", "第二个节点", id=node1.id)  # 使用相同的ID
+    
+    with pytest.raises(ValueError, match=f"Node with id {node1.id} already exists."):
+        graph.add_node(node2)
+    
+    # 验证只有第一个节点存在
+    assert len(graph.nodes) == 1
+    assert graph.nodes[node1.id].name == "Node1"
+    
+    print("✅ 计算图重复ID检查功能正常工作") 

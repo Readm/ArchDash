@@ -45,69 +45,78 @@ id_mapper = IDMapper()
 
 # 画布更新函数
 def update_canvas(node_data):
+    # 确保所有节点都有row属性
+    for node_id, data in node_data["nodes"].items():
+        if "row" not in data:
+            data["row"] = 0
+    
     canvas_content = []
-    for i in range(node_data["columns"]):
+    for col_index in range(node_data["columns"]):
         col_content = []
-        for node_id, data in node_data["nodes"].items():
-            if data["col"] == i:
-                node_name = id_mapper.get_node_name(node_id)
-                # 获取参数列表
-                node = graph.nodes.get(node_id)
-                param_rows = []
-                if node and hasattr(node, "parameters"):
-                    for i, param in enumerate(node.parameters):
-                        param_rows.append(
-                            html.Tr([
-                                html.Td(
-                                    dcc.Input(
-                                        id={"type": "param-name", "node": node_id, "index": i},
-                                        value=param.name,
-                                        style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
-                                        className="param-input"
-                                    ),
-                                    style={"paddingRight": "8px", "width": "40%"}
+        # 获取当前列的所有节点并按row排序
+        nodes_in_col = [(node_id, data) for node_id, data in node_data["nodes"].items() 
+                       if data["col"] == col_index]
+        nodes_in_col.sort(key=lambda x: x[1].get("row", 0))
+        
+        for node_id, data in nodes_in_col:
+            node_name = id_mapper.get_node_name(node_id)
+            # 获取参数列表
+            node = graph.nodes.get(node_id)
+            param_rows = []
+            if node and hasattr(node, "parameters"):
+                for param_index, param in enumerate(node.parameters):
+                    param_rows.append(
+                        html.Tr([
+                            html.Td(
+                                dcc.Input(
+                                    id={"type": "param-name", "node": node_id, "index": param_index},
+                                    value=param.name,
+                                    style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
+                                    className="param-input"
                                 ),
-                                html.Td(
-                                    dcc.Input(
-                                        id={"type": "param-value", "node": node_id, "index": i},
-                                        value=str(param.value),
-                                        style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
-                                        className="param-input"
-                                    ),
-                                    style={"width": "40%"}
+                                style={"paddingRight": "8px", "width": "40%"}
+                            ),
+                            html.Td(
+                                dcc.Input(
+                                    id={"type": "param-value", "node": node_id, "index": param_index},
+                                    value=str(param.value),
+                                    style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
+                                    className="param-input"
                                 ),
-                                html.Td(
-                                    dbc.DropdownMenu(
-                                        children=[
-                                            dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": i}, className="text-danger"),
-                                            dbc.DropdownMenuItem(divider=True),
-                                            dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": i}, disabled=i==0),
-                                            dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": i}, disabled=i==len(node.parameters)-1),
-                                        ],
-                                        toggle_class_name="param-menu-btn",
-                                        label="⋮",
-                                        size="sm",
-                                        direction="left"
-                                    ),
-                                    style={"width": "20%", "textAlign": "right", "paddingLeft": "4px"}
-                                )
-                            ])
-                        )
-                param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.95em", "marginTop": "4px"}) if param_rows else None
-                node_div = html.Div(
-                    [
-                        html.Div([
-                            html.Div(f"节点: {node_name}", className="node-name"),
-                            html.Button("⋮", id={"type": "node-menu", "index": node_id}, className="btn btn-sm btn-link", style={"float": "right", "padding": "0 4px"})
-                        ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
-                        param_table,
-                        html.Div(id=f"node-content-{node_id}", className="node-content")
-                    ],
-                    className="p-2 border m-2 node-container",
-                    id=id_mapper.get_html_id(node_id),  # 使用HTML ID作为主ID
-                    **{"data-col": data["col"], "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
-                )
-                col_content.append(node_div)
+                                style={"width": "40%"}
+                            ),
+                            html.Td(
+                                dbc.DropdownMenu(
+                                    children=[
+                                        dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": param_index}, className="text-danger"),
+                                        dbc.DropdownMenuItem(divider=True),
+                                        dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": param_index}, disabled=param_index==0),
+                                        dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": param_index}, disabled=param_index==len(node.parameters)-1),
+                                    ],
+                                    toggle_class_name="param-menu-btn",
+                                    label="⋮",
+                                    size="sm",
+                                    direction="left"
+                                ),
+                                style={"width": "20%", "textAlign": "right", "paddingLeft": "4px"}
+                            )
+                        ])
+                    )
+            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.95em", "marginTop": "4px"}) if param_rows else None
+            node_div = html.Div(
+                [
+                    html.Div([
+                        html.Div(f"节点: {node_name}", className="node-name"),
+                        html.Button("⋮", id={"type": "node-menu", "index": node_id}, className="btn btn-sm btn-link", style={"float": "right", "padding": "0 4px"})
+                    ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
+                    param_table,
+                    html.Div(id=f"node-content-{node_id}", className="node-content")
+                ],
+                className="p-2 border m-2 node-container",
+                id=id_mapper.get_html_id(node_id),  # 使用HTML ID作为主ID
+                **{"data-col": data["col"], "data-row": data.get("row", 0), "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
+            )
+            col_content.append(node_div)
         canvas_content.append(dbc.Col(col_content, width=12 // node_data["columns"]))
     return dbc.Row(canvas_content)
 
@@ -142,7 +151,12 @@ app.layout = dbc.Container([
         dbc.ModalBody([
             dbc.Button("左移", id="move-left", className="btn btn-primary m-2"),
             dbc.Button("右移", id="move-right", className="btn btn-primary m-2"),
-            dbc.Button("添加参数", id="add-param", className="btn btn-primary m-2"),
+            html.Hr(),
+            dbc.Button("上移", id="move-node-up", className="btn btn-secondary m-2"),
+            dbc.Button("下移", id="move-node-down", className="btn btn-secondary m-2"),
+            html.Hr(),
+            dbc.Button("添加参数", id="add-param", className="btn btn-success m-2"),
+            dbc.Button("删除节点", id="delete-node", className="btn btn-danger m-2"),
         ]),
     ], id="context-menu", is_open=False),
 ], fluid=True)
@@ -237,26 +251,41 @@ app.index_string = '''
     Input("context-menu-data", "data"),
     Input("move-left", "n_clicks"),
     Input("move-right", "n_clicks"),
+    Input("move-node-up", "n_clicks"),
+    Input("move-node-down", "n_clicks"),
     Input("add-param", "n_clicks"),
+    Input("delete-node", "n_clicks"),
     State("node-name", "value"),
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def update_output(n_clicks, add_column, context_menu_data, move_left, move_right, add_param, node_name, node_data):
+def update_output(n_clicks, add_column, context_menu_data, move_left, move_right, move_node_up, move_node_down, add_param, delete_node, node_name, node_data):
     if ctx.triggered_id == "add-node-button":
-        if not node_name:
-            return "请输入节点名称", node_data, [], False
+        if not node_name or not node_name.strip():
+            return "请输入节点名称", node_data, update_canvas(node_data), False
         
-        # 添加节点到数据模型
-        node = Node(name=node_name, description=f"节点 {node_name}")
-        graph.add_node(node)
-        id_mapper.register_node(node.id, node_name)
-        
-        # 更新节点数据
-        node_data["nodes"][node.id] = {"col": 0}
-        
-        # 更新画布
-        return f"节点 {node_name} 已添加", node_data, update_canvas(node_data), False
+        # 添加节点到数据模型（CalculationGraph会自动检查重名）
+        try:
+            node = Node(name=node_name, description=f"节点 {node_name}")
+            graph.add_node(node)
+            id_mapper.register_node(node.id, node_name)
+            
+            # 更新节点数据，添加row属性来跟踪节点在列中的位置
+            max_row = 0
+            for existing_node_data in node_data["nodes"].values():
+                if existing_node_data["col"] == 0:
+                    max_row = max(max_row, existing_node_data.get("row", 0))
+            
+            node_data["nodes"][node.id] = {"col": 0, "row": max_row + 1}
+            
+            # 更新画布
+            return f"节点 {node_name} 已添加", node_data, update_canvas(node_data), False
+        except ValueError as e:
+            # 捕获重名或其他错误
+            if "already exists" in str(e):
+                return f"错误：节点名称 '{node_name}' 已存在，请使用不同的名称", node_data, update_canvas(node_data), False
+            else:
+                return f"错误：{str(e)}", node_data, update_canvas(node_data), False
     
     elif ctx.triggered_id == "add-column-button":
         node_data["columns"] += 1
@@ -273,7 +302,15 @@ def update_output(n_clicks, add_column, context_menu_data, move_left, move_right
         if not node_id:
             return "无效操作", node_data, update_canvas(node_data), False
         if node_data["nodes"][node_id]["col"] > 0:
-            node_data["nodes"][node_id]["col"] -= 1
+            new_col = node_data["nodes"][node_id]["col"] - 1
+            # 计算目标列的最大row值
+            max_row = 0
+            for ndata in node_data["nodes"].values():
+                if ndata["col"] == new_col:
+                    max_row = max(max_row, ndata.get("row", 0))
+            
+            node_data["nodes"][node_id]["col"] = new_col
+            node_data["nodes"][node_id]["row"] = max_row + 1
         node_name = id_mapper.get_node_name(node_id)
         return f"节点 {node_name} 已左移", node_data, update_canvas(node_data), False
     
@@ -282,9 +319,73 @@ def update_output(n_clicks, add_column, context_menu_data, move_left, move_right
         if not node_id:
             return "无效操作", node_data, update_canvas(node_data), False
         if node_data["nodes"][node_id]["col"] < node_data["columns"] - 1:
-            node_data["nodes"][node_id]["col"] += 1
+            new_col = node_data["nodes"][node_id]["col"] + 1
+            # 计算目标列的最大row值
+            max_row = 0
+            for ndata in node_data["nodes"].values():
+                if ndata["col"] == new_col:
+                    max_row = max(max_row, ndata.get("row", 0))
+            
+            node_data["nodes"][node_id]["col"] = new_col
+            node_data["nodes"][node_id]["row"] = max_row + 1
         node_name = id_mapper.get_node_name(node_id)
         return f"节点 {node_name} 已右移", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "move-node-up":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        
+        current_node = node_data["nodes"][node_id]
+        current_col = current_node["col"]
+        current_row = current_node.get("row", 0)
+        
+        # 找到同一列中可以交换的上一个节点
+        nodes_in_same_col = [(nid, ndata) for nid, ndata in node_data["nodes"].items() 
+                           if ndata["col"] == current_col and ndata.get("row", 0) < current_row]
+        
+        if nodes_in_same_col:
+            # 按row排序，找到最接近的上一个节点
+            nodes_in_same_col.sort(key=lambda x: x[1].get("row", 0), reverse=True)
+            swap_node_id, swap_node_data = nodes_in_same_col[0]
+            
+            # 交换两个节点的row位置
+            node_data["nodes"][node_id]["row"], node_data["nodes"][swap_node_id]["row"] = \
+                swap_node_data.get("row", 0), current_row
+            
+            node_name = id_mapper.get_node_name(node_id)
+            return f"节点 {node_name} 已上移", node_data, update_canvas(node_data), False
+        else:
+            node_name = id_mapper.get_node_name(node_id)
+            return f"节点 {node_name} 已经在最上方", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "move-node-down":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        
+        current_node = node_data["nodes"][node_id]
+        current_col = current_node["col"]
+        current_row = current_node.get("row", 0)
+        
+        # 找到同一列中可以交换的下一个节点
+        nodes_in_same_col = [(nid, ndata) for nid, ndata in node_data["nodes"].items() 
+                           if ndata["col"] == current_col and ndata.get("row", 0) > current_row]
+        
+        if nodes_in_same_col:
+            # 按row排序，找到最接近的下一个节点
+            nodes_in_same_col.sort(key=lambda x: x[1].get("row", 0))
+            swap_node_id, swap_node_data = nodes_in_same_col[0]
+            
+            # 交换两个节点的row位置
+            node_data["nodes"][node_id]["row"], node_data["nodes"][swap_node_id]["row"] = \
+                swap_node_data.get("row", 0), current_row
+            
+            node_name = id_mapper.get_node_name(node_id)
+            return f"节点 {node_name} 已下移", node_data, update_canvas(node_data), False
+        else:
+            node_name = id_mapper.get_node_name(node_id)  
+            return f"节点 {node_name} 已经在最下方", node_data, update_canvas(node_data), False
     
     elif ctx.triggered_id == "add-param":
         node_id = context_menu_data.get("node")
@@ -294,6 +395,27 @@ def update_output(n_clicks, add_column, context_menu_data, move_left, move_right
         param = Parameter(name="test_param", value=0.0, unit="V", description=f"参数 {node_name}")
         graph.nodes[node_id].add_parameter(param)
         return f"参数 test_param 已添加到节点 {node_name}", node_data, update_canvas(node_data), False
+    
+    elif ctx.triggered_id == "delete-node":
+        node_id = context_menu_data.get("node")
+        if not node_id:
+            return "无效操作", node_data, update_canvas(node_data), False
+        
+        node_name = id_mapper.get_node_name(node_id)
+        
+        # 从数据模型中删除节点
+        if node_id in graph.nodes:
+            graph.remove_node(graph.nodes[node_id])
+        
+        # 从ID映射中删除节点
+        if node_id in id_mapper._node_mapping:
+            del id_mapper._node_mapping[node_id]
+        
+        # 从节点数据中删除节点
+        if node_id in node_data["nodes"]:
+            del node_data["nodes"][node_id]
+        
+        return f"节点 {node_name} 已删除", node_data, update_canvas(node_data), False
 
 @callback(
     Output("context-menu-data", "data"),

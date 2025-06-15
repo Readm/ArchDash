@@ -191,6 +191,12 @@ class CalculationGraph:
     def add_node(self, node: Node) -> None:
         if node.id in self.nodes:
             raise ValueError(f"Node with id {node.id} already exists.")
+        
+        # 检查节点名称是否已存在
+        for existing_node in self.nodes.values():
+            if existing_node.name == node.name:
+                raise ValueError(f"Node with name '{node.name}' already exists.")
+        
         self.nodes[node.id] = node
 
     def get_node(self, node_id: str) -> Optional[Node]:
