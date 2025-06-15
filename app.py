@@ -65,7 +65,7 @@ def update_canvas(node_data):
                                         style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
                                         className="param-input"
                                     ),
-                                    style={"paddingRight": "8px", "width": "50%"}
+                                    style={"paddingRight": "8px", "width": "40%"}
                                 ),
                                 html.Td(
                                     dcc.Input(
@@ -74,7 +74,22 @@ def update_canvas(node_data):
                                         style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
                                         className="param-input"
                                     ),
-                                    style={"width": "50%"}
+                                    style={"width": "40%"}
+                                ),
+                                html.Td(
+                                    dbc.DropdownMenu(
+                                        children=[
+                                            dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": i}, className="text-danger"),
+                                            dbc.DropdownMenuItem(divider=True),
+                                            dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": i}, disabled=i==0),
+                                            dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": i}, disabled=i==len(node.parameters)-1),
+                                        ],
+                                        toggle_class_name="param-menu-btn",
+                                        label="⋮",
+                                        size="sm",
+                                        direction="left"
+                                    ),
+                                    style={"width": "20%", "textAlign": "right", "paddingLeft": "4px"}
                                 )
                             ])
                         )
@@ -169,6 +184,36 @@ app.index_string = '''
                 font-size: 0.9em;
                 color: #666;
             }
+            .param-menu-btn {
+                border: none !important;
+                background: transparent !important;
+                padding: 2px 6px !important;
+                font-size: 12px !important;
+                color: #666 !important;
+                transition: all 0.2s ease !important;
+            }
+            .param-menu-btn:hover {
+                background: #f8f9fa !important;
+                color: #333 !important;
+                border-radius: 3px !important;
+            }
+            .dropdown-menu {
+                font-size: 0.9em !important;
+                min-width: 120px !important;
+                border: 1px solid #dee2e6 !important;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+            }
+            .dropdown-item {
+                padding: 6px 12px !important;
+                font-size: 0.9em !important;
+            }
+            .dropdown-item:hover {
+                background-color: #f8f9fa !important;
+            }
+            .dropdown-item.text-danger:hover {
+                background-color: #f5c6cb !important;
+                color: #721c24 !important;
+            }
         </style>
     </head>
     <body>
@@ -260,6 +305,11 @@ def show_context_menu(menu_clicks_list, menu_ids):
     if not ctx.triggered_id:
         return {"node": None, "action": None}
     
+    # 检查触发值，避免重新创建组件时的误触发
+    trigger_value = ctx.triggered[0]["value"]
+    if not trigger_value or trigger_value == 0:
+        return {"node": None, "action": None}
+    
     # 获取被点击的节点ID
     triggered_id = ctx.triggered_id
     if isinstance(triggered_id, dict):
@@ -297,29 +347,106 @@ def update_parameter(param_names, param_values, node_data):
         param_index = triggered_id["index"]
         param_type = triggered_id["type"]
         
+        # 获取触发的新值
+        new_value = ctx.triggered[0]["value"]
+        
+        # 检查值是否为空或无效
+        if new_value is None or new_value == "":
+            return node_data
+        
         # 获取节点
         node = graph.nodes.get(node_id)
-        if node and param_index < len(node.parameters):
-            if param_type == "param-name":
-                # 更新参数名
-                new_name = ctx.triggered[0]["value"]
-                if new_name:
-                    node.parameters[param_index].name = new_name
-            elif param_type == "param-value":
-                # 更新参数值
-                new_value = ctx.triggered[0]["value"]
+        if not node:
+            return node_data
+            
+        # 检查参数索引是否有效
+        if param_index >= len(node.parameters):
+            return node_data
+            
+        # 获取当前参数
+        current_param = node.parameters[param_index]
+        
+        if param_type == "param-name":
+            # 更新参数名，检查是否真的有变化
+            if new_value != current_param.name:
+                current_param.name = new_value
+        elif param_type == "param-value":
+            # 更新参数值，检查是否真的有变化
+            current_value_str = str(current_param.value)
+            if new_value != current_value_str:
                 try:
                     # 尝试转换为数字
                     if '.' in str(new_value):
-                        node.parameters[param_index].value = float(new_value)
+                        current_param.value = float(new_value)
                     else:
-                        node.parameters[param_index].value = int(new_value)
+                        current_param.value = int(new_value)
                 except (ValueError, TypeError):
                     # 如果转换失败，保存为字符串
-                    node.parameters[param_index].value = str(new_value)
+                    current_param.value = str(new_value)
     
     # 不重新渲染画布，只更新数据
     return node_data
+
+# 添加参数操作回调 - 完全独立于节点菜单
+@callback(
+    Output("node-data", "data", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Input({"type": "delete-param", "node": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "move-param-up", "node": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "move-param-down", "node": ALL, "index": ALL}, "n_clicks"),
+    State("node-data", "data"),
+    prevent_initial_call=True
+)
+def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data):
+    if not ctx.triggered_id:
+        return node_data, update_canvas(node_data)
+    
+    triggered_id = ctx.triggered_id
+    if not isinstance(triggered_id, dict):
+        return node_data, update_canvas(node_data)
+    
+    node_id = triggered_id.get("node")
+    param_index = triggered_id.get("index")
+    operation_type = triggered_id.get("type")
+    
+    # 检查点击数值，避免初始化时的误触发
+    trigger_value = ctx.triggered[0]["value"]
+    if not trigger_value or trigger_value == 0:
+        return node_data, update_canvas(node_data)
+    
+    if not node_id or param_index is None:
+        return node_data, update_canvas(node_data)
+    
+    # 获取节点
+    node = graph.nodes.get(node_id)
+    if not node:
+        return node_data, update_canvas(node_data)
+        
+    if param_index >= len(node.parameters):
+        return node_data, update_canvas(node_data)
+    
+    node_name = id_mapper.get_node_name(node_id)
+    param_name = node.parameters[param_index].name
+    
+    if operation_type == "delete-param":
+        # 删除参数
+        deleted_param = node.parameters.pop(param_index)
+        # 可以添加一个静默的操作记录（如果需要）
+        
+    elif operation_type == "move-param-up":
+        # 上移参数
+        if param_index > 0:
+            node.parameters[param_index], node.parameters[param_index - 1] = \
+                node.parameters[param_index - 1], node.parameters[param_index]
+            
+    elif operation_type == "move-param-down":
+        # 下移参数
+        if param_index < len(node.parameters) - 1:
+            node.parameters[param_index], node.parameters[param_index + 1] = \
+                node.parameters[param_index + 1], node.parameters[param_index]
+    
+    # 参数操作完成，只更新数据和画布，不影响任何其他UI组件
+    return node_data, update_canvas(node_data)
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050) 
