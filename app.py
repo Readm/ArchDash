@@ -1,10 +1,11 @@
 import dash
 from dash import html, dcc, callback, Output, Input, State, ctx, MATCH, ALL
 import dash_bootstrap_components as dbc
-from models import CalculationGraph, Node, Parameter
-from typing import Dict, Optional
+from models import CalculationGraph, Node, Parameter, CanvasLayoutManager, GridPosition
+from typing import Dict, Optional, List, Any
 import json
 from datetime import datetime
+import uuid
 
 class IDMapper:
     """管理 Model ID 到 Dash ID 和 HTML ID 的映射"""
@@ -43,6 +44,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 # 全局数据模型
 graph = CalculationGraph()
 id_mapper = IDMapper()
+layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 新增：布局管理器
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -99,74 +101,111 @@ def create_dependency_checkboxes(available_params, selected_deps=None):
     
     return checkboxes
 
-# 画布更新函数
-def update_canvas(node_data):
+# 画布更新函数 - 使用新的布局管理器
+def update_canvas(node_data=None):
+    """使用布局管理器渲染画布"""
     canvas_content = []
-    for i in range(node_data["columns"]):
+    
+    # 按列组织内容
+    for col in range(layout_manager.cols):
         col_content = []
-        for node_id, data in node_data["nodes"].items():
-            if data["col"] == i:
-                node_name = id_mapper.get_node_name(node_id)
-                # 获取参数列表
-                node = graph.nodes.get(node_id)
-                param_rows = []
-                if node and hasattr(node, "parameters"):
-                    for i, param in enumerate(node.parameters):
-                        param_rows.append(
-                            html.Tr([
-                                html.Td(
-                                    dcc.Input(
-                                        id={"type": "param-name", "node": node_id, "index": i},
-                                        value=param.name,
-                                        style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
-                                        className="param-input"
-                                    ),
-                                    style={"paddingRight": "8px", "width": "40%"}
+        col_nodes = layout_manager.get_column_nodes(col)
+        
+        # 按行排序节点
+        for node_id, row in sorted(col_nodes, key=lambda x: x[1]):
+            node_name = id_mapper.get_node_name(node_id)
+            node = graph.nodes.get(node_id)
+            
+            if not node:
+                continue
+                
+            # 构建参数表格
+            param_rows = []
+            if hasattr(node, "parameters"):
+                for param_idx, param in enumerate(node.parameters):
+                    param_rows.append(
+                        html.Tr([
+                            html.Td(
+                                dcc.Input(
+                                    id={"type": "param-name", "node": node_id, "index": param_idx},
+                                    value=param.name,
+                                    style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
+                                    className="param-input"
                                 ),
-                                html.Td(
-                                    dcc.Input(
-                                        id={"type": "param-value", "node": node_id, "index": i},
-                                        value=str(param.value),
-                                        style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
-                                        className="param-input"
-                                    ),
-                                    style={"width": "40%"}
+                                style={"paddingRight": "8px", "width": "40%"}
+                            ),
+                            html.Td(
+                                dcc.Input(
+                                    id={"type": "param-value", "node": node_id, "index": param_idx},
+                                    value=str(param.value),
+                                    style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
+                                    className="param-input"
                                 ),
-                                html.Td(
-                                    dbc.DropdownMenu(
-                                        children=[
-                                            dbc.DropdownMenuItem("编辑参数", id={"type": "edit-param", "node": node_id, "index": i}, className="text-primary"),
-                                            dbc.DropdownMenuItem(divider=True),
-                                            dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": i}, className="text-danger"),
-                                            dbc.DropdownMenuItem(divider=True),
-                                            dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": i}, disabled=i==0),
-                                            dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": i}, disabled=i==len(node.parameters)-1),
-                                        ],
-                                        toggle_class_name="param-menu-btn",
-                                        label="⋮",
-                                        size="sm",
-                                        direction="left"
-                                    ),
-                                    style={"width": "20%", "textAlign": "right", "paddingLeft": "4px"}
-                                )
-                            ])
-                        )
-                param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.95em", "marginTop": "4px"}) if param_rows else None
-                node_div = html.Div(
-                    [
+                                style={"width": "40%"}
+                            ),
+                            html.Td(
+                                dbc.DropdownMenu(
+                                    children=[
+                                        dbc.DropdownMenuItem("编辑参数", id={"type": "edit-param", "node": node_id, "index": param_idx}, className="text-primary"),
+                                        dbc.DropdownMenuItem(divider=True),
+                                        dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": param_idx}, className="text-danger"),
+                                        dbc.DropdownMenuItem(divider=True),
+                                        dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": param_idx}, disabled=param_idx==0),
+                                        dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": param_idx}, disabled=param_idx==len(node.parameters)-1),
+                                    ],
+                                    toggle_class_name="param-menu-btn",
+                                    label="⋮",
+                                    size="sm",
+                                    direction="left"
+                                ),
+                                style={"width": "20%", "textAlign": "right", "paddingLeft": "4px"}
+                            )
+                        ])
+                    )
+            
+            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.95em", "marginTop": "4px"}) if param_rows else None
+            
+            # 获取节点在网格中的位置信息
+            position = layout_manager.get_node_position(node_id)
+            position_info = f"({position.row},{position.col})" if position else ""
+            
+            node_div = html.Div(
+                [
+                    html.Div([
                         html.Div([
-                            html.Div(f"节点: {node_name}", className="node-name"),
-                            html.Button("⋮", id={"type": "node-menu", "index": node_id}, className="btn btn-sm btn-link", style={"float": "right", "padding": "0 4px"})
-                        ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
-                        param_table,
-                        html.Div(id=f"node-content-{node_id}", className="node-content")
-                    ],
-                    className="p-2 border m-2 node-container",
-                    id=id_mapper.get_html_id(node_id),  # 使用HTML ID作为主ID
-                    **{"data-col": data["col"], "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
-                )
-                col_content.append(node_div)
-        canvas_content.append(dbc.Col(col_content, width=12 // node_data["columns"]))
+                            html.Span(f"节点: {node_name}", className="node-name"),
+                            html.Small(f" {position_info}", className="text-muted", style={"fontSize": "0.7em"})
+                        ]),
+                        dbc.DropdownMenu(
+                            children=[
+                                dbc.DropdownMenuItem("上移", id={"type": "move-node-up", "node": node_id}, className="text-primary"),
+                                dbc.DropdownMenuItem("下移", id={"type": "move-node-down", "node": node_id}, className="text-primary"),
+                                dbc.DropdownMenuItem(divider=True),
+                                dbc.DropdownMenuItem("左移", id={"type": "move-node-left", "node": node_id}, className="text-info"),
+                                dbc.DropdownMenuItem("右移", id={"type": "move-node-right", "node": node_id}, className="text-info"),
+                                dbc.DropdownMenuItem(divider=True),
+                                dbc.DropdownMenuItem("添加参数", id={"type": "add-param", "node": node_id}, className="text-success"),
+                                dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
+                            ],
+                            toggle_class_name="node-menu-btn",
+                            label="⋮",
+                            size="sm",
+                            direction="left"
+                        )
+                    ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
+                    param_table,
+                    html.Div(id=f"node-content-{node_id}", className="node-content")
+                ],
+                className="p-2 border m-2 node-container",
+                id=id_mapper.get_html_id(node_id),
+                **{"data-row": row, "data-col": col, "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
+            )
+            col_content.append(node_div)
+        
+        # 计算列宽
+        col_width = max(1, 12 // layout_manager.cols)
+        canvas_content.append(dbc.Col(col_content, width=col_width))
+    
     return dbc.Row(canvas_content)
 
 app.layout = dbc.Container([
@@ -193,16 +232,8 @@ app.layout = dbc.Container([
             html.Button("添加列", id="add-column-button", className="btn btn-primary mt-2"),
         ], width=12),
     ]),
-    dcc.Store(id="node-data", data={"nodes": {}, "columns": 1}),
-    dcc.Store(id="context-menu-data", data={"node": None, "action": None}),
-    dbc.Modal([
-        dbc.ModalHeader("节点操作"),
-        dbc.ModalBody([
-            dbc.Button("左移", id="move-left", className="btn btn-primary m-2"),
-            dbc.Button("右移", id="move-right", className="btn btn-primary m-2"),
-            dbc.Button("添加参数", id="add-param", className="btn btn-primary m-2"),
-        ]),
-    ], id="context-menu", is_open=False),
+    dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
+# 移除旧的context menu，使用新的dropdown menu
     
     # 参数编辑模态窗口
     dbc.Modal([
@@ -371,116 +402,125 @@ app.index_string = '''
 </html>
 '''
 
+# 新的节点操作回调函数 - 使用布局管理器
 @callback(
     Output("output-result", "children"),
     Output("node-data", "data"),
     Output("canvas-container", "children"),
-    Output("context-menu", "is_open"),
     Input("add-node-button", "n_clicks"),
     Input("add-column-button", "n_clicks"),
-    Input("context-menu-data", "data"),
-    Input("move-left", "n_clicks"),
-    Input("move-right", "n_clicks"),
-    Input("add-param", "n_clicks"),
+    Input({"type": "move-node-up", "node": ALL}, "n_clicks"),
+    Input({"type": "move-node-down", "node": ALL}, "n_clicks"),
+    Input({"type": "move-node-left", "node": ALL}, "n_clicks"),
+    Input({"type": "move-node-right", "node": ALL}, "n_clicks"),
+    Input({"type": "add-param", "node": ALL}, "n_clicks"),
+    Input({"type": "delete-node", "node": ALL}, "n_clicks"),
     State("node-name", "value"),
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def update_output(n_clicks, add_column, context_menu_data, move_left, move_right, add_param, node_name, node_data):
+def handle_node_operations(add_node_clicks, add_column_clicks, 
+                          move_up_clicks, move_down_clicks, 
+                          move_left_clicks, move_right_clicks, 
+                          add_param_clicks, delete_node_clicks,
+                          node_name, node_data):
+    
     if ctx.triggered_id == "add-node-button":
         if not node_name:
-            return "请输入节点名称", node_data, [], False
+            return "请输入节点名称", node_data, update_canvas()
         
-        # 添加节点到数据模型
-        node = Node(name=node_name, description=f"节点 {node_name}")
-        graph.add_node(node)
-        id_mapper.register_node(node.id, node_name)
-        
-        # 更新节点数据
-        node_data["nodes"][node.id] = {"col": 0}
-        
-        # 更新画布
-        return f"节点 {node_name} 已添加", node_data, update_canvas(node_data), False
+        try:
+            # 检查节点名称是否已存在
+            for existing_node in graph.nodes.values():
+                if existing_node.name == node_name:
+                    return f"错误：节点名称 '{node_name}' 已存在，请使用不同的名称", node_data, update_canvas()
+            
+            # 创建新节点
+            node = Node(name=node_name, description=f"节点 {node_name}")
+            graph.add_node(node)
+            id_mapper.register_node(node.id, node_name)
+            
+            # 使用布局管理器放置节点
+            position = layout_manager.place_node(node.id)
+            
+            return f"节点 {node_name} 已添加到位置 ({position.row}, {position.col})", node_data, update_canvas()
+            
+        except ValueError as e:
+            return f"错误：{str(e)}", node_data, update_canvas()
     
     elif ctx.triggered_id == "add-column-button":
-        node_data["columns"] += 1
-        return f"已添加新列，当前列数: {node_data['columns']}", node_data, update_canvas(node_data), False
+        layout_manager.add_column()
+        return f"已添加新列，当前列数: {layout_manager.cols}", node_data, update_canvas()
     
-    elif ctx.triggered_id == "context-menu-data":
-        node_id = context_menu_data.get("node")
-        if not node_id:
-            return "无效操作", node_data, update_canvas(node_data), False
-        return "请选择操作", node_data, update_canvas(node_data), True
-    
-    elif ctx.triggered_id == "move-left":
-        node_id = context_menu_data.get("node")
-        if not node_id:
-            return "无效操作", node_data, update_canvas(node_data), False
-        if node_data["nodes"][node_id]["col"] > 0:
-            node_data["nodes"][node_id]["col"] -= 1
-        node_name = id_mapper.get_node_name(node_id)
-        return f"节点 {node_name} 已左移", node_data, update_canvas(node_data), False
-    
-    elif ctx.triggered_id == "move-right":
-        node_id = context_menu_data.get("node")
-        if not node_id:
-            return "无效操作", node_data, update_canvas(node_data), False
-        if node_data["nodes"][node_id]["col"] < node_data["columns"] - 1:
-            node_data["nodes"][node_id]["col"] += 1
-        node_name = id_mapper.get_node_name(node_id)
-        return f"节点 {node_name} 已右移", node_data, update_canvas(node_data), False
-    
-    elif ctx.triggered_id == "add-param":
-        node_id = context_menu_data.get("node")
-        if not node_id:
-            return "无效操作", node_data, update_canvas(node_data), False
-        node_name = id_mapper.get_node_name(node_id)
-        param = Parameter(name="test_param", value=0.0, unit="V", description=f"参数 {node_name}")
+    elif isinstance(ctx.triggered_id, dict):
+        operation_type = ctx.triggered_id.get("type")
+        node_id = ctx.triggered_id.get("node")
         
-        # 使用计算图的方法添加参数，确保正确设置graph引用
-        if hasattr(graph, 'add_parameter_to_node'):
-            graph.add_parameter_to_node(node_id, param)
-        else:
-            # 兼容旧方法
-            graph.nodes[node_id].add_parameter(param)
-            # 手动设置graph引用
-            param.set_graph(graph)
+        # 检查点击值，避免初始化误触发
+        trigger_value = ctx.triggered[0]["value"]
+        if not trigger_value or trigger_value == 0:
+            return dash.no_update, dash.no_update, dash.no_update
         
-        return f"参数 test_param 已添加到节点 {node_name}", node_data, update_canvas(node_data), False
+        if not node_id:
+            return "无效操作", node_data, update_canvas()
+        
+        node_name = id_mapper.get_node_name(node_id)
+        
+        if operation_type == "move-node-up":
+            success = layout_manager.move_node_up(node_id)
+            if success:
+                return f"节点 {node_name} 已上移", node_data, update_canvas()
+            else:
+                return f"节点 {node_name} 无法上移", node_data, update_canvas()
+        
+        elif operation_type == "move-node-down":
+            success = layout_manager.move_node_down(node_id)
+            if success:
+                return f"节点 {node_name} 已下移", node_data, update_canvas()
+            else:
+                return f"节点 {node_name} 无法下移", node_data, update_canvas()
+        
+        elif operation_type == "move-node-left":
+            success = layout_manager.move_node_left(node_id)
+            if success:
+                return f"节点 {node_name} 已左移", node_data, update_canvas()
+            else:
+                return f"节点 {node_name} 无法左移", node_data, update_canvas()
+        
+        elif operation_type == "move-node-right":
+            success = layout_manager.move_node_right(node_id)
+            if success:
+                return f"节点 {node_name} 已右移", node_data, update_canvas()
+            else:
+                return f"节点 {node_name} 无法右移", node_data, update_canvas()
+        
+        elif operation_type == "add-param":
+            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
+            
+            # 添加参数到节点
+            if hasattr(graph, 'add_parameter_to_node'):
+                graph.add_parameter_to_node(node_id, param)
+            else:
+                graph.nodes[node_id].add_parameter(param)
+                param.set_graph(graph)
+            
+            return f"参数已添加到节点 {node_name}", node_data, update_canvas()
+        
+        elif operation_type == "delete-node":
+            # 从布局管理器移除节点
+            layout_manager.remove_node(node_id)
+            # 从计算图移除节点
+            if node_id in graph.nodes:
+                del graph.nodes[node_id]
+            # 从ID映射器移除
+            if hasattr(id_mapper, '_node_mapping') and node_id in id_mapper._node_mapping:
+                del id_mapper._node_mapping[node_id]
+            
+            return f"节点 {node_name} 已删除", node_data, update_canvas()
+    
+    return dash.no_update, dash.no_update, dash.no_update
 
-@callback(
-    Output("context-menu-data", "data"),
-    Input({"type": "node-menu", "index": ALL}, "n_clicks"),
-    State({"type": "node-menu", "index": ALL}, "id"),
-    prevent_initial_call=True
-)
-def show_context_menu(menu_clicks_list, menu_ids):
-    if not ctx.triggered_id:
-        return {"node": None, "action": None}
-    
-    # 检查触发值，避免重新创建组件时的误触发
-    trigger_value = ctx.triggered[0]["value"]
-    if not trigger_value or trigger_value == 0:
-        return {"node": None, "action": None}
-    
-    # 获取被点击的节点ID
-    triggered_id = ctx.triggered_id
-    if isinstance(triggered_id, dict):
-        if triggered_id["type"] == "node-menu":
-            node_id = triggered_id["index"]
-        else:
-            node_id = None
-    else:
-        import ast
-        try:
-            node_id = ast.literal_eval(triggered_id.replace(".n_clicks", ""))["index"]
-        except Exception:
-            node_id = None
-    
-    if node_id is None:
-        return {"node": None, "action": None}
-    
-    return {"node": node_id, "action": "show-menu"}
+# 移除旧的show_context_menu回调，现在使用直接的dropdown menu
 
 # 添加参数更新回调
 @callback(
@@ -565,11 +605,11 @@ def update_parameter(param_names, param_values, node_data):
 )
 def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data):
     if not ctx.triggered_id:
-        return node_data, update_canvas(node_data)
+        return node_data, update_canvas()
     
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, update_canvas(node_data)
+        return node_data, update_canvas()
     
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
@@ -578,18 +618,18 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     # 检查点击数值，避免初始化时的误触发
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, update_canvas(node_data)
+        return node_data, update_canvas()
     
     if not node_id or param_index is None:
-        return node_data, update_canvas(node_data)
+        return node_data, update_canvas()
     
     # 获取节点
     node = graph.nodes.get(node_id)
     if not node:
-        return node_data, update_canvas(node_data)
+        return node_data, update_canvas()
         
     if param_index >= len(node.parameters):
-        return node_data, update_canvas(node_data)
+        return node_data, update_canvas()
     
     node_name = id_mapper.get_node_name(node_id)
     param_name = node.parameters[param_index].name
@@ -612,7 +652,7 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
                 node.parameters[param_index + 1], node.parameters[param_index]
     
     # 参数操作完成，只更新数据和画布，不影响任何其他UI组件
-    return node_data, update_canvas(node_data)
+    return node_data, update_canvas()
 
 # 打开参数编辑模态窗口
 @callback(
@@ -912,7 +952,7 @@ def save_parameter_changes(save_clicks, param_name, param_value, param_unit, par
             success_msg = f"参数 {param_name} 已保存{cascaded_info}"
         
         # 更新画布显示
-        updated_canvas = update_canvas(node_data)
+        updated_canvas = update_canvas()
         
         return False, updated_canvas, success_msg
         

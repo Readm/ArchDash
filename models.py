@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any, Union, Callable, TypeVar, cast
+from typing import Dict, List, Optional, Any, Union, Callable, TypeVar, cast, Tuple
 from dataclasses import dataclass, field
 import numpy as np
 import json
@@ -484,4 +484,329 @@ class CalculationGraph:
     def from_json(cls, json_str: str) -> 'CalculationGraph':
         """从JSON字符串创建计算图"""
         data = json.loads(json_str)
-        return cls.from_dict(data) 
+        return cls.from_dict(data)
+
+@dataclass 
+class GridPosition:
+    """网格位置类"""
+    row: int
+    col: int
+    
+    def __post_init__(self):
+        if self.row < 0 or self.col < 0:
+            raise ValueError("行和列索引必须非负")
+
+class CanvasLayoutManager:
+    """画布布局管理器
+    
+    使用二维数组来精确管理节点位置，提供友好的测试和维护接口
+    """
+    
+    def __init__(self, initial_cols: int = 3, initial_rows: int = 10):
+        """初始化布局管理器
+        
+        Args:
+            initial_cols: 初始列数
+            initial_rows: 初始行数（每列最大节点数）
+        """
+        self.grid: List[List[Optional[str]]] = []
+        self.cols = initial_cols
+        self.rows = initial_rows
+        self._init_grid()
+        
+        # 节点位置映射：node_id -> GridPosition
+        self.node_positions: Dict[str, GridPosition] = {}
+        
+        # 反向映射：position -> node_id
+        self.position_nodes: Dict[Tuple[int, int], str] = {}
+    
+    def _init_grid(self):
+        """初始化网格"""
+        self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]
+    
+    def add_column(self):
+        """添加新列"""
+        for row in self.grid:
+            row.append(None)
+        self.cols += 1
+        
+    def add_rows(self, num_rows: int = 5):
+        """添加新行"""
+        for _ in range(num_rows):
+            self.grid.append([None] * self.cols)
+        self.rows += num_rows
+    
+    def place_node(self, node_id: str, position: GridPosition = None) -> GridPosition:
+        """放置节点到指定位置，如果位置为空则自动寻找合适位置
+        
+        Args:
+            node_id: 节点ID
+            position: 目标位置，如果为None则自动寻找
+            
+        Returns:
+            实际放置的位置
+            
+        Raises:
+            ValueError: 如果指定位置已被占用
+        """
+        if position is None:
+            position = self._find_next_available_position()
+        
+        if not self._is_position_valid(position):
+            raise ValueError(f"位置 ({position.row}, {position.col}) 超出网格范围")
+            
+        if self._is_position_occupied(position):
+            raise ValueError(f"位置 ({position.row}, {position.col}) 已被节点 {self.grid[position.row][position.col]} 占用")
+        
+        # 如果节点已存在于其他位置，先移除
+        if node_id in self.node_positions:
+            self.remove_node(node_id)
+        
+        # 放置节点
+        self.grid[position.row][position.col] = node_id
+        self.node_positions[node_id] = position
+        self.position_nodes[(position.row, position.col)] = node_id
+        
+        return position
+    
+    def move_node(self, node_id: str, new_position: GridPosition) -> bool:
+        """移动节点到新位置
+        
+        Args:
+            node_id: 节点ID
+            new_position: 新位置
+            
+        Returns:
+            移动是否成功
+        """
+        if node_id not in self.node_positions:
+            return False
+            
+        if not self._is_position_valid(new_position):
+            return False
+            
+        if self._is_position_occupied(new_position):
+            return False
+        
+        # 移除旧位置
+        old_position = self.node_positions[node_id]
+        self.grid[old_position.row][old_position.col] = None
+        del self.position_nodes[(old_position.row, old_position.col)]
+        
+        # 放置到新位置
+        self.grid[new_position.row][new_position.col] = node_id
+        self.node_positions[node_id] = new_position
+        self.position_nodes[(new_position.row, new_position.col)] = node_id
+        
+        return True
+    
+    def move_node_up(self, node_id: str) -> bool:
+        """节点上移"""
+        if node_id not in self.node_positions:
+            return False
+            
+        current_pos = self.node_positions[node_id]
+        if current_pos.row == 0:
+            return False  # 已经在顶部
+            
+        new_position = GridPosition(current_pos.row - 1, current_pos.col)
+        if self._is_position_occupied(new_position):
+            # 如果目标位置被占用，交换节点
+            return self._swap_nodes(node_id, self.grid[new_position.row][new_position.col])
+        else:
+            return self.move_node(node_id, new_position)
+    
+    def move_node_down(self, node_id: str) -> bool:
+        """节点下移"""
+        if node_id not in self.node_positions:
+            return False
+            
+        current_pos = self.node_positions[node_id]
+        if current_pos.row >= self.rows - 1:
+            # 需要扩展行数
+            self.add_rows(5)
+            
+        new_position = GridPosition(current_pos.row + 1, current_pos.col)
+        if self._is_position_occupied(new_position):
+            # 如果目标位置被占用，交换节点
+            return self._swap_nodes(node_id, self.grid[new_position.row][new_position.col])
+        else:
+            return self.move_node(node_id, new_position)
+    
+    def move_node_left(self, node_id: str) -> bool:
+        """节点左移"""
+        if node_id not in self.node_positions:
+            return False
+            
+        current_pos = self.node_positions[node_id]
+        if current_pos.col == 0:
+            return False  # 已经在最左边
+            
+        # 在新列中寻找合适位置
+        target_col = current_pos.col - 1
+        new_position = self._find_position_in_column(target_col, preferred_row=current_pos.row)
+        return self.move_node(node_id, new_position)
+    
+    def move_node_right(self, node_id: str) -> bool:
+        """节点右移"""
+        if node_id not in self.node_positions:
+            return False
+            
+        current_pos = self.node_positions[node_id]
+        if current_pos.col >= self.cols - 1:
+            # 需要添加新列
+            self.add_column()
+            
+        # 在新列中寻找合适位置
+        target_col = current_pos.col + 1
+        new_position = self._find_position_in_column(target_col, preferred_row=current_pos.row)
+        return self.move_node(node_id, new_position)
+    
+    def remove_node(self, node_id: str) -> bool:
+        """移除节点"""
+        if node_id not in self.node_positions:
+            return False
+            
+        position = self.node_positions[node_id]
+        self.grid[position.row][position.col] = None
+        del self.node_positions[node_id]
+        del self.position_nodes[(position.row, position.col)]
+        return True
+    
+    def get_node_position(self, node_id: str) -> Optional[GridPosition]:
+        """获取节点位置"""
+        return self.node_positions.get(node_id)
+    
+    def get_node_at_position(self, position: GridPosition) -> Optional[str]:
+        """获取指定位置的节点"""
+        if not self._is_position_valid(position):
+            return None
+        return self.grid[position.row][position.col]
+    
+    def get_column_nodes(self, col: int) -> List[Tuple[str, int]]:
+        """获取指定列的所有节点，按行排序
+        
+        Returns:
+            List of (node_id, row) tuples
+        """
+        if col >= self.cols:
+            return []
+            
+        nodes = []
+        for row in range(self.rows):
+            if self.grid[row][col] is not None:
+                nodes.append((self.grid[row][col], row))
+        return nodes
+    
+    def get_layout_dict(self) -> Dict[str, Any]:
+        """获取布局的字典表示，用于序列化和API交互"""
+        return {
+            "grid_size": {"rows": self.rows, "cols": self.cols},
+            "node_positions": {
+                node_id: {"row": pos.row, "col": pos.col} 
+                for node_id, pos in self.node_positions.items()
+            },
+            "column_layouts": [
+                [self.grid[row][col] for row in range(self.rows) if self.grid[row][col] is not None]
+                for col in range(self.cols)
+            ]
+        }
+    
+    def _find_next_available_position(self) -> GridPosition:
+        """寻找下一个可用位置"""
+        # 优先填满第一列，然后是第二列...
+        for col in range(self.cols):
+            for row in range(self.rows):
+                if self.grid[row][col] is None:
+                    return GridPosition(row, col)
+        
+        # 如果所有位置都满了，添加新行
+        self.add_rows(5)
+        return GridPosition(self.rows - 5, 0)
+    
+    def _find_position_in_column(self, col: int, preferred_row: int = None) -> GridPosition:
+        """在指定列中寻找位置"""
+        if col >= self.cols:
+            raise ValueError(f"列索引 {col} 超出范围")
+        
+        # 如果指定了优选行且该位置可用，使用它
+        if preferred_row is not None and preferred_row < self.rows:
+            if self.grid[preferred_row][col] is None:
+                return GridPosition(preferred_row, col)
+        
+        # 否则寻找该列的第一个空位
+        for row in range(self.rows):
+            if self.grid[row][col] is None:
+                return GridPosition(row, col)
+        
+        # 如果该列已满，添加新行
+        self.add_rows(5)
+        return GridPosition(self.rows - 5, col)
+    
+    def _is_position_valid(self, position: GridPosition) -> bool:
+        """检查位置是否有效"""
+        return (0 <= position.row < self.rows and 
+                0 <= position.col < self.cols)
+    
+    def _is_position_occupied(self, position: GridPosition) -> bool:
+        """检查位置是否被占用"""
+        if not self._is_position_valid(position):
+            return False
+        return self.grid[position.row][position.col] is not None
+    
+    def _swap_nodes(self, node_id1: str, node_id2: str) -> bool:
+        """交换两个节点的位置"""
+        if node_id1 not in self.node_positions or node_id2 not in self.node_positions:
+            return False
+        
+        pos1 = self.node_positions[node_id1]
+        pos2 = self.node_positions[node_id2]
+        
+        # 交换网格中的位置
+        self.grid[pos1.row][pos1.col] = node_id2
+        self.grid[pos2.row][pos2.col] = node_id1
+        
+        # 更新映射
+        self.node_positions[node_id1] = pos2
+        self.node_positions[node_id2] = pos1
+        self.position_nodes[(pos1.row, pos1.col)] = node_id2
+        self.position_nodes[(pos2.row, pos2.col)] = node_id1
+        
+        return True
+    
+    def compact_layout(self):
+        """压缩布局，移除空行和列"""
+        # 移除空行
+        used_rows = set()
+        for node_id, pos in self.node_positions.items():
+            used_rows.add(pos.row)
+        
+        if used_rows:
+            max_used_row = max(used_rows)
+            # 保留一些空行用于扩展
+            self.rows = max_used_row + 5
+            self.grid = self.grid[:self.rows]
+    
+    def print_layout(self) -> str:
+        """打印布局，用于调试"""
+        result = []
+        result.append(f"布局 ({self.rows}x{self.cols}):")
+        result.append("+" + "-" * (self.cols * 12 + 1) + "+")
+        
+        for row in range(min(self.rows, 10)):  # 只显示前10行
+            row_str = "|"
+            for col in range(self.cols):
+                node_id = self.grid[row][col]
+                if node_id:
+                    # 截断长ID
+                    display_id = node_id[:10] if len(node_id) > 10 else node_id
+                    row_str += f"{display_id:^11}|"
+                else:
+                    row_str += f"{'':^11}|"
+            result.append(row_str)
+        
+        if self.rows > 10:
+            result.append("|" + "..." * self.cols + "|")
+        
+        result.append("+" + "-" * (self.cols * 12 + 1) + "+")
+        return "\n".join(result) 
