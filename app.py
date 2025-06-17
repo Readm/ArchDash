@@ -45,6 +45,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 graph = CalculationGraph()
 id_mapper = IDMapper()
 layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 新增：布局管理器
+recently_updated_params = set()  # 新增：存储最近更新的参数ID，用于高亮显示
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -138,7 +139,14 @@ def update_canvas(node_data=None):
                                 dcc.Input(
                                     id={"type": "param-value", "node": node_id, "index": param_idx},
                                     value=str(param.value),
-                                    style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "borderRadius": "3px", "padding": "2px 4px"},
+                                    style={
+                                        "width": "100%", 
+                                        "border": "1px solid transparent", 
+                                        "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
+                                        "borderRadius": "3px", 
+                                        "padding": "2px 4px",
+                                        "transition": "background-color 2s ease-out"
+                                    },
                                     className="param-input"
                                 ),
                                 style={"width": "40%"}
@@ -233,6 +241,7 @@ app.layout = dbc.Container([
         ], width=12),
     ]),
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
+    dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
 # 移除旧的context menu，使用新的dropdown menu
     
     # 参数编辑模态窗口
@@ -525,6 +534,9 @@ def handle_node_operations(add_node_clicks, add_column_clicks,
 # 添加参数更新回调
 @callback(
     Output("node-data", "data", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
     Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
     Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
     State("node-data", "data"),
@@ -532,7 +544,7 @@ def handle_node_operations(add_node_clicks, add_column_clicks,
 )
 def update_parameter(param_names, param_values, node_data):
     if not ctx.triggered_id:
-        return node_data
+        return node_data, dash.no_update, dash.no_update, dash.no_update
     
     triggered_id = ctx.triggered_id
     if isinstance(triggered_id, dict):
@@ -545,24 +557,29 @@ def update_parameter(param_names, param_values, node_data):
         
         # 检查值是否为空或无效
         if new_value is None or new_value == "":
-            return node_data
+            return node_data, dash.no_update, dash.no_update, dash.no_update
         
         # 获取节点
         node = graph.nodes.get(node_id)
         if not node:
-            return node_data
+            return node_data, dash.no_update, dash.no_update, dash.no_update
             
         # 检查参数索引是否有效
         if param_index >= len(node.parameters):
-            return node_data
+            return node_data, dash.no_update, dash.no_update, dash.no_update
             
         # 获取当前参数
         current_param = node.parameters[param_index]
+        
+        update_message = ""
+        should_update_canvas = False
         
         if param_type == "param-name":
             # 更新参数名，检查是否真的有变化
             if new_value != current_param.name:
                 current_param.name = new_value
+                should_update_canvas = True
+                update_message = f"参数名已更新为: {new_value}"
         elif param_type == "param-value":
             # 更新参数值
             try:
@@ -580,18 +597,48 @@ def update_parameter(param_names, param_values, node_data):
             
             # 使用数据流机制更新参数值，这会自动触发依赖参数的重新计算
             if hasattr(graph, 'set_parameter_value'):
+                # 清空之前的高亮标记
+                recently_updated_params.clear()
+                
                 # 使用新的数据流更新机制
                 update_result = graph.set_parameter_value(current_param, new_value)
+                should_update_canvas = True
+                
+                # 标记主参数为已更新
+                recently_updated_params.add(f"{node_id}-{param_index}")
+                
+                # 标记所有被级联更新的参数
+                for update_info in update_result.get('cascaded_updates', []):
+                    updated_param = update_info['param']
+                    # 找到该参数所在的节点和索引
+                    for check_node_id, check_node in graph.nodes.items():
+                        for check_idx, check_param in enumerate(check_node.parameters):
+                            if check_param is updated_param:
+                                recently_updated_params.add(f"{check_node_id}-{check_idx}")
+                                break
+                
+                # 构建更新消息
                 cascaded_info = ""
                 if update_result['cascaded_updates']:
-                    affected_params = [update['param'].name for update in update_result['cascaded_updates']]
+                    affected_params = [f"{update['param'].name}({update['old_value']}→{update['new_value']})" 
+                                     for update in update_result['cascaded_updates']]
                     cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
+                
+                update_message = f"🔄 参数 {current_param.name} 已更新为 {new_value}{cascaded_info}"
             else:
                 # 兼容旧方法
                 current_param.value = new_value
+                should_update_canvas = True
+                update_message = f"参数 {current_param.name} 已更新为 {new_value}"
+        
+        # 返回更新结果
+        if should_update_canvas:
+            return node_data, update_canvas(), update_message, False  # 启用计时器
+        else:
+            return node_data, dash.no_update, update_message, False  # 启用计时器
     
-    # 不重新渲染画布，只更新数据
-    return node_data
+    # 默认情况
+    return node_data, dash.no_update, dash.no_update, dash.no_update
 
 # 添加参数操作回调 - 完全独立于节点菜单
 @callback(
@@ -958,6 +1005,20 @@ def save_parameter_changes(save_clicks, param_name, param_value, param_unit, par
         
     except Exception as e:
         return True, dash.no_update, f"保存失败: {str(e)}"
+
+# 添加定时清理高亮的回调
+@callback(
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
+    Input("clear-highlight-timer", "n_intervals"),
+    prevent_initial_call=True
+)
+def clear_parameter_highlights(n_intervals):
+    """定时清除参数高亮"""
+    if recently_updated_params:
+        recently_updated_params.clear()
+        return update_canvas(), True  # 清除高亮并禁用计时器
+    return dash.no_update, dash.no_update
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050) 
