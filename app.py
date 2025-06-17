@@ -531,18 +531,22 @@ def handle_node_operations(add_node_clicks, add_column_clicks,
 
 # 移除旧的show_context_menu回调，现在使用直接的dropdown menu
 
-# 添加参数更新回调
+# 添加参数更新回调 - 修改为失去焦点或按Enter时更新
 @callback(
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
     Output("clear-highlight-timer", "disabled", allow_duplicate=True),
-    Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
-    Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
+    Input({"type": "param-name", "node": ALL, "index": ALL}, "n_blur"),
+    Input({"type": "param-name", "node": ALL, "index": ALL}, "n_submit"),
+    Input({"type": "param-value", "node": ALL, "index": ALL}, "n_blur"),
+    Input({"type": "param-value", "node": ALL, "index": ALL}, "n_submit"),
+    State({"type": "param-name", "node": ALL, "index": ALL}, "value"),
+    State({"type": "param-value", "node": ALL, "index": ALL}, "value"),
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def update_parameter(param_names, param_values, node_data):
+def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, param_names, param_values, node_data):
     if not ctx.triggered_id:
         return node_data, dash.no_update, dash.no_update, dash.no_update
     
@@ -552,8 +556,31 @@ def update_parameter(param_names, param_values, node_data):
         param_index = triggered_id["index"]
         param_type = triggered_id["type"]
         
-        # 获取触发的新值
-        new_value = ctx.triggered[0]["value"]
+        # 检查触发类型，只处理有效的触发
+        trigger_prop = ctx.triggered[0]["prop_id"].split(".")[-1]
+        if trigger_prop not in ["n_blur", "n_submit"]:
+            return node_data, dash.no_update, dash.no_update, dash.no_update
+        
+        # 检查触发值是否有效（避免初始化误触发）
+        trigger_value = ctx.triggered[0]["value"]
+        if not trigger_value or trigger_value == 0:
+            return node_data, dash.no_update, dash.no_update, dash.no_update
+        
+        # 获取对应的输入框当前值
+        # 通过触发ID中的信息，直接从对应的state列表中找到值
+        new_value = None
+        
+        # 构建一个映射来查找正确的索引
+        param_input_index = 0
+        for n_id, node in graph.nodes.items():
+            for p_idx, param in enumerate(node.parameters):
+                if n_id == node_id and p_idx == param_index:
+                    if param_type == "param-name" and param_input_index < len(param_names):
+                        new_value = param_names[param_input_index]
+                    elif param_type == "param-value" and param_input_index < len(param_values):
+                        new_value = param_values[param_input_index]
+                    break
+                param_input_index += 1
         
         # 检查值是否为空或无效
         if new_value is None or new_value == "":
