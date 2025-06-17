@@ -456,58 +456,74 @@ class CalculationGraph:
         self.layout_manager = layout_manager
     
     def to_dict(self, include_layout: bool = True) -> Dict[str, Any]:
-        """将计算图转换为字典
+        """将计算图转换为字典格式
         
         Args:
             include_layout: 是否包含布局信息
             
         Returns:
-            包含计算图数据的字典
+            包含计算图信息的字典
         """
-        data = {
-            "version": "1.0",
-            "timestamp": datetime.now().isoformat(),
+        # 创建所有参数的映射，供依赖关系使用
+        all_params = {}
+        for node in self.nodes.values():
+            for param in node.parameters:
+                all_params[param.name] = param
+        
+        graph_dict = {
             "nodes": {},
-            "dependencies": self.dependencies
+            "dependencies": {},
+            "metadata": {
+                "created_at": datetime.now().isoformat(),
+                "node_count": len(self.nodes),
+                "total_parameters": sum(len(node.parameters) for node in self.nodes.values())
+            }
         }
         
-        # 保存节点数据
+        # 添加节点信息
         for node_id, node in self.nodes.items():
-            data["nodes"][node_id] = {
-                "id": node.id,
-                "name": node.name,
-                "description": node.description,
-                "node_type": getattr(node, 'node_type', 'default'),
-                "parameters": []
-            }
-            
-            # 保存参数数据
+            graph_dict["nodes"][node_id] = node.to_dict()
+        
+        # 添加依赖关系
+        for node_id, node in self.nodes.items():
             for param in node.parameters:
-                param_data = {
-                    "name": param.name,
-                    "value": param.value,
-                    "unit": param.unit,
-                    "description": param.description,
-                    "confidence": param.confidence,
-                    "calculation_func": param.calculation_func,
-                    "dependencies": [dep.name for dep in param.dependencies],
-                    "history": param.history
-                }
-                data["nodes"][node_id]["parameters"].append(param_data)
+                if param.dependencies:
+                    dep_key = f"{node_id}.{param.name}"
+                    graph_dict["dependencies"][dep_key] = [
+                        dep.name for dep in param.dependencies
+                    ]
         
-        # 保存布局信息
+        # 添加布局信息
         if include_layout and self.layout_manager:
-            data["layout"] = {
-                "cols": self.layout_manager.cols,
-                "rows": self.layout_manager.rows,
-                "node_positions": {
-                    node_id: {"row": pos.row, "col": pos.col}
-                    for node_id, pos in self.layout_manager.node_positions.items()
-                }
-            }
+            graph_dict["layout"] = self.layout_manager.to_dict()
         
-        return data
-    
+        return graph_dict
+
+    def to_json(self, include_layout: bool = True) -> str:
+        """将计算图转换为JSON字符串
+        
+        Args:
+            include_layout: 是否包含布局信息
+            
+        Returns:
+            JSON格式的字符串
+        """
+        return json.dumps(self.to_dict(include_layout), indent=2, ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, json_str: str, layout_manager: Optional['CanvasLayoutManager'] = None) -> 'CalculationGraph':
+        """从JSON字符串创建计算图
+        
+        Args:
+            json_str: JSON格式的字符串
+            layout_manager: 可选的布局管理器
+            
+        Returns:
+            新的计算图实例
+        """
+        data = json.loads(json_str)
+        return cls.from_dict(data, layout_manager)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any], layout_manager: Optional['CanvasLayoutManager'] = None) -> 'CalculationGraph':
         """从字典创建计算图
@@ -605,7 +621,7 @@ class CalculationGraph:
                         print(f"⚠️ 恢复节点 {node_id} 位置失败: {e}")
         
         return graph
-    
+
     def save_to_file(self, filepath: str, include_layout: bool = True) -> bool:
         """保存计算图到文件
         
