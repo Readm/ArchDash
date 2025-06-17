@@ -4,6 +4,7 @@ import numpy as np
 import json
 from datetime import datetime
 import uuid
+import os
 
 # 定义类型变量
 T = TypeVar('T', float, int, str)
@@ -236,14 +237,19 @@ class Node:
         }
 
 class CalculationGraph:
+    """计算图类，管理所有节点和参数之间的依赖关系"""
+    
     def __init__(self):
-        self.nodes = {}
+        self.nodes: Dict[str, Node] = {}
         self.dependencies = {}
+        self.dependency_graph: Dict[str, List[str]] = {}
+        self.reverse_dependency_graph: Dict[str, List[str]] = {}
         # 新增：反向依赖图，记录哪些参数依赖于当前参数
-        self._dependents_map = {}  # param_id -> [dependent_param_ids]
+        self._dependents_map: Dict[int, List[int]] = {}  # param_id -> [dependent_param_ids]
         # 新增：所有参数的全局映射，便于快速查找
-        self._all_parameters = {}  # param_id -> parameter_object
-
+        self._all_parameters: Dict[int, Parameter] = {}  # param_id -> parameter_object
+        self.layout_manager: Optional['CanvasLayoutManager'] = None
+        
     def add_node(self, node: Node) -> None:
         if node.id in self.nodes:
             raise ValueError(f"Node with id {node.id} already exists.")
@@ -445,46 +451,252 @@ class CalculationGraph:
             del self.nodes[node.id]
             self.dependencies = [(s, t) for s, t in self.dependencies if s != node.id and t != node.id]
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "nodes": {node_id: {
-                "name": node.name,
-                "description": node.description,
-                "parameters": [param.to_dict() for param in node.parameters]
-            } for node_id, node in self.nodes.items()},
+    def set_layout_manager(self, layout_manager: 'CanvasLayoutManager') -> None:
+        """设置布局管理器"""
+        self.layout_manager = layout_manager
+    
+    def to_dict(self, include_layout: bool = True) -> Dict[str, Any]:
+        """将计算图转换为字典
+        
+        Args:
+            include_layout: 是否包含布局信息
+            
+        Returns:
+            包含计算图数据的字典
+        """
+        data = {
+            "version": "1.0",
+            "timestamp": datetime.now().isoformat(),
+            "nodes": {},
             "dependencies": self.dependencies
         }
-
+        
+        # 保存节点数据
+        for node_id, node in self.nodes.items():
+            data["nodes"][node_id] = {
+                "id": node.id,
+                "name": node.name,
+                "description": node.description,
+                "node_type": getattr(node, 'node_type', 'default'),
+                "parameters": []
+            }
+            
+            # 保存参数数据
+            for param in node.parameters:
+                param_data = {
+                    "name": param.name,
+                    "value": param.value,
+                    "unit": param.unit,
+                    "description": param.description,
+                    "confidence": param.confidence,
+                    "calculation_func": param.calculation_func,
+                    "dependencies": [dep.name for dep in param.dependencies],
+                    "history": param.history
+                }
+                data["nodes"][node_id]["parameters"].append(param_data)
+        
+        # 保存布局信息
+        if include_layout and self.layout_manager:
+            data["layout"] = {
+                "cols": self.layout_manager.cols,
+                "rows": self.layout_manager.rows,
+                "node_positions": {
+                    node_id: {"row": pos.row, "col": pos.col}
+                    for node_id, pos in self.layout_manager.node_positions.items()
+                }
+            }
+        
+        return data
+    
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CalculationGraph':
+    def from_dict(cls, data: Dict[str, Any], layout_manager: Optional['CanvasLayoutManager'] = None) -> 'CalculationGraph':
+        """从字典创建计算图
+        
+        Args:
+            data: 包含计算图数据的字典
+            layout_manager: 可选的布局管理器
+            
+        Returns:
+            重建的计算图对象
+        """
         graph = cls()
+        
+        # 设置布局管理器
+        if layout_manager:
+            graph.set_layout_manager(layout_manager)
+        
+        # 第一遍：创建所有节点和参数（不包含依赖关系）
+        param_dict = {}  # 用于解析依赖关系
+        
         for node_id, node_data in data["nodes"].items():
             node = Node(
                 name=node_data["name"],
-                description=node_data["description"],
-                id=node_id
+                description=node_data.get("description", ""),
+                id=node_data.get("id", node_id)
             )
+            
+            # 设置节点类型
+            if "node_type" in node_data:
+                node.node_type = node_data["node_type"]
+            
+            # 创建参数（暂不设置依赖）
             for param_data in node_data["parameters"]:
                 param = Parameter(
                     name=param_data["name"],
                     value=param_data["value"],
                     unit=param_data["unit"],
-                    description=param_data["description"]
+                    description=param_data.get("description", ""),
+                    confidence=param_data.get("confidence", 1.0),
+                    calculation_func=param_data.get("calculation_func"),
+                    history=param_data.get("history", [])
                 )
+                
+                # 设置计算图引用
+                param.set_graph(graph)
+                
                 node.add_parameter(param)
+                param_dict[f"{node_id}.{param.name}"] = param
+            
             graph.add_node(node)
-        graph.dependencies = data["dependencies"]
+        
+        # 第二遍：重建参数依赖关系
+        for node_id, node_data in data["nodes"].items():
+            node = graph.nodes[node_id]
+            
+            for i, param_data in enumerate(node_data["parameters"]):
+                param = node.parameters[i]
+                
+                # 重建依赖关系
+                for dep_name in param_data.get("dependencies", []):
+                    # 查找依赖参数
+                    for dep_key, dep_param in param_dict.items():
+                        if dep_param.name == dep_name:
+                            param.add_dependency(dep_param)
+                            break
+        
+        # 恢复节点依赖关系
+        if "dependencies" in data:
+            graph.dependencies = data["dependencies"]
+        
+        # 重建依赖图
+        graph._rebuild_dependency_graph()
+        
+        # 恢复布局信息
+        if "layout" in data and graph.layout_manager:
+            layout_data = data["layout"]
+            
+            # 调整布局管理器大小
+            required_cols = layout_data.get("cols", 3)
+            required_rows = layout_data.get("rows", 10)
+            
+            while graph.layout_manager.cols < required_cols:
+                graph.layout_manager.add_column()
+            
+            while graph.layout_manager.rows < required_rows:
+                graph.layout_manager.add_rows(5)
+            
+            # 恢复节点位置
+            for node_id, pos_data in layout_data.get("node_positions", {}).items():
+                if node_id in graph.nodes:
+                    try:
+                        position = GridPosition(pos_data["row"], pos_data["col"])
+                        graph.layout_manager.place_node(node_id, position)
+                    except Exception as e:
+                        print(f"⚠️ 恢复节点 {node_id} 位置失败: {e}")
+        
         return graph
-
-    def to_json(self) -> str:
-        """将计算图转换为JSON字符串"""
-        return json.dumps(self.to_dict(), indent=2)
+    
+    def save_to_file(self, filepath: str, include_layout: bool = True) -> bool:
+        """保存计算图到文件
+        
+        Args:
+            filepath: 保存路径
+            include_layout: 是否包含布局信息
+            
+        Returns:
+            保存是否成功
+        """
+        try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            # 转换为字典并保存
+            data = self.to_dict(include_layout=include_layout)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            print(f"✅ 计算图已保存到: {filepath}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 保存计算图失败: {e}")
+            return False
     
     @classmethod
-    def from_json(cls, json_str: str) -> 'CalculationGraph':
-        """从JSON字符串创建计算图"""
-        data = json.loads(json_str)
-        return cls.from_dict(data)
+    def load_from_file(cls, filepath: str, layout_manager: Optional['CanvasLayoutManager'] = None) -> Optional['CalculationGraph']:
+        """从文件加载计算图
+        
+        Args:
+            filepath: 文件路径
+            layout_manager: 可选的布局管理器
+            
+        Returns:
+            加载的计算图对象，失败时返回None
+        """
+        try:
+            if not os.path.exists(filepath):
+                print(f"❌ 文件不存在: {filepath}")
+                return None
+            
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 验证文件格式
+            if "nodes" not in data:
+                print("❌ 无效的计算图文件格式")
+                return None
+            
+            graph = cls.from_dict(data, layout_manager)
+            print(f"✅ 计算图已从文件加载: {filepath}")
+            return graph
+            
+        except Exception as e:
+            print(f"❌ 加载计算图失败: {e}")
+            return None
+    
+    def export_summary(self) -> Dict[str, Any]:
+        """导出计算图摘要信息"""
+        summary = {
+            "总节点数": len(self.nodes),
+            "总参数数": sum(len(node.parameters) for node in self.nodes.values()),
+            "节点信息": []
+        }
+        
+        for node_id, node in self.nodes.items():
+            node_summary = {
+                "节点ID": node_id,
+                "节点名称": node.name,
+                "参数数量": len(node.parameters),
+                "参数列表": [
+                    {
+                        "名称": param.name,
+                        "值": param.value,
+                        "单位": param.unit,
+                        "有计算函数": bool(param.calculation_func),
+                        "依赖数量": len(param.dependencies)
+                    }
+                    for param in node.parameters
+                ]
+            }
+            
+            if self.layout_manager and node_id in self.layout_manager.node_positions:
+                pos = self.layout_manager.node_positions[node_id]
+                node_summary["位置"] = f"({pos.row}, {pos.col})"
+            
+            summary["节点信息"].append(node_summary)
+        
+        return summary
 
 @dataclass 
 class GridPosition:
@@ -520,6 +732,35 @@ class CanvasLayoutManager:
         # 反向映射：position -> node_id
         self.position_nodes: Dict[Tuple[int, int], str] = {}
     
+    def to_dict(self) -> Dict[str, Any]:
+        """将布局管理器转换为字典"""
+        return {
+            "cols": self.cols,
+            "rows": self.rows,
+            "node_positions": {
+                node_id: {"row": pos.row, "col": pos.col}
+                for node_id, pos in self.node_positions.items()
+            }
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CanvasLayoutManager':
+        """从字典创建布局管理器"""
+        layout_manager = cls(
+            initial_cols=data.get("cols", 3),
+            initial_rows=data.get("rows", 10)
+        )
+        
+        # 恢复节点位置
+        for node_id, pos_data in data.get("node_positions", {}).items():
+            try:
+                position = GridPosition(pos_data["row"], pos_data["col"])
+                layout_manager.place_node(node_id, position)
+            except Exception as e:
+                print(f"⚠️ 恢复节点 {node_id} 位置失败: {e}")
+        
+        return layout_manager
+
     def _init_grid(self):
         """初始化网格"""
         self.grid = [[None for _ in range(self.cols)] for _ in range(self.rows)]

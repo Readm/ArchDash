@@ -47,6 +47,9 @@ id_mapper = IDMapper()
 layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 新增：布局管理器
 recently_updated_params = set()  # 新增：存储最近更新的参数ID，用于高亮显示
 
+# 将布局管理器与计算图关联
+graph.set_layout_manager(layout_manager)
+
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
     """获取所有可用的参数，排除当前参数自身"""
@@ -225,10 +228,25 @@ app.layout = dbc.Container([
                 dcc.Input(id="node-name", type="text", placeholder="请输入节点名称"),
                 html.Button("添加节点", id="add-node-button", className="btn btn-primary mt-2"),
             ]),
-        ], width=6),
+        ], width=4),
+        dbc.Col([
+            html.Div([
+                html.Label("文件操作："),
+                html.Div([
+                    dcc.Upload(
+                        id="upload-graph",
+                        children=html.Button("🔼 加载计算图", className="btn btn-info me-2"),
+                        accept=".json",
+                        multiple=False
+                    ),
+                    html.Button("💾 保存计算图", id="save-graph-button", className="btn btn-success me-2"),
+                    html.Button("📋 导出摘要", id="export-summary-button", className="btn btn-secondary"),
+                ], className="d-flex mt-2"),
+            ]),
+        ], width=4),
         dbc.Col([
             html.Div(id="output-result", className="mt-4"),
-        ], width=6),
+        ], width=4),
     ]),
     dbc.Row([
         dbc.Col([
@@ -242,6 +260,8 @@ app.layout = dbc.Container([
     ]),
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
+    dcc.Download(id="download-graph"),  # 新增：用于下载计算图文件
+    dcc.Download(id="download-summary"),  # 新增：用于下载摘要文件
 # 移除旧的context menu，使用新的dropdown menu
     
     # 参数编辑模态窗口
@@ -566,21 +586,38 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
         if not trigger_value or trigger_value == 0:
             return node_data, dash.no_update, dash.no_update, dash.no_update
         
-        # 获取对应的输入框当前值
-        # 通过触发ID中的信息，直接从对应的state列表中找到值
+        # 🔧 重要修复：直接从触发的属性中获取新值
+        # 解析触发的属性ID以找到对应的值
+        triggered_prop_id = ctx.triggered[0]["prop_id"]
+        
+        # 从所有输入和状态中找到对应的值
         new_value = None
         
-        # 构建一个映射来查找正确的索引
-        param_input_index = 0
-        for n_id, node in graph.nodes.items():
-            for p_idx, param in enumerate(node.parameters):
-                if n_id == node_id and p_idx == param_index:
-                    if param_type == "param-name" and param_input_index < len(param_names):
-                        new_value = param_names[param_input_index]
-                    elif param_type == "param-value" and param_input_index < len(param_values):
-                        new_value = param_values[param_input_index]
+        # 构建完整的输入/状态ID列表以便匹配
+        if param_type == "param-name":
+            # 构建相同的ID结构来匹配
+            for i, (name_input_id, name_value) in enumerate(zip(
+                [{"type": "param-name", "node": n_id, "index": p_idx} 
+                 for n_id, node in graph.nodes.items() 
+                 for p_idx in range(len(node.parameters))],
+                param_names
+            )):
+                if (name_input_id["node"] == node_id and 
+                    name_input_id["index"] == param_index):
+                    new_value = name_value
                     break
-                param_input_index += 1
+        elif param_type == "param-value":
+            # 构建相同的ID结构来匹配
+            for i, (value_input_id, value_value) in enumerate(zip(
+                [{"type": "param-value", "node": n_id, "index": p_idx} 
+                 for n_id, node in graph.nodes.items() 
+                 for p_idx in range(len(node.parameters))],
+                param_values
+            )):
+                if (value_input_id["node"] == node_id and 
+                    value_input_id["index"] == param_index):
+                    new_value = value_value
+                    break
         
         # 检查值是否为空或无效
         if new_value is None or new_value == "":
@@ -615,12 +652,10 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
                         new_value = float(new_value)
                     elif isinstance(new_value, str):
                         new_value = int(new_value)
-                    else:
-                        new_value = param_value
                 else:
                     new_value = 0
             except (ValueError, TypeError):
-                new_value = str(param_value) if param_value is not None else ""
+                new_value = str(new_value) if new_value is not None else ""
             
             # 使用数据流机制更新参数值，这会自动触发依赖参数的重新计算
             if hasattr(graph, 'set_parameter_value'):
@@ -1046,6 +1081,127 @@ def clear_parameter_highlights(n_intervals):
         recently_updated_params.clear()
         return update_canvas(), True  # 清除高亮并禁用计时器
     return dash.no_update, dash.no_update
+
+# 保存计算图
+@callback(
+    Output("download-graph", "data"),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("save-graph-button", "n_clicks"),
+    prevent_initial_call=True
+)
+def save_calculation_graph(n_clicks):
+    """保存计算图到文件"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"calculation_graph_{timestamp}.json"
+        
+        # 转换为字典数据
+        graph_data = graph.to_dict(include_layout=True)
+        
+        # 创建JSON字符串
+        json_str = json.dumps(graph_data, indent=2, ensure_ascii=False)
+        
+        # 返回下载数据
+        return dict(
+            content=json_str,
+            filename=filename,
+            type="application/json"
+        ), f"✅ 计算图已保存为 {filename}"
+        
+    except Exception as e:
+        return dash.no_update, f"❌ 保存失败: {str(e)}"
+
+# 导出摘要
+@callback(
+    Output("download-summary", "data"),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("export-summary-button", "n_clicks"),
+    prevent_initial_call=True
+)
+def export_graph_summary(n_clicks):
+    """导出计算图摘要"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 生成摘要数据
+        summary = graph.export_summary()
+        
+        # 生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"graph_summary_{timestamp}.json"
+        
+        # 创建JSON字符串
+        json_str = json.dumps(summary, indent=2, ensure_ascii=False)
+        
+        # 返回下载数据
+        return dict(
+            content=json_str,
+            filename=filename,
+            type="application/json"
+        ), f"✅ 计算图摘要已导出为 {filename}"
+        
+    except Exception as e:
+        return dash.no_update, f"❌ 导出失败: {str(e)}"
+
+# 加载计算图
+@callback(
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("upload-graph", "contents"),
+    State("upload-graph", "filename"),
+    prevent_initial_call=True
+)
+def load_calculation_graph(contents, filename):
+    """从上传的文件加载计算图"""
+    if contents is None:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 解析上传的内容
+        import base64
+        
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        # 解析JSON数据
+        try:
+            data = json.loads(decoded.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            return dash.no_update, f"❌ 文件格式错误: {str(e)}"
+        
+        # 验证数据格式
+        if "nodes" not in data:
+            return dash.no_update, "❌ 无效的计算图文件格式"
+        
+        # 清空现有数据
+        global graph, layout_manager, id_mapper
+        
+        # 重新创建布局管理器
+        layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
+        
+        # 从数据重建计算图
+        graph = CalculationGraph.from_dict(data, layout_manager)
+        
+        # 重新注册所有节点到ID映射器
+        id_mapper = IDMapper()
+        for node_id, node in graph.nodes.items():
+            id_mapper.register_node(node_id, node.name)
+        
+        # 更新画布显示
+        updated_canvas = update_canvas()
+        
+        loaded_nodes = len(graph.nodes)
+        total_params = sum(len(node.parameters) for node in graph.nodes.values())
+        
+        return updated_canvas, f"✅ 成功加载计算图 '{filename}'：{loaded_nodes}个节点，{total_params}个参数"
+        
+    except Exception as e:
+        return dash.no_update, f"❌ 加载失败: {str(e)}"
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8050) 
