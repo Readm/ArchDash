@@ -786,6 +786,28 @@ class CanvasLayoutManager:
         for row in self.grid:
             row.append(None)
         self.cols += 1
+    
+    def remove_column(self) -> bool:
+        """删除最后一列，但需要先确认最后一列是空的
+        
+        Returns:
+            bool: 删除是否成功
+        """
+        if self.cols <= 1:
+            return False  # 至少保留一列
+        
+        # 检查最后一列是否为空
+        last_col = self.cols - 1
+        for row in range(self.rows):
+            if self.grid[row][last_col] is not None:
+                return False  # 最后一列不为空，不能删除
+        
+        # 删除最后一列
+        for row in self.grid:
+            row.pop()
+        self.cols -= 1
+        
+        return True
         
     def add_rows(self, num_rows: int = 5):
         """添加新行"""

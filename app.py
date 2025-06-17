@@ -255,7 +255,8 @@ app.layout = dbc.Container([
     ]),
     dbc.Row([
         dbc.Col([
-            html.Button("添加列", id="add-column-button", className="btn btn-primary mt-2"),
+            html.Button("添加列", id="add-column-button", className="btn btn-primary mt-2 me-2"),
+            html.Button("减少列", id="remove-column-button", className="btn btn-warning mt-2"),
         ], width=12),
     ]),
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
@@ -438,6 +439,7 @@ app.index_string = '''
     Output("canvas-container", "children"),
     Input("add-node-button", "n_clicks"),
     Input("add-column-button", "n_clicks"),
+    Input("remove-column-button", "n_clicks"),
     Input({"type": "move-node-up", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-down", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-left", "node": ALL}, "n_clicks"),
@@ -448,7 +450,7 @@ app.index_string = '''
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def handle_node_operations(add_node_clicks, add_column_clicks, 
+def handle_node_operations(add_node_clicks, add_column_clicks, remove_column_clicks,
                           move_up_clicks, move_down_clicks, 
                           move_left_clicks, move_right_clicks, 
                           add_param_clicks, delete_node_clicks,
@@ -480,6 +482,16 @@ def handle_node_operations(add_node_clicks, add_column_clicks,
     elif ctx.triggered_id == "add-column-button":
         layout_manager.add_column()
         return f"已添加新列，当前列数: {layout_manager.cols}", node_data, update_canvas()
+    
+    elif ctx.triggered_id == "remove-column-button":
+        success = layout_manager.remove_column()
+        if success:
+            return f"已删除最后一列，当前列数: {layout_manager.cols}", node_data, update_canvas()
+        else:
+            if layout_manager.cols <= 1:
+                return "无法删除列：至少需要保留一列", node_data, update_canvas()
+            else:
+                return "无法删除列：最后一列不为空", node_data, update_canvas()
     
     elif isinstance(ctx.triggered_id, dict):
         operation_type = ctx.triggered_id.get("type")
