@@ -39,7 +39,7 @@ class IDMapper:
         except (KeyError, TypeError):
             return None
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
 # 全局数据模型
 graph = CalculationGraph()
@@ -130,12 +130,31 @@ def update_canvas(node_data=None):
                     param_rows.append(
                         html.Tr([
                             html.Td(
-                                dcc.Input(
-                                    id={"type": "param-name", "node": node_id, "index": param_idx},
-                                    value=param.name,
-                                    style={"width": "100%", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
-                                    className="param-input"
-                                ),
+                                html.Div([
+                                    # Pin点
+                                    html.Div(
+                                        style={
+                                            "width": "8px",
+                                            "height": "8px",
+                                            "borderRadius": "50%",
+                                            "backgroundColor": "#007bff",
+                                            "border": "2px solid #fff",
+                                            "boxShadow": "0 0 0 1px #007bff",
+                                            "marginRight": "8px",
+                                            "marginTop": "6px",
+                                            "flex": "none"
+                                        },
+                                        className="param-pin",
+                                        id=f"pin-{node_id}-{param_idx}"
+                                    ),
+                                    # 参数名输入框
+                                    dcc.Input(
+                                        id={"type": "param-name", "node": node_id, "index": param_idx},
+                                        value=param.name,
+                                        style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
+                                        className="param-input"
+                                    )
+                                ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
                                 style={"paddingRight": "8px", "width": "40%"}
                             ),
                             html.Td(
@@ -217,7 +236,48 @@ def update_canvas(node_data=None):
         col_width = max(1, 12 // layout_manager.cols)
         canvas_content.append(dbc.Col(col_content, width=col_width))
     
-    return dbc.Row(canvas_content)
+    # 创建箭头连接
+    arrows = create_arrows()
+    
+    # 创建画布内容，包含节点和箭头覆盖层
+    canvas_with_arrows = html.Div([
+        # 节点内容
+        dbc.Row(canvas_content),
+        # 箭头覆盖层 - 使用普通div
+        html.Div(
+            arrows,
+            style={
+                "position": "absolute",
+                "top": "0",
+                "left": "0", 
+                "width": "100%",
+                "height": "100%",
+                "pointerEvents": "none",  # 允许鼠标事件穿透到下层元素
+                "zIndex": "10"
+            },
+            id="arrows-overlay"
+        )
+    ], style={"position": "relative"})
+    
+    return canvas_with_arrows
+
+def create_arrows():
+    """创建箭头连接 - 使用客户端JavaScript获取真实pin位置"""
+    # 总是返回箭头容器，让客户端JavaScript处理具体的箭头绘制
+    return [
+        html.Div(
+            id="arrows-overlay-dynamic",
+            style={
+                "position": "absolute",
+                "top": "0",
+                "left": "0",
+                "width": "100%",
+                "height": "100%",
+                "pointerEvents": "none",
+                "zIndex": "10"
+            }
+        )
+    ]
 
 app.layout = dbc.Container([
     html.H1("ArchDash", className="text-center my-4"),
@@ -261,6 +321,7 @@ app.layout = dbc.Container([
     ]),
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
+    dcc.Interval(id="arrow-update-timer", interval=500, n_intervals=0),  # 定时更新箭头位置
     dcc.Download(id="download-graph"),  # 新增：用于下载计算图文件
     dcc.Download(id="download-summary"),  # 新增：用于下载摘要文件
 # 移除旧的context menu，使用新的dropdown menu
@@ -418,6 +479,37 @@ app.index_string = '''
             .dropdown-item.text-danger:hover {
                 background-color: #f5c6cb !important;
                 color: #721c24 !important;
+            }
+            
+            /* Pin点样式 */
+            .param-pin {
+                transition: all 0.2s ease;
+                cursor: pointer;
+            }
+            
+            .param-pin:hover {
+                transform: scale(1.2);
+                backgroundColor: #0056b3 !important;
+                boxShadow: 0 0 0 2px #0056b3 !important;
+            }
+            
+            /* 箭头样式 */
+            #arrows-overlay {
+                pointer-events: none;
+                z-index: 10;
+            }
+            
+            .arrow-line {
+                transition: all 0.3s ease;
+            }
+            
+            .arrow-head {
+                transition: all 0.3s ease;
+            }
+            
+            /* 节点容器调整，为pin点留出空间 */
+            .node-container {
+                position: relative;
             }
         </style>
     </head>
@@ -1215,5 +1307,130 @@ def load_calculation_graph(contents, filename):
     except Exception as e:
         return dash.no_update, f"❌ 加载失败: {str(e)}"
 
+# 空的Python回调，实际绘制由客户端回调处理
+@callback(
+    Output("arrows-overlay-dynamic", "children"),
+    Input("arrow-update-timer", "n_intervals"),
+    prevent_initial_call=True
+)
+def trigger_arrow_update(n_intervals):
+    """触发箭头更新，实际绘制由客户端回调处理"""
+    return []
+
+# 修复后的客户端回调，无错误版本
+app.clientside_callback(
+    """
+    function(n_intervals, canvas_children) {
+        setTimeout(function() {
+            try {
+                var arrowContainer = document.getElementById('arrows-overlay-dynamic');
+                if (!arrowContainer) {
+                    console.log('箭头容器未找到');
+                    return;
+                }
+                
+                arrowContainer.innerHTML = '';
+                
+                var pinElements = document.querySelectorAll('[id^="pin-"]');
+                console.log('找到pin元素:', pinElements.length);
+                
+                if (pinElements.length < 2) {
+                    console.log('pin元素不足，无法绘制箭头');
+                    return;
+                }
+                
+                var pins = [];
+                var containerRect = arrowContainer.getBoundingClientRect();
+                
+                for (var i = 0; i < pinElements.length; i++) {
+                    var pin = pinElements[i];
+                    var rect = pin.getBoundingClientRect();
+                    var parts = pin.id.split('-');
+                    
+                    if (parts.length >= 3) {
+                        pins.push({
+                            nodeId: parts[1],
+                            paramIdx: parts[2], 
+                            x: rect.left + rect.width / 2 - containerRect.left,
+                            y: rect.top + rect.height / 2 - containerRect.top,
+                            right: rect.right - containerRect.left,
+                            left: rect.left - containerRect.left
+                        });
+                    }
+                }
+                
+                console.log('处理的pin数据:', pins.length);
+                
+                var groups = {};
+                for (var i = 0; i < pins.length; i++) {
+                    var pin = pins[i];
+                    if (!groups[pin.nodeId]) {
+                        groups[pin.nodeId] = [];
+                    }
+                    groups[pin.nodeId].push(pin);
+                }
+                
+                var nodeIds = Object.keys(groups);
+                console.log('节点组数量:', nodeIds.length);
+                
+                // 连接相邻节点
+                for (var i = 0; i < nodeIds.length - 1; i++) {
+                    var sourceGroup = groups[nodeIds[i]];
+                    var targetGroup = groups[nodeIds[i + 1]];
+                    
+                    if (sourceGroup.length > 0 && targetGroup.length > 0) {
+                        var source = sourceGroup[0];
+                        var target = targetGroup[0];
+                        
+                        var x1 = source.right;
+                        var y1 = source.y;
+                        var x2 = target.left;
+                        var y2 = target.y;
+                        
+                        var dx = x2 - x1;
+                        var dy = y2 - y1;
+                        var length = Math.sqrt(dx * dx + dy * dy);
+                        var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        
+                        if (length > 5) {
+                            // 连接线
+                            var line = document.createElement('div');
+                            line.style.position = 'absolute';
+                            line.style.left = x1 + 'px';
+                            line.style.top = (y1 - 1) + 'px';
+                            line.style.width = length + 'px';
+                            line.style.height = '2px';
+                            line.style.backgroundColor = '#28a745';
+                            line.style.transformOrigin = '0 50%';
+                            line.style.transform = 'rotate(' + angle + 'deg)';
+                            line.style.zIndex = '1000';
+                            
+                            arrowContainer.appendChild(line);
+                            
+                            console.log('绘制连接线: 节点' + source.nodeId + ' -> 节点' + target.nodeId);
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                console.error('客户端回调错误:', error);
+            }
+        }, 300);
+        
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("arrows-overlay-dynamic", "style"),
+    Input("arrow-update-timer", "n_intervals"),
+    Input("canvas-container", "children"),
+    prevent_initial_call=True
+)
+
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8050) 
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='启动计算图应用')
+    parser.add_argument('--port', type=int, default=8050, help='服务端口号(默认:8050)')
+    args = parser.parse_args()
+    
+    app.run(debug=True, host="0.0.0.0", port=args.port)
