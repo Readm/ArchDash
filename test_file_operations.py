@@ -60,12 +60,12 @@ def test_save_and_load_graph():
     
     if not success:
         print("❌ 保存失败！")
-        return False
+        assert False, "保存失败"
     
     # 验证文件存在
     if not os.path.exists(temp_path):
         print("❌ 保存的文件不存在！")
-        return False
+        assert False, "保存的文件不存在"
     
     print(f"✅ 文件保存成功，大小: {os.path.getsize(temp_path)} 字节")
     
@@ -86,7 +86,7 @@ def test_save_and_load_graph():
     
     if loaded_graph is None:
         print("❌ 加载失败！")
-        return False
+        assert False, "加载失败"
     
     # 验证加载的数据
     print("✅ 验证加载的计算图...")
@@ -94,7 +94,7 @@ def test_save_and_load_graph():
     # 检查节点数量
     if len(loaded_graph.nodes) != len(graph.nodes):
         print(f"❌ 节点数量不匹配: 原始{len(graph.nodes)}, 加载{len(loaded_graph.nodes)}")
-        return False
+        assert False, f"节点数量不匹配: 原始{len(graph.nodes)}, 加载{len(loaded_graph.nodes)}"
     
     # 检查参数数量
     original_params = sum(len(node.parameters) for node in graph.nodes.values())
@@ -102,12 +102,12 @@ def test_save_and_load_graph():
     
     if original_params != loaded_params:
         print(f"❌ 参数数量不匹配: 原始{original_params}, 加载{loaded_params}")
-        return False
+        assert False, f"参数数量不匹配: 原始{original_params}, 加载{loaded_params}"
     
     # 检查布局信息
     if loaded_graph.layout_manager is None:
         print("❌ 布局管理器未正确加载")
-        return False
+        assert False, "布局管理器未正确加载"
     
     print(f"   节点数: {len(loaded_graph.nodes)}")
     print(f"   参数数: {loaded_params}")
@@ -128,7 +128,8 @@ def test_save_and_load_graph():
         print(f"⚠️ 清理临时文件失败: {e}")
     
     print("✅ 所有测试通过！")
-    return True
+    # 使用assert代替return来表示测试通过
+    assert True
 
 def test_error_handling():
     """测试错误处理"""
@@ -139,7 +140,7 @@ def test_error_handling():
     result = CalculationGraph.load_from_file("nonexistent_file.json")
     if result is not None:
         print("❌ 应该返回None但没有")
-        return False
+        assert False, "应该返回None但没有"
     print("✅ 正确处理不存在的文件")
     
     # 测试加载无效JSON
@@ -152,7 +153,7 @@ def test_error_handling():
         result = CalculationGraph.load_from_file(temp_path)
         if result is not None:
             print("❌ 应该返回None但没有")
-            return False
+            assert False, "应该返回None但没有"
         print("✅ 正确处理无效JSON文件")
     finally:
         os.unlink(temp_path)
@@ -163,11 +164,12 @@ def test_error_handling():
     success = graph.save_to_file("/invalid/path/file.json")
     if success:
         print("❌ 应该失败但成功了")
-        return False
+        assert False, "应该失败但成功了"
     print("✅ 正确处理无效保存路径")
     
     print("✅ 错误处理测试通过！")
-    return True
+    # 使用assert代替return来表示测试通过
+    assert True
 
 if __name__ == "__main__":
     print("🚀 启动计算图文件操作测试")

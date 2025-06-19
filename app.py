@@ -439,7 +439,7 @@ app.layout = dbc.Container([
     ]),
     dbc.Row([
         dbc.Col([
-            html.Div(id="canvas-container", className="border p-3 mt-4", style={"height": "400px", "background-color": "#f8f9fa"}),
+            html.Div(id="canvas-container", className="border p-3 mt-4", style={"height": "400px", "backgroundColor": "#f8f9fa"}),
         ], width=6),
         dbc.Col([
             html.H5("参数敏感性分析", className="text-center mb-3"),
@@ -536,7 +536,7 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     html.Div(
                         id="dependencies-display",
-                        style={"height": "500px", "overflow-y": "auto"},
+                        style={"height": "500px", "overflowY": "auto"},
                         children=[html.P("加载中...", className="text-muted")]
                     )
                 ])
