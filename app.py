@@ -6,6 +6,8 @@ from typing import Dict, Optional, List, Any
 import json
 from datetime import datetime
 import uuid
+import plotly.graph_objects as go
+import numpy as np
 
 class IDMapper:
     """管理 Model ID 到 Dash ID 和 HTML ID 的映射"""
@@ -104,6 +106,133 @@ def create_dependency_checkboxes(available_params, selected_deps=None):
         return [html.P("暂无可用的依赖参数", className="text-muted")]
     
     return checkboxes
+
+def get_plotting_parameters():
+    """获取所有可用于绘图的参数"""
+    all_params = []
+    for node_id, node in graph.nodes.items():
+        for param in node.parameters:
+            # 只允许数值类型的参数用于绘图
+            if isinstance(param.value, (int, float)):
+                all_params.append({
+                    'label': f"{node.name}.{param.name}",
+                    'value': f"{node_id}|{param.name}",
+                    'node_id': node_id,
+                    'param_name': param.name,
+                    'current_value': param.value,
+                    'unit': param.unit
+                })
+    return all_params
+
+def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_step):
+    """执行参数敏感性分析"""
+    try:
+        x_node_id, x_param_name = x_param_info['value'].split('|')
+        y_node_id, y_param_name = y_param_info['value'].split('|')
+        
+        # 获取参数对象
+        x_node = graph.nodes.get(x_node_id)
+        y_node = graph.nodes.get(y_node_id)
+        
+        if not x_node or not y_node:
+            return {'success': False, 'message': '参数所属节点不存在'}
+        
+        x_param = None
+        y_param = None
+        
+        # 找到对应的参数对象
+        for param in x_node.parameters:
+            if param.name == x_param_name:
+                x_param = param
+                break
+        
+        for param in y_node.parameters:
+            if param.name == y_param_name:
+                y_param = param
+                break
+        
+        if not x_param or not y_param:
+            return {'success': False, 'message': '参数对象不存在'}
+        
+        # 保存原始值
+        original_x_value = x_param.value
+        
+        x_values = []
+        y_values = []
+        
+        # 生成X轴取值范围
+        x_range = np.arange(x_start, x_end + x_step, x_step)
+        
+        # 限制最大数据点数量以避免性能问题
+        if len(x_range) > 1000:
+            return {
+                'success': False, 
+                'message': f'数据点过多 ({len(x_range)} 点)，请减少范围或增大步长 (最大1000点)'
+            }
+        
+        for x_val in x_range:
+            try:
+                # 设置X参数值
+                if hasattr(graph, 'set_parameter_value'):
+                    update_result = graph.set_parameter_value(x_param, float(x_val))
+                else:
+                    x_param.value = float(x_val)
+                    # 如果Y参数有计算函数，触发重新计算
+                    if y_param.calculation_func:
+                        y_param.calculate()
+                
+                x_values.append(float(x_val))
+                y_values.append(float(y_param.value))
+                
+            except Exception as e:
+                print(f"计算错误 (X={x_val}): {e}")
+                continue
+        
+        if not x_values:
+            return {'success': False, 'message': '没有成功计算的数据点'}
+        
+        return {
+            'x_values': x_values,
+            'y_values': y_values,
+            'x_label': f"{x_param_info['label']} ({x_param_info['unit']})" if x_param_info['unit'] else x_param_info['label'],
+            'y_label': f"{y_param_info['label']} ({y_param_info['unit']})" if y_param_info['unit'] else y_param_info['label'],
+            'success': True,
+            'message': f"成功生成 {len(x_values)} 个数据点"
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f"分析失败: {str(e)}"
+        }
+    finally:
+        # 恢复原始值
+        try:
+            if 'x_param' in locals() and 'original_x_value' in locals():
+                if hasattr(graph, 'set_parameter_value'):
+                    graph.set_parameter_value(x_param, original_x_value)
+                else:
+                    x_param.value = original_x_value
+        except Exception as e:
+            print(f"恢复原始值时出错: {e}")
+
+def create_empty_plot():
+    """创建空的绘图"""
+    fig = go.Figure()
+    fig.add_annotation(
+        text="请选择参数并点击'生成图表'开始分析",
+        xref="paper", yref="paper",
+        x=0.5, y=0.5,
+        showarrow=False,
+        font=dict(size=14, color="gray")
+    )
+    fig.update_layout(
+        template="plotly_white",
+        showlegend=False,
+        xaxis=dict(showgrid=False, showticklabels=False, title=""),
+        yaxis=dict(showgrid=False, showticklabels=False, title="")
+    )
+    return fig
 
 # 画布更新函数 - 使用新的布局管理器
 def update_canvas(node_data=None):
@@ -311,7 +440,90 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.Div(id="canvas-container", className="border p-3 mt-4", style={"height": "400px", "background-color": "#f8f9fa"}),
-        ], width=12),
+        ], width=8),
+        dbc.Col([
+            html.H5("参数敏感性分析", className="text-center mb-3"),
+            
+            # 参数选择区域
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label("X轴参数:"),
+                            dcc.Dropdown(
+                                id="x-param-selector", 
+                                placeholder="选择X轴参数",
+                                clearable=True
+                            )
+                        ], width=6),
+                        dbc.Col([
+                            dbc.Label("Y轴参数:"),
+                            dcc.Dropdown(
+                                id="y-param-selector", 
+                                placeholder="选择Y轴参数",
+                                clearable=True
+                            )
+                        ], width=6),
+                    ], className="mb-3"),
+                    
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label("起始值:"),
+                            dbc.Input(
+                                id="x-start-value", 
+                                type="number", 
+                                value=0,
+                                size="sm"
+                            )
+                        ], width=4),
+                        dbc.Col([
+                            dbc.Label("结束值:"),
+                            dbc.Input(
+                                id="x-end-value", 
+                                type="number", 
+                                value=100,
+                                size="sm"
+                            )
+                        ], width=4),
+                        dbc.Col([
+                            dbc.Label("步长:"),
+                            dbc.Input(
+                                id="x-step-value", 
+                                type="number", 
+                                value=1,
+                                size="sm",
+                                min=0.1
+                            )
+                        ], width=4),
+                    ], className="mb-3"),
+                    
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.ButtonGroup([
+                                dbc.Button("🔄 生成图表", id="generate-plot-btn", color="primary", size="sm"),
+                                dbc.Button("🗑️ 清除", id="clear-plot-btn", color="secondary", size="sm"),
+                                dbc.Button("📊 导出", id="export-plot-data-btn", color="info", size="sm")
+                            ], className="w-100")
+                        ])
+                    ])
+                ])
+            ], className="mb-3"),
+            
+            # 图表显示区域
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Graph(
+                        id="sensitivity-plot",
+                        style={"height": "350px"},
+                        config={
+                            'displayModeBar': True,
+                            'modeBarButtonsToRemove': ['pan2d', 'lasso2d'],
+                            'displaylogo': False
+                        }
+                    )
+                ])
+            ])
+        ], width=4),
     ]),
     dbc.Row([
         dbc.Col([
@@ -324,6 +536,7 @@ app.layout = dbc.Container([
     dcc.Interval(id="arrow-update-timer", interval=500, n_intervals=0),  # 定时更新箭头位置
     dcc.Download(id="download-graph"),  # 新增：用于下载计算图文件
     dcc.Download(id="download-summary"),  # 新增：用于下载摘要文件
+    dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
 # 移除旧的context menu，使用新的dropdown menu
     
     # 参数编辑模态窗口
@@ -1425,6 +1638,293 @@ app.clientside_callback(
     Input("canvas-container", "children"),
     prevent_initial_call=True
 )
+
+# =============== 绘图相关回调函数 ===============
+
+# 更新参数选择器选项
+@callback(
+    Output("x-param-selector", "options"),
+    Output("y-param-selector", "options"),
+    Input("canvas-container", "children"),
+    prevent_initial_call=True
+)
+def update_param_selectors(canvas_children):
+    """动态更新参数选择器的选项"""
+    params = get_plotting_parameters()
+    # 为Dropdown组件创建简化的选项列表（只包含label和value）
+    dropdown_options = [
+        {
+            'label': param['label'],
+            'value': param['value']
+        }
+        for param in params
+    ]
+    return dropdown_options, dropdown_options
+
+# 初始化空图表
+@callback(
+    Output("sensitivity-plot", "figure"),
+    Input("x-param-selector", "id"),  # 使用ID作为触发器，只在初始化时运行
+    prevent_initial_call=False
+)
+def initialize_plot(selector_id):
+    """初始化空图表"""
+    return create_empty_plot()
+
+# 生成敏感性分析图表
+@callback(
+    Output("sensitivity-plot", "figure", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("generate-plot-btn", "n_clicks"),
+    State("x-param-selector", "value"),
+    State("y-param-selector", "value"),
+    State("x-start-value", "value"),
+    State("x-end-value", "value"),
+    State("x-step-value", "value"),
+    prevent_initial_call=True
+)
+def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step):
+    """生成参数敏感性分析图表"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    if not x_param or not y_param:
+        return create_empty_plot(), "❌ 请选择X轴和Y轴参数"
+    
+    if x_param == y_param:
+        return create_empty_plot(), "❌ X轴和Y轴参数不能相同"
+    
+    # 验证输入值
+    try:
+        x_start = float(x_start) if x_start is not None else 0
+        x_end = float(x_end) if x_end is not None else 100
+        x_step = float(x_step) if x_step is not None else 1
+        
+        if x_step <= 0:
+            return create_empty_plot(), "❌ 步长必须大于0"
+        
+        if x_start >= x_end:
+            return create_empty_plot(), "❌ 起始值必须小于结束值"
+            
+    except (ValueError, TypeError):
+        return create_empty_plot(), "❌ 请输入有效的数值"
+    
+    # 从参数值中解析节点ID和参数名
+    try:
+        x_node_id, x_param_name = x_param.split('|')
+        y_node_id, y_param_name = y_param.split('|')
+    except ValueError:
+        return create_empty_plot(), "❌ 参数格式错误，请重新选择"
+    
+    # 从graph中获取节点和参数对象
+    x_node = graph.nodes.get(x_node_id)
+    y_node = graph.nodes.get(y_node_id)
+    
+    if not x_node or not y_node:
+        return create_empty_plot(), "❌ 参数所属节点不存在，请重新选择"
+    
+    # 构建参数信息字典
+    x_param_info = {
+        'value': x_param,
+        'label': f"{x_node.name}.{x_param_name}",
+        'unit': next((p.unit for p in x_node.parameters if p.name == x_param_name), "")
+    }
+    
+    y_param_info = {
+        'value': y_param,
+        'label': f"{y_node.name}.{y_param_name}",
+        'unit': next((p.unit for p in y_node.parameters if p.name == y_param_name), "")
+    }
+    
+    # 执行敏感性分析
+    result = perform_sensitivity_analysis(
+        x_param_info, y_param_info, 
+        x_start, x_end, x_step
+    )
+    
+    if not result['success']:
+        return create_empty_plot(), f"❌ {result['message']}"
+    
+    # 创建Plotly图表
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=result['x_values'],
+        y=result['y_values'],
+        mode='lines+markers',
+        name=f"{y_param_info['label']}",
+        line=dict(width=2, color='#1f77b4'),
+        marker=dict(size=6, color='#1f77b4'),
+        hovertemplate='<b>%{fullData.name}</b><br>' +
+                      'X: %{x}<br>' +
+                      'Y: %{y}<br>' +
+                      '<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        title=dict(
+            text=f"参数敏感性分析",
+            x=0.5,
+            font=dict(size=16)
+        ),
+        xaxis_title=result['x_label'],
+        yaxis_title=result['y_label'],
+        hovermode='x unified',
+        template="plotly_white",
+        showlegend=True,
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=350
+    )
+    
+    # 添加网格线和样式优化
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.3)')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.3)')
+    
+    return fig, f"✅ {result['message']}"
+
+# 清除图表
+@callback(
+    Output("sensitivity-plot", "figure", allow_duplicate=True),
+    Output("x-param-selector", "value"),
+    Output("y-param-selector", "value"),
+    Input("clear-plot-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def clear_plot(n_clicks):
+    """清除图表和选择器"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    return create_empty_plot(), None, None
+
+# 导出绘图数据
+@callback(
+    Output("download-plot-data", "data"),
+    Input("export-plot-data-btn", "n_clicks"),
+    State("sensitivity-plot", "figure"),
+    State("x-param-selector", "value"),
+    State("y-param-selector", "value"),
+    prevent_initial_call=True
+)
+def export_plot_data(n_clicks, figure, x_param, y_param):
+    """导出绘图数据为CSV文件"""
+    if not n_clicks or not figure:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 检查图表是否有数据
+        if not figure.get('data') or len(figure['data']) == 0:
+            raise dash.exceptions.PreventUpdate
+        
+        trace_data = figure['data'][0]
+        if 'x' not in trace_data or 'y' not in trace_data:
+            raise dash.exceptions.PreventUpdate
+        
+        # 从参数值中解析参数信息
+        x_param_info = None
+        y_param_info = None
+        
+        if x_param and y_param:
+            try:
+                x_node_id, x_param_name = x_param.split('|')
+                y_node_id, y_param_name = y_param.split('|')
+                
+                x_node = graph.nodes.get(x_node_id)
+                y_node = graph.nodes.get(y_node_id)
+                
+                if x_node and y_node:
+                    x_param_info = {'label': f"{x_node.name}.{x_param_name}"}
+                    y_param_info = {'label': f"{y_node.name}.{y_param_name}"}
+            except ValueError:
+                pass
+        
+        # 构建CSV内容
+        csv_lines = []
+        
+        # 添加头部信息
+        csv_lines.append("# ArchDash 参数敏感性分析数据")
+        csv_lines.append(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        if x_param_info and y_param_info:
+            csv_lines.append(f"# X轴参数: {x_param_info['label']}")
+            csv_lines.append(f"# Y轴参数: {y_param_info['label']}")
+        csv_lines.append("")
+        
+        # 添加列标题
+        x_title = figure['layout'].get('xaxis', {}).get('title', {}).get('text', 'X')
+        y_title = figure['layout'].get('yaxis', {}).get('title', {}).get('text', 'Y')
+        csv_lines.append(f"{x_title},{y_title}")
+        
+        # 添加数据行
+        x_values = trace_data['x']
+        y_values = trace_data['y']
+        
+        for x_val, y_val in zip(x_values, y_values):
+            csv_lines.append(f"{x_val},{y_val}")
+        
+        # 生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"sensitivity_analysis_{timestamp}.csv"
+        
+        # 创建CSV字符串
+        csv_content = "\n".join(csv_lines)
+        
+        return dict(
+            content=csv_content,
+            filename=filename,
+            type="text/csv"
+        )
+        
+    except Exception as e:
+        # 静默失败，不影响用户体验
+        print(f"导出数据失败: {e}")
+        raise dash.exceptions.PreventUpdate
+
+# 自动更新范围值（当选择X轴参数时）
+@callback(
+    Output("x-start-value", "value"),
+    Output("x-end-value", "value"),
+    Input("x-param-selector", "value"),
+    prevent_initial_call=True
+)
+def auto_update_range(x_param):
+    """当选择X轴参数时，自动设置合理的范围值"""
+    if not x_param:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 从x_param值中解析节点ID和参数名
+        x_node_id, x_param_name = x_param.split('|')
+        
+        # 从graph中获取参数对象
+        x_node = graph.nodes.get(x_node_id)
+        if not x_node:
+            raise dash.exceptions.PreventUpdate
+        
+        x_param_obj = None
+        for param in x_node.parameters:
+            if param.name == x_param_name:
+                x_param_obj = param
+                break
+        
+        if not x_param_obj:
+            raise dash.exceptions.PreventUpdate
+        
+        current_value = float(x_param_obj.value)
+        
+        # 设置合理的范围（当前值的50%到150%）
+        start_value = max(0, current_value * 0.5)
+        end_value = current_value * 1.5
+        
+        # 如果当前值为0，设置默认范围
+        if current_value == 0:
+            start_value = 0
+            end_value = 100
+        
+        return start_value, end_value
+        
+    except (ValueError, TypeError):
+        # 如果转换失败，返回默认值
+        return 0, 100
 
 if __name__ == "__main__":
     import argparse
