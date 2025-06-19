@@ -440,7 +440,7 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.Div(id="canvas-container", className="border p-3 mt-4", style={"height": "400px", "background-color": "#f8f9fa"}),
-        ], width=8),
+        ], width=6),
         dbc.Col([
             html.H5("参数敏感性分析", className="text-center mb-3"),
             
@@ -514,7 +514,7 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dcc.Graph(
                         id="sensitivity-plot",
-                        style={"height": "350px"},
+                        style={"height": "250px"},
                         config={
                             'displayModeBar': True,
                             'modeBarButtonsToRemove': ['pan2d', 'lasso2d'],
@@ -523,7 +523,25 @@ app.layout = dbc.Container([
                     )
                 ])
             ])
-        ], width=4),
+        ], width=3),
+        dbc.Col([
+            html.H5("🔗 参数依赖关系", className="text-center mb-3"),
+            dbc.Card([
+                dbc.CardHeader([
+                    html.Div([
+                        html.H6("依赖关系分析", className="mb-0 d-inline"),
+                        dbc.Button("🔄 刷新", id="refresh-dependencies-btn", color="outline-primary", size="sm", className="float-end")
+                    ])
+                ]),
+                dbc.CardBody([
+                    html.Div(
+                        id="dependencies-display",
+                        style={"height": "500px", "overflow-y": "auto"},
+                        children=[html.P("加载中...", className="text-muted")]
+                    )
+                ])
+            ])
+        ], width=3),
     ]),
     dbc.Row([
         dbc.Col([
@@ -532,8 +550,8 @@ app.layout = dbc.Container([
         ], width=12),
     ]),
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
+    dcc.Store(id="arrow-connections-data", data=[]),  # 存储箭头连接数据
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
-    dcc.Interval(id="arrow-update-timer", interval=500, n_intervals=0),  # 定时更新箭头位置
     dcc.Download(id="download-graph"),  # 新增：用于下载计算图文件
     dcc.Download(id="download-summary"),  # 新增：用于下载摘要文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
@@ -698,12 +716,21 @@ app.index_string = '''
             .param-pin {
                 transition: all 0.2s ease;
                 cursor: pointer;
+                position: relative;
             }
             
             .param-pin:hover {
-                transform: scale(1.2);
+                transform: scale(1.3);
                 backgroundColor: #0056b3 !important;
-                boxShadow: 0 0 0 2px #0056b3 !important;
+                boxShadow: 0 0 0 3px rgba(0, 86, 179, 0.3) !important;
+                z-index: 1000;
+            }
+            
+            .param-pin.active {
+                transform: scale(1.3);
+                backgroundColor: #0056b3 !important;
+                boxShadow: 0 0 0 3px rgba(0, 86, 179, 0.3) !important;
+                z-index: 1000;
             }
             
             /* 箭头样式 */
@@ -712,12 +739,28 @@ app.index_string = '''
                 z-index: 10;
             }
             
-            .arrow-line {
-                transition: all 0.3s ease;
+            .dependency-arrow {
+                transition: all 0.2s ease;
+                cursor: pointer;
+                pointer-events: auto;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             }
             
-            .arrow-head {
-                transition: all 0.3s ease;
+            .dependency-arrow:hover {
+                transform: scaleY(1.5);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            }
+            
+            .dependency-arrow-head {
+                transition: all 0.2s ease;
+                cursor: pointer;
+                pointer-events: auto;
+                filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+            }
+            
+            .dependency-arrow-head:hover {
+                transform: scale(1.2);
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
             }
             
             /* 节点容器调整，为pin点留出空间 */
@@ -1520,20 +1563,36 @@ def load_calculation_graph(contents, filename):
     except Exception as e:
         return dash.no_update, f"❌ 加载失败: {str(e)}"
 
+# 更新箭头连接数据
+@callback(
+    Output("arrow-connections-data", "data"),
+    Input("canvas-container", "children"),
+    Input("node-data", "data"),
+    prevent_initial_call=False
+)
+def update_arrow_connections_data(canvas_children, node_data):
+    """更新箭头连接数据"""
+    try:
+        connections = get_arrow_connections_data()
+        return connections
+    except Exception as e:
+        print(f"⚠️ 更新箭头连接数据失败: {e}")
+        return []
+
 # 空的Python回调，实际绘制由客户端回调处理
 @callback(
     Output("arrows-overlay-dynamic", "children"),
-    Input("arrow-update-timer", "n_intervals"),
+    Input("arrow-connections-data", "data"),
     prevent_initial_call=True
 )
-def trigger_arrow_update(n_intervals):
-    """触发箭头更新，实际绘制由客户端回调处理"""
+def trigger_arrow_update_on_data_change(connections_data):
+    """当箭头连接数据变化时触发更新，实际绘制由客户端回调处理"""
     return []
 
-# 修复后的客户端回调，无错误版本
+# 基于pin点悬停的动态箭头显示系统 - 事件驱动更新
 app.clientside_callback(
     """
-    function(n_intervals, canvas_children) {
+    function(connections_data, canvas_children) {
         setTimeout(function() {
             try {
                 var arrowContainer = document.getElementById('arrows-overlay-dynamic');
@@ -1542,88 +1601,148 @@ app.clientside_callback(
                     return;
                 }
                 
+                // 清除现有箭头
                 arrowContainer.innerHTML = '';
                 
-                var pinElements = document.querySelectorAll('[id^="pin-"]');
-                console.log('找到pin元素:', pinElements.length);
-                
-                if (pinElements.length < 2) {
-                    console.log('pin元素不足，无法绘制箭头');
+                if (!connections_data || connections_data.length === 0) {
+                    console.log('无依赖关系数据');
                     return;
                 }
                 
-                var pins = [];
-                var containerRect = arrowContainer.getBoundingClientRect();
+                console.log('初始化pin悬停箭头系统，连接数:', connections_data.length);
                 
+                // 存储连接数据到全局变量，供事件处理器使用
+                window.arrowConnectionsData = connections_data;
+                window.arrowContainer = arrowContainer;
+                
+                // 移除之前的事件监听器（避免重复绑定）
+                var pinElements = document.querySelectorAll('[id^="pin-"]');
                 for (var i = 0; i < pinElements.length; i++) {
                     var pin = pinElements[i];
-                    var rect = pin.getBoundingClientRect();
-                    var parts = pin.id.split('-');
-                    
-                    if (parts.length >= 3) {
-                        pins.push({
-                            nodeId: parts[1],
-                            paramIdx: parts[2], 
-                            x: rect.left + rect.width / 2 - containerRect.left,
-                            y: rect.top + rect.height / 2 - containerRect.top,
-                            right: rect.right - containerRect.left,
-                            left: rect.left - containerRect.left
-                        });
-                    }
+                    pin.removeEventListener('mouseenter', window.pinMouseEnter);
+                    pin.removeEventListener('mouseleave', window.pinMouseLeave);
                 }
                 
-                console.log('处理的pin数据:', pins.length);
-                
-                var groups = {};
-                for (var i = 0; i < pins.length; i++) {
-                    var pin = pins[i];
-                    if (!groups[pin.nodeId]) {
-                        groups[pin.nodeId] = [];
-                    }
-                    groups[pin.nodeId].push(pin);
-                }
-                
-                var nodeIds = Object.keys(groups);
-                console.log('节点组数量:', nodeIds.length);
-                
-                // 连接相邻节点
-                for (var i = 0; i < nodeIds.length - 1; i++) {
-                    var sourceGroup = groups[nodeIds[i]];
-                    var targetGroup = groups[nodeIds[i + 1]];
+                // 定义鼠标进入pin的处理函数
+                window.pinMouseEnter = function(event) {
+                    var pinId = event.target.id;
+                    console.log('鼠标进入pin:', pinId);
                     
-                    if (sourceGroup.length > 0 && targetGroup.length > 0) {
-                        var source = sourceGroup[0];
-                        var target = targetGroup[0];
+                    // 添加active类
+                    event.target.classList.add('active');
+                    
+                    // 清除现有箭头
+                    window.arrowContainer.innerHTML = '';
+                    
+                    // 找到与当前pin相关的所有连接
+                    var relevantConnections = window.arrowConnectionsData.filter(function(conn) {
+                        return conn.source_pin_id === pinId || conn.target_pin_id === pinId;
+                    });
+                    
+                    console.log('找到相关连接:', relevantConnections.length);
+                    
+                    // 绘制相关的箭头
+                    drawArrows(relevantConnections, pinId);
+                };
+                
+                // 定义鼠标离开pin的处理函数
+                window.pinMouseLeave = function(event) {
+                    var pinId = event.target.id;
+                    console.log('鼠标离开pin:', pinId);
+                    
+                    // 移除active类
+                    event.target.classList.remove('active');
+                    
+                    // 延迟清除箭头（给用户时间移动到箭头上）
+                    setTimeout(function() {
+                        // 检查是否还有active的pin
+                        var activePins = document.querySelectorAll('.param-pin.active');
+                        if (activePins.length === 0) {
+                            window.arrowContainer.innerHTML = '';
+                            console.log('清除所有箭头');
+                        }
+                    }, 200);
+                };
+                
+                // 绘制箭头的函数
+                function drawArrows(connections, activePinId) {
+                    var containerRect = window.arrowContainer.getBoundingClientRect();
+                    
+                    for (var i = 0; i < connections.length; i++) {
+                        var connection = connections[i];
                         
-                        var x1 = source.right;
-                        var y1 = source.y;
-                        var x2 = target.left;
-                        var y2 = target.y;
+                        var sourcePin = document.getElementById(connection.source_pin_id);
+                        var targetPin = document.getElementById(connection.target_pin_id);
                         
-                        var dx = x2 - x1;
-                        var dy = y2 - y1;
-                        var length = Math.sqrt(dx * dx + dy * dy);
-                        var angle = Math.atan2(dy, dx) * 180 / Math.PI;
-                        
-                        if (length > 5) {
-                            // 连接线
-                            var line = document.createElement('div');
-                            line.style.position = 'absolute';
-                            line.style.left = x1 + 'px';
-                            line.style.top = (y1 - 1) + 'px';
-                            line.style.width = length + 'px';
-                            line.style.height = '2px';
-                            line.style.backgroundColor = '#28a745';
-                            line.style.transformOrigin = '0 50%';
-                            line.style.transform = 'rotate(' + angle + 'deg)';
-                            line.style.zIndex = '1000';
+                        if (sourcePin && targetPin) {
+                            var sourceRect = sourcePin.getBoundingClientRect();
+                            var targetRect = targetPin.getBoundingClientRect();
                             
-                            arrowContainer.appendChild(line);
+                            // 计算源pin的右边中点作为起始点
+                            var x1 = sourceRect.right - containerRect.left;
+                            var y1 = sourceRect.top + sourceRect.height / 2 - containerRect.top;
                             
-                            console.log('绘制连接线: 节点' + source.nodeId + ' -> 节点' + target.nodeId);
+                            // 计算目标pin的左边中点作为结束点
+                            var x2 = targetRect.left - containerRect.left;
+                            var y2 = targetRect.top + targetRect.height / 2 - containerRect.top;
+                            
+                            var dx = x2 - x1;
+                            var dy = y2 - y1;
+                            var length = Math.sqrt(dx * dx + dy * dy);
+                            var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                            
+                            if (length > 5) {
+                                // 确定箭头颜色（当前pin相关的用特殊颜色）
+                                var isActiveConnection = (connection.source_pin_id === activePinId || connection.target_pin_id === activePinId);
+                                var arrowColor = isActiveConnection ? '#e74c3c' : '#007bff';
+                                var arrowOpacity = isActiveConnection ? '1' : '0.6';
+                                
+                                // 创建连接线
+                                var line = document.createElement('div');
+                                line.style.position = 'absolute';
+                                line.style.left = x1 + 'px';
+                                line.style.top = (y1 - 1) + 'px';
+                                line.style.width = length + 'px';
+                                line.style.height = isActiveConnection ? '3px' : '2px';
+                                line.style.backgroundColor = arrowColor;
+                                line.style.opacity = arrowOpacity;
+                                line.style.transformOrigin = '0 50%';
+                                line.style.transform = 'rotate(' + angle + 'deg)';
+                                line.style.zIndex = isActiveConnection ? '1002' : '1000';
+                                line.className = 'dependency-arrow';
+                                line.title = connection.source_node_name + '.' + connection.source_param_name + 
+                                            ' → ' + connection.target_node_name + '.' + connection.target_param_name;
+                                
+                                window.arrowContainer.appendChild(line);
+                                
+                                // 创建箭头头部
+                                var arrowHead = document.createElement('div');
+                                arrowHead.style.position = 'absolute';
+                                arrowHead.style.left = (x2 - 6) + 'px';
+                                arrowHead.style.top = (y2 - 3) + 'px';
+                                arrowHead.style.width = '0';
+                                arrowHead.style.height = '0';
+                                arrowHead.style.borderLeft = '6px solid ' + arrowColor;
+                                arrowHead.style.borderTop = '3px solid transparent';
+                                arrowHead.style.borderBottom = '3px solid transparent';
+                                arrowHead.style.opacity = arrowOpacity;
+                                arrowHead.style.zIndex = isActiveConnection ? '1003' : '1001';
+                                arrowHead.className = 'dependency-arrow-head';
+                                
+                                window.arrowContainer.appendChild(arrowHead);
+                            }
                         }
                     }
                 }
+                
+                // 为所有pin添加事件监听器
+                for (var i = 0; i < pinElements.length; i++) {
+                    var pin = pinElements[i];
+                    pin.addEventListener('mouseenter', window.pinMouseEnter);
+                    pin.addEventListener('mouseleave', window.pinMouseLeave);
+                }
+                
+                console.log('Pin悬停事件监听器已设置，总pin数:', pinElements.length);
                 
             } catch (error) {
                 console.error('客户端回调错误:', error);
@@ -1634,7 +1753,7 @@ app.clientside_callback(
     }
     """,
     Output("arrows-overlay-dynamic", "style"),
-    Input("arrow-update-timer", "n_intervals"),
+    Input("arrow-connections-data", "data"),
     Input("canvas-container", "children"),
     prevent_initial_call=True
 )
@@ -1925,6 +2044,284 @@ def auto_update_range(x_param):
     except (ValueError, TypeError):
         # 如果转换失败，返回默认值
         return 0, 100
+
+def get_all_parameter_dependencies():
+    """获取计算图中所有参数的依赖关系"""
+    if not graph.nodes:
+        return []
+    
+    dependencies_info = []
+    
+    # 遍历所有节点和参数
+    for node_id, node in graph.nodes.items():
+        node_name = id_mapper.get_node_name(node_id)
+        
+        for param_idx, param in enumerate(node.parameters):
+            param_info = {
+                'node_id': node_id,
+                'node_name': node_name,
+                'param_name': param.name,
+                'param_value': param.value,
+                'param_unit': param.unit,
+                'param_description': param.description,
+                'has_calculation': bool(param.calculation_func),
+                'calculation_func': param.calculation_func,
+                'dependencies': [],
+                'dependents': []
+            }
+            
+            # 获取直接依赖
+            for dep_param in param.dependencies:
+                # 找到依赖参数所在的节点
+                dep_node_id = None
+                dep_node_name = None
+                for search_node_id, search_node in graph.nodes.items():
+                    if dep_param in search_node.parameters:
+                        dep_node_id = search_node_id
+                        dep_node_name = id_mapper.get_node_name(search_node_id)
+                        break
+                
+                param_info['dependencies'].append({
+                    'node_id': dep_node_id,
+                    'node_name': dep_node_name,
+                    'param_name': dep_param.name,
+                    'param_value': dep_param.value,
+                    'param_unit': dep_param.unit
+                })
+            
+            # 获取依赖于当前参数的参数（使用计算图的反向依赖图）
+            if hasattr(graph, '_all_parameters') and hasattr(graph, '_dependents_map'):
+                param_id = id(param)
+                if param_id in graph._dependents_map:
+                    dependent_ids = graph._dependents_map[param_id]
+                    for dep_id in dependent_ids:
+                        if dep_id in graph._all_parameters:
+                            dependent_param = graph._all_parameters[dep_id]
+                            
+                            # 找到依赖参数所在的节点
+                            dep_node_id = None
+                            dep_node_name = None
+                            for search_node_id, search_node in graph.nodes.items():
+                                if dependent_param in search_node.parameters:
+                                    dep_node_id = search_node_id
+                                    dep_node_name = id_mapper.get_node_name(search_node_id)
+                                    break
+                            
+                            param_info['dependents'].append({
+                                'node_id': dep_node_id,
+                                'node_name': dep_node_name,
+                                'param_name': dependent_param.name,
+                                'param_value': dependent_param.value,
+                                'param_unit': dependent_param.unit
+                            })
+            
+            dependencies_info.append(param_info)
+    
+    return dependencies_info
+
+def format_dependencies_display(dependencies_info):
+    """格式化依赖关系显示"""
+    if not dependencies_info:
+        return [html.P("暂无参数依赖关系", className="text-muted")]
+    
+    display_components = []
+    
+    # 统计信息
+    total_params = len(dependencies_info)
+    params_with_deps = sum(1 for p in dependencies_info if p['dependencies'])
+    params_with_calc = sum(1 for p in dependencies_info if p['has_calculation'])
+    
+    display_components.append(
+        dbc.Alert([
+            html.H6("📊 依赖关系统计", className="mb-2"),
+            html.P(f"总参数数量: {total_params}", className="mb-1"),
+            html.P(f"有依赖关系的参数: {params_with_deps}", className="mb-1"),
+            html.P(f"有计算函数的参数: {params_with_calc}", className="mb-0"),
+        ], color="info", className="mb-3")
+    )
+    
+    # 按节点分组显示
+    nodes_dict = {}
+    for param_info in dependencies_info:
+        node_name = param_info['node_name']
+        if node_name not in nodes_dict:
+            nodes_dict[node_name] = []
+        nodes_dict[node_name].append(param_info)
+    
+    for node_name, params in nodes_dict.items():
+        node_card_content = []
+        
+        for param_info in params:
+            param_card_items = []
+            
+            # 参数基本信息
+            param_card_items.append(
+                html.P([
+                    html.Strong(f"{param_info['param_name']}"),
+                    f" = {param_info['param_value']} {param_info['param_unit']}",
+                    html.Br(),
+                    html.Small(param_info['param_description'], className="text-muted")
+                ], className="mb-2")
+            )
+            
+            # 计算函数信息
+            if param_info['has_calculation']:
+                param_card_items.append(
+                    html.P([
+                        dbc.Badge("📊 计算参数", color="success", className="me-2"),
+                        html.Br(),
+                        html.Code(param_info['calculation_func'] or "无计算函数", style={"fontSize": "0.8em"})
+                    ], className="mb-2")
+                )
+            
+            # 显示依赖关系
+            if param_info['dependencies']:
+                deps_text = []
+                for dep in param_info['dependencies']:
+                    dep_text = f"{dep['node_name']}.{dep['param_name']}"
+                    deps_text.append(dep_text)
+                
+                param_card_items.append(
+                    html.P([
+                        html.Strong("⬅️ 依赖于: "),
+                        ", ".join(deps_text)
+                    ], className="mb-2", style={"color": "#dc3545"})
+                )
+            
+            # 显示被依赖关系
+            if param_info['dependents']:
+                dependents_text = []
+                for dep in param_info['dependents']:
+                    dep_text = f"{dep['node_name']}.{dep['param_name']}"
+                    dependents_text.append(dep_text)
+                
+                param_card_items.append(
+                    html.P([
+                        html.Strong("➡️ 被依赖于: "),
+                        ", ".join(dependents_text)
+                    ], className="mb-2", style={"color": "#28a745"})
+                )
+            
+            # 如果没有任何依赖关系
+            if not param_info['dependencies'] and not param_info['dependents']:
+                param_card_items.append(
+                    html.P("🔸 独立参数（无依赖关系）", className="text-muted mb-2")
+                )
+            
+            node_card_content.append(
+                html.Div(param_card_items, className="border-start border-3 ps-3 mb-3")
+            )
+        
+        display_components.append(
+            dbc.Card([
+                dbc.CardHeader(html.H6(f"📦 {node_name}", className="mb-0")),
+                dbc.CardBody(node_card_content)
+            ], className="mb-3")
+        )
+    
+    return display_components
+
+# =============== 依赖关系显示回调函数 ===============
+
+# 初始化依赖关系显示
+@callback(
+    Output("dependencies-display", "children"),
+    Input("canvas-container", "children"),
+    prevent_initial_call=False
+)
+def initialize_dependencies_display(canvas_children):
+    """初始化依赖关系显示"""
+    try:
+        dependencies_info = get_all_parameter_dependencies()
+        return format_dependencies_display(dependencies_info)
+    except Exception as e:
+        return [
+            dbc.Alert([
+                html.H6("⚠️ 加载依赖关系失败", className="mb-2"),
+                html.P(f"错误信息: {str(e)}", className="mb-0")
+            ], color="warning")
+        ]
+
+# 手动刷新依赖关系
+@callback(
+    Output("dependencies-display", "children", allow_duplicate=True),
+    Input("refresh-dependencies-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def refresh_dependencies_display(n_clicks):
+    """手动刷新依赖关系显示"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        dependencies_info = get_all_parameter_dependencies()
+        return format_dependencies_display(dependencies_info)
+    except Exception as e:
+        return [
+            dbc.Alert([
+                html.H6("⚠️ 刷新依赖关系失败", className="mb-2"),
+                html.P(f"错误信息: {str(e)}", className="mb-0")
+            ], color="danger")
+        ]
+
+# 当节点/参数发生变化时自动更新依赖关系
+@callback(
+    Output("dependencies-display", "children", allow_duplicate=True),
+    Input("node-data", "data"),
+    prevent_initial_call=True
+)
+def auto_update_dependencies_on_change(node_data):
+    """当节点或参数发生变化时自动更新依赖关系显示"""
+    try:
+        dependencies_info = get_all_parameter_dependencies()
+        return format_dependencies_display(dependencies_info)
+    except Exception as e:
+        return [
+            dbc.Alert([
+                html.H6("⚠️ 自动更新依赖关系失败", className="mb-2"),
+                html.P(f"错误信息: {str(e)}", className="mb-0")
+            ], color="warning")
+        ]
+
+def get_arrow_connections_data():
+    """获取用于绘制箭头的连接数据"""
+    connections = []
+    
+    if not graph.nodes:
+        return connections
+    
+    # 遍历所有节点和参数，生成连接数据
+    for node_id, node in graph.nodes.items():
+        for param_idx, param in enumerate(node.parameters):
+            # 为每个有依赖的参数创建连接
+            for dep_param in param.dependencies:
+                # 找到依赖参数所在的节点和索引
+                source_node_id = None
+                source_param_idx = None
+                
+                for search_node_id, search_node in graph.nodes.items():
+                    for search_param_idx, search_param in enumerate(search_node.parameters):
+                        if search_param is dep_param:
+                            source_node_id = search_node_id
+                            source_param_idx = search_param_idx
+                            break
+                    if source_node_id:
+                        break
+                
+                if source_node_id is not None and source_param_idx is not None:
+                    connection = {
+                        'source_pin_id': f"pin-{source_node_id}-{source_param_idx}",
+                        'target_pin_id': f"pin-{node_id}-{param_idx}",
+                        'source_node_id': source_node_id,
+                        'target_node_id': node_id,
+                        'source_param_name': dep_param.name,
+                        'target_param_name': param.name,
+                        'source_node_name': id_mapper.get_node_name(source_node_id),
+                        'target_node_name': id_mapper.get_node_name(node_id)
+                    }
+                    connections.append(connection)
+    
+    return connections
 
 if __name__ == "__main__":
     import argparse
