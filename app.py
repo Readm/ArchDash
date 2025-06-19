@@ -234,6 +234,43 @@ def create_empty_plot():
     )
     return fig
 
+# 自动删除空的最后一列的辅助函数
+def auto_remove_empty_last_column():
+    """检查并自动删除空的最后一列
+    
+    Returns:
+        str: 删除结果的描述，如果没有删除则返回None
+    """
+    removed_count = 0
+    
+    # 持续检查并删除空的最后一列，直到最后一列不为空或只剩一列
+    while layout_manager.cols > 1:
+        # 检查最后一列是否为空
+        last_col = layout_manager.cols - 1
+        is_empty = True
+        
+        for row in range(layout_manager.rows):
+            if layout_manager.grid[row][last_col] is not None:
+                is_empty = False
+                break
+        
+        if is_empty:
+            # 删除空的最后一列
+            if layout_manager.remove_column():
+                removed_count += 1
+            else:
+                break
+        else:
+            break
+    
+    if removed_count > 0:
+        if removed_count == 1:
+            return f"自动删除了1个空列"
+        else:
+            return f"自动删除了{removed_count}个空列"
+    
+    return None
+
 # 画布更新函数 - 使用新的布局管理器
 def update_canvas(node_data=None):
     """使用布局管理器渲染画布"""
@@ -355,7 +392,7 @@ def update_canvas(node_data=None):
                     param_table,
                     html.Div(id=f"node-content-{node_id}", className="node-content")
                 ],
-                className="p-2 border m-2 node-container",
+                className="p-3 node-container node-entrance fade-in",
                 id=id_mapper.get_html_id(node_id),
                 **{"data-row": row, "data-col": col, "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
             )
@@ -409,151 +446,262 @@ def create_arrows():
     ]
 
 app.layout = dbc.Container([
-    html.H1("ArchDash", className="text-center my-4"),
+    # 深色主题切换按钮
+    html.Button(
+        "🌙", 
+        id="theme-toggle", 
+        className="theme-toggle",
+        title="切换深色/浅色主题"
+    ),
+    
+    html.H1([
+        "🎨 ArchDash"
+    ], className="text-center my-2 fade-in"),
     dbc.Row([
         dbc.Col([
-            html.Div([
-                html.Label("节点名称："),
-                dcc.Input(id="node-name", type="text", placeholder="请输入节点名称"),
-                html.Button("添加节点", id="add-node-button", className="btn btn-primary mt-2"),
-            ]),
-        ], width=4),
-        dbc.Col([
-            html.Div([
-                html.Label("文件操作："),
-                html.Div([
-                    dcc.Upload(
-                        id="upload-graph",
-                        children=html.Button("🔼 加载计算图", className="btn btn-info me-2"),
-                        accept=".json",
-                        multiple=False
-                    ),
-                    html.Button("💾 保存计算图", id="save-graph-button", className="btn btn-success me-2"),
-                    html.Button("📋 导出摘要", id="export-summary-button", className="btn btn-secondary"),
-                ], className="d-flex mt-2"),
-            ]),
-        ], width=4),
-        dbc.Col([
-            html.Div(id="output-result", className="mt-4"),
-        ], width=4),
-    ]),
-    dbc.Row([
-        dbc.Col([
-            html.Div(id="canvas-container", className="border p-3 mt-4", style={"height": "400px", "backgroundColor": "#f8f9fa"}),
-        ], width=6),
-        dbc.Col([
-            html.H5("参数敏感性分析", className="text-center mb-3"),
-            
-            # 参数选择区域
             dbc.Card([
                 dbc.CardBody([
+                    # 节点添加 - 紧凑布局
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label("X轴参数:"),
-                            dcc.Dropdown(
-                                id="x-param-selector", 
-                                placeholder="选择X轴参数",
-                                clearable=True
-                            )
-                        ], width=6),
+                            dcc.Input(
+                                id="node-name", 
+                                type="text", 
+                                placeholder="输入节点名称...",
+                                className="form-control"
+                            ),
+                        ], width=8),
                         dbc.Col([
-                            dbc.Label("Y轴参数:"),
-                            dcc.Dropdown(
-                                id="y-param-selector", 
-                                placeholder="选择Y轴参数",
-                                clearable=True
-                            )
-                        ], width=6),
-                    ], className="mb-3"),
-                    
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label("起始值:"),
-                            dbc.Input(
-                                id="x-start-value", 
-                                type="number", 
-                                value=0,
-                                size="sm"
-                            )
-                        ], width=4),
-                        dbc.Col([
-                            dbc.Label("结束值:"),
-                            dbc.Input(
-                                id="x-end-value", 
-                                type="number", 
-                                value=100,
-                                size="sm"
-                            )
-                        ], width=4),
-                        dbc.Col([
-                            dbc.Label("步长:"),
-                            dbc.Input(
-                                id="x-step-value", 
-                                type="number", 
-                                value=1,
-                                size="sm",
-                                min=0.1
-                            )
+                            html.Button(
+                                ["➕ ", html.Span("添加")], 
+                                id="add-node-button", 
+                                className="btn btn-primary w-100"
+                            ),
                         ], width=4),
                     ], className="mb-3"),
                     
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.ButtonGroup([
-                                dbc.Button("🔄 生成图表", id="generate-plot-btn", color="primary", size="sm"),
-                                dbc.Button("🗑️ 清除", id="clear-plot-btn", color="secondary", size="sm"),
-                                dbc.Button("📊 导出", id="export-plot-data-btn", color="info", size="sm")
-                            ], className="w-100")
-                        ])
-                    ])
+                    # 画布自动管理列数
                 ])
-            ], className="mb-3"),
-            
-            # 图表显示区域
+            ], className="glass-card fade-in"),
+        ], width=4),
+        dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    dcc.Graph(
-                        id="sensitivity-plot",
-                        style={"height": "250px"},
-                        config={
-                            'displayModeBar': True,
-                            'modeBarButtonsToRemove': ['pan2d', 'lasso2d'],
-                            'displaylogo': False
-                        }
-                    )
+                    html.Div([
+                        html.Label("文件操作", className="fw-bold mb-0 me-auto"),
+                        html.Div([
+                            dcc.Upload(
+                                id="upload-graph",
+                                children=html.Button(
+                                    "📁", 
+                                    className="btn btn-info btn-sm me-2",
+                                    title="加载文件"
+                                ),
+                                accept=".json",
+                                multiple=False
+                            ),
+                            html.Button(
+                                "💾", 
+                                id="save-graph-button", 
+                                className="btn btn-success btn-sm",
+                                title="保存文件"
+                            ),
+                        ], className="d-flex"),
+                    ], className="d-flex align-items-center"),
                 ])
-            ])
-        ], width=3),
+            ], className="glass-card fade-in"),
+        ], width=4),
         dbc.Col([
-            html.H5("🔗 参数依赖关系", className="text-center mb-3"),
+            dbc.Card([
+                dbc.CardBody([
+                    html.Label("操作状态", className="fw-bold mb-2"),
+                    html.Div(id="output-result", className="text-muted"),
+                ])
+            ], className="glass-card fade-in"),
+        ], width=4),
+    ], className="mb-2"),
+    dbc.Row([
+        dbc.Col([
             dbc.Card([
                 dbc.CardHeader([
-                    html.Div([
-                        html.H6("依赖关系分析", className="mb-0 d-inline"),
-                        dbc.Button("🔄 刷新", id="refresh-dependencies-btn", color="outline-primary", size="sm", className="float-end")
-                    ])
+                    html.H5([ 
+                        html.Span("计算图", className="fw-bold")
+                    ], className="mb-0")
                 ]),
                 dbc.CardBody([
                     html.Div(
-                        id="dependencies-display",
-                        style={"height": "500px", "overflowY": "auto"},
-                        children=[html.P("加载中...", className="text-muted")]
-                    )
-                ])
-            ])
-        ], width=3),
+                        id="canvas-container", 
+                        className="position-relative",
+                        style={"minHeight": "500px"}
+                    ),
+                ], className="p-1")
+            ], className="glass-card"),
+        ], width=8),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader([
+                    html.H5([
+                        html.Span("相关性性分析", className="fw-bold")
+                    ], className="mb-0")
+                ]),
+                dbc.CardBody([
+                    # 图表显示区域 - 移到上方，增加高度与计算图保持一致
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(
+                                id="sensitivity-plot",
+                                style={"height": "280px"},
+                                config={
+                                    'displayModeBar': True,
+                                    'modeBarButtonsToRemove': ['pan2d', 'lasso2d'],
+                                    'displaylogo': False
+                                }
+                            )
+                        ], className="p-1")
+                    ], className="glass-card mb-1"),
+                    
+                    # 参数选择区域 - 移到下方，减少间距
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label("X轴参数:", className="mb-1"),
+                                    dcc.Dropdown(
+                                        id="x-param-selector", 
+                                        placeholder="选择X轴参数",
+                                        clearable=True,
+                                        className="mb-1"
+                                    )
+                                ], width=6),
+                                dbc.Col([
+                                    dbc.Label("Y轴参数:", className="mb-1"),
+                                    dcc.Dropdown(
+                                        id="y-param-selector", 
+                                        placeholder="选择Y轴参数",
+                                        clearable=True,
+                                        className="mb-1"
+                                    )
+                                ], width=6),
+                            ], className="mb-2"),
+                            
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label("起始值:", className="mb-1"),
+                                    dbc.Input(
+                                        id="x-start-value", 
+                                        type="number", 
+                                        value=0,
+                                        size="sm",
+                                        className="form-control"
+                                    )
+                                ], width=4),
+                                dbc.Col([
+                                    dbc.Label("结束值:", className="mb-1"),
+                                    dbc.Input(
+                                        id="x-end-value", 
+                                        type="number", 
+                                        value=100,
+                                        size="sm",
+                                        className="form-control"
+                                    )
+                                ], width=4),
+                                dbc.Col([
+                                    dbc.Label("步长:", className="mb-1"),
+                                    dbc.Input(
+                                        id="x-step-value", 
+                                        type="number", 
+                                        value=1,
+                                        size="sm",
+                                        min=0.1,
+                                        className="form-control"
+                                    )
+                                ], width=4),
+                            ], className="mb-2"),
+                            
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.ButtonGroup([
+                                        dbc.Button(
+                                            ["🔄 ", html.Span("生成")], 
+                                            id="generate-plot-btn", 
+                                            color="primary", 
+                                            size="sm"
+                                        ),
+                                        dbc.Button(
+                                            ["🔍 ", html.Span("放大")], 
+                                            id="enlarge-plot-btn", 
+                                            color="success", 
+                                            size="sm"
+                                        ),
+                                        dbc.Button(
+                                            ["🗑️ ", html.Span("清除")], 
+                                            id="clear-plot-btn", 
+                                            color="secondary", 
+                                            size="sm"
+                                        ),
+                                        dbc.Button(
+                                            ["📊 ", html.Span("导出")], 
+                                            id="export-plot-data-btn", 
+                                            color="info", 
+                                            size="sm"
+                                        )
+                                    ], className="w-100")
+                                ])
+                            ])
+                        ], className="p-2")
+                    ], className="glass-card")
+                ], className="p-1", style={"minHeight": "450px"})
+            ], className="glass-card"),
+        ], width=4),
     ]),
+    
+    # 参数依赖关系模块 - 可折叠，独立一行
     dbc.Row([
         dbc.Col([
-            html.Button("添加列", id="add-column-button", className="btn btn-primary mt-2 me-2"),
-            html.Button("减少列", id="remove-column-button", className="btn btn-warning mt-2"),
+            dbc.Card([
+                dbc.CardHeader([
+                    html.Div([
+                        html.H5([ 
+                            html.Span("参数依赖关系", className="fw-bold"),
+                        ], className="mb-0 d-inline-flex align-items-center"),
+                        html.Div([
+                            dbc.Button(
+                                "🔄", 
+                                id="refresh-dependencies-btn", 
+                                color="outline-primary", 
+                                size="sm", 
+                                className="me-2",
+                                title="刷新依赖关系"
+                            ),
+                            dbc.Button(
+                                ["🔽 ", html.Span("展开")], 
+                                id="collapse-dependencies-btn", 
+                                color="outline-secondary", 
+                                size="sm",
+                                className="collapse-btn",
+                                title="展开/折叠依赖关系面板"
+                            ),
+                        ], className="d-flex")
+                    ], className="d-flex justify-content-between align-items-center w-100")
+                ], className="dependencies-header py-2"),
+                dbc.Collapse([
+                    dbc.CardBody([
+                        html.Div(
+                            id="dependencies-display",
+                            style={"height": "350px", "overflowY": "auto"},
+                            children=[html.P("📊 加载依赖关系中...", className="text-muted text-center")]
+                        )
+                    ], className="p-2")
+                ], id="dependencies-collapse", is_open=False)
+            ], className="glass-card dependencies-panel"),
         ], width=12),
-    ]),
+    ], className="mt-2"),
+
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
     dcc.Store(id="arrow-connections-data", data=[]),  # 存储箭头连接数据
+    dcc.Store(id="dependencies-collapse-state", data={"is_open": False}),  # 存储依赖关系面板折叠状态
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
-    dcc.Download(id="download-graph"),  # 新增：用于下载计算图文件
-    dcc.Download(id="download-summary"),  # 新增：用于下载摘要文件
+    dcc.Download(id="download-graph"),  # 用于下载计算图文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
 # 移除旧的context menu，使用新的dropdown menu
     
@@ -642,98 +790,72 @@ app.layout = dbc.Container([
     
     # 存储当前编辑的参数信息
     dcc.Store(id="param-edit-data", data={"node_id": None, "param_index": None}),
+    
+    # 放大图表模态窗口
+    dbc.Modal([
+        dbc.ModalHeader([
+            html.H4("📈 参数敏感性分析 - 详细视图", className="modal-title")
+        ]),
+        dbc.ModalBody([
+            dcc.Graph(
+                id="enlarged-plot",
+                style={"height": "70vh"},
+                config={
+                    'displayModeBar': True,
+                    'modeBarButtonsToRemove': ['pan2d', 'lasso2d'],
+                    'displaylogo': False,
+                    'toImageButtonOptions': {
+                        'format': 'png',
+                        'filename': 'sensitivity_analysis',
+                        'height': 800,
+                        'width': 1200,
+                        'scale': 2
+                    }
+                }
+            )
+        ], className="p-1"),
+        dbc.ModalFooter([
+            dbc.Button("关闭", id="close-enlarged-plot", color="secondary")
+        ])
+    ], id="enlarged-plot-modal", size="xl", is_open=False),
 ], fluid=True)
 
-# 添加自定义CSS样式
+# 添加自定义CSS样式 - 使用外部样式文件
 app.index_string = '''
 <!DOCTYPE html>
 <html>
     <head>
         {%metas%}
-        <title>{%title%}</title>
+        <title>🎨 ArchDash </title>
         {%favicon%}
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
         {%css%}
         <style>
-            .node-container {
-                background-color: white;
-                border-radius: 4px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                transition: all 0.3s ease;
-            }
-            .node-container:hover {
-                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            }
-            .param-input:hover {
-                border: 1px solid #ddd !important;
-                background: #f8f9fa !important;
-            }
-            .param-input:focus {
-                outline: none !important;
-                border: 2px solid #007bff !important;
-                background: white !important;
-                box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25) !important;
-            }
+            /* 保留必要的覆盖样式 */
             .node-name {
                 font-weight: bold;
                 margin-bottom: 4px;
+                color: var(--text-primary);
             }
             .node-content {
                 font-size: 0.9em;
-                color: #666;
+                color: var(--text-secondary);
             }
             .param-menu-btn {
                 border: none !important;
                 background: transparent !important;
                 padding: 2px 6px !important;
                 font-size: 12px !important;
-                color: #666 !important;
+                color: var(--text-secondary) !important;
                 transition: all 0.2s ease !important;
             }
             .param-menu-btn:hover {
-                background: #f8f9fa !important;
-                color: #333 !important;
+                background: var(--glass-bg) !important;
+                color: var(--text-primary) !important;
                 border-radius: 3px !important;
             }
-            .dropdown-menu {
-                font-size: 0.9em !important;
-                min-width: 120px !important;
-                border: 1px solid #dee2e6 !important;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-            }
-            .dropdown-item {
-                padding: 6px 12px !important;
-                font-size: 0.9em !important;
-            }
-            .dropdown-item:hover {
-                background-color: #f8f9fa !important;
-            }
-            .dropdown-item.text-danger:hover {
-                background-color: #f5c6cb !important;
-                color: #721c24 !important;
-            }
             
-            /* Pin点样式 */
-            .param-pin {
-                transition: all 0.2s ease;
-                cursor: pointer;
-                position: relative;
-            }
-            
-            .param-pin:hover {
-                transform: scale(1.3);
-                backgroundColor: #0056b3 !important;
-                boxShadow: 0 0 0 3px rgba(0, 86, 179, 0.3) !important;
-                z-index: 1000;
-            }
-            
-            .param-pin.active {
-                transform: scale(1.3);
-                backgroundColor: #0056b3 !important;
-                boxShadow: 0 0 0 3px rgba(0, 86, 179, 0.3) !important;
-                z-index: 1000;
-            }
-            
-            /* 箭头样式 */
+            /* 箭头样式保持 */
             #arrows-overlay {
                 pointer-events: none;
                 z-index: 10;
@@ -743,12 +865,12 @@ app.index_string = '''
                 transition: all 0.2s ease;
                 cursor: pointer;
                 pointer-events: auto;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
             }
             
             .dependency-arrow:hover {
                 transform: scaleY(1.5);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
             }
             
             .dependency-arrow-head {
@@ -761,11 +883,6 @@ app.index_string = '''
             .dependency-arrow-head:hover {
                 transform: scale(1.2);
                 filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-            }
-            
-            /* 节点容器调整，为pin点留出空间 */
-            .node-container {
-                position: relative;
             }
         </style>
     </head>
@@ -786,8 +903,6 @@ app.index_string = '''
     Output("node-data", "data"),
     Output("canvas-container", "children"),
     Input("add-node-button", "n_clicks"),
-    Input("add-column-button", "n_clicks"),
-    Input("remove-column-button", "n_clicks"),
     Input({"type": "move-node-up", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-down", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-left", "node": ALL}, "n_clicks"),
@@ -798,8 +913,7 @@ app.index_string = '''
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def handle_node_operations(add_node_clicks, add_column_clicks, remove_column_clicks,
-                          move_up_clicks, move_down_clicks, 
+def handle_node_operations(add_node_clicks, move_up_clicks, move_down_clicks, 
                           move_left_clicks, move_right_clicks, 
                           add_param_clicks, delete_node_clicks,
                           node_name, node_data):
@@ -827,20 +941,6 @@ def handle_node_operations(add_node_clicks, add_column_clicks, remove_column_cli
         except ValueError as e:
             return f"错误：{str(e)}", node_data, update_canvas()
     
-    elif ctx.triggered_id == "add-column-button":
-        layout_manager.add_column()
-        return f"已添加新列，当前列数: {layout_manager.cols}", node_data, update_canvas()
-    
-    elif ctx.triggered_id == "remove-column-button":
-        success = layout_manager.remove_column()
-        if success:
-            return f"已删除最后一列，当前列数: {layout_manager.cols}", node_data, update_canvas()
-        else:
-            if layout_manager.cols <= 1:
-                return "无法删除列：至少需要保留一列", node_data, update_canvas()
-            else:
-                return "无法删除列：最后一列不为空", node_data, update_canvas()
-    
     elif isinstance(ctx.triggered_id, dict):
         operation_type = ctx.triggered_id.get("type")
         node_id = ctx.triggered_id.get("node")
@@ -857,31 +957,43 @@ def handle_node_operations(add_node_clicks, add_column_clicks, remove_column_cli
         
         if operation_type == "move-node-up":
             success = layout_manager.move_node_up(node_id)
+            result_message = f"节点 {node_name} 已上移" if success else f"节点 {node_name} 无法上移"
+            # 节点移动后检查并自动删除空的最后一列
             if success:
-                return f"节点 {node_name} 已上移", node_data, update_canvas()
-            else:
-                return f"节点 {node_name} 无法上移", node_data, update_canvas()
+                auto_remove_result = auto_remove_empty_last_column()
+                if auto_remove_result:
+                    result_message += f"，{auto_remove_result}"
+            return result_message, node_data, update_canvas()
         
         elif operation_type == "move-node-down":
             success = layout_manager.move_node_down(node_id)
+            result_message = f"节点 {node_name} 已下移" if success else f"节点 {node_name} 无法下移"
+            # 节点移动后检查并自动删除空的最后一列
             if success:
-                return f"节点 {node_name} 已下移", node_data, update_canvas()
-            else:
-                return f"节点 {node_name} 无法下移", node_data, update_canvas()
+                auto_remove_result = auto_remove_empty_last_column()
+                if auto_remove_result:
+                    result_message += f"，{auto_remove_result}"
+            return result_message, node_data, update_canvas()
         
         elif operation_type == "move-node-left":
             success = layout_manager.move_node_left(node_id)
+            result_message = f"节点 {node_name} 已左移" if success else f"节点 {node_name} 无法左移"
+            # 节点移动后检查并自动删除空的最后一列
             if success:
-                return f"节点 {node_name} 已左移", node_data, update_canvas()
-            else:
-                return f"节点 {node_name} 无法左移", node_data, update_canvas()
+                auto_remove_result = auto_remove_empty_last_column()
+                if auto_remove_result:
+                    result_message += f"，{auto_remove_result}"
+            return result_message, node_data, update_canvas()
         
         elif operation_type == "move-node-right":
             success = layout_manager.move_node_right(node_id)
+            result_message = f"节点 {node_name} 已右移" if success else f"节点 {node_name} 无法右移"
+            # 节点移动后检查并自动删除空的最后一列
             if success:
-                return f"节点 {node_name} 已右移", node_data, update_canvas()
-            else:
-                return f"节点 {node_name} 无法右移", node_data, update_canvas()
+                auto_remove_result = auto_remove_empty_last_column()
+                if auto_remove_result:
+                    result_message += f"，{auto_remove_result}"
+            return result_message, node_data, update_canvas()
         
         elif operation_type == "add-param":
             param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
@@ -905,7 +1017,13 @@ def handle_node_operations(add_node_clicks, add_column_clicks, remove_column_cli
             if hasattr(id_mapper, '_node_mapping') and node_id in id_mapper._node_mapping:
                 del id_mapper._node_mapping[node_id]
             
-            return f"节点 {node_name} 已删除", node_data, update_canvas()
+            result_message = f"节点 {node_name} 已删除"
+            # 删除节点后检查并自动删除空的最后一列
+            auto_remove_result = auto_remove_empty_last_column()
+            if auto_remove_result:
+                result_message += f"，{auto_remove_result}"
+            
+            return result_message, node_data, update_canvas()
     
     return dash.no_update, dash.no_update, dash.no_update
 
@@ -1475,38 +1593,7 @@ def save_calculation_graph(n_clicks):
     except Exception as e:
         return dash.no_update, f"❌ 保存失败: {str(e)}"
 
-# 导出摘要
-@callback(
-    Output("download-summary", "data"),
-    Output("output-result", "children", allow_duplicate=True),
-    Input("export-summary-button", "n_clicks"),
-    prevent_initial_call=True
-)
-def export_graph_summary(n_clicks):
-    """导出计算图摘要"""
-    if not n_clicks:
-        raise dash.exceptions.PreventUpdate
-    
-    try:
-        # 生成摘要数据
-        summary = graph.export_summary()
-        
-        # 生成文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"graph_summary_{timestamp}.json"
-        
-        # 创建JSON字符串
-        json_str = json.dumps(summary, indent=2, ensure_ascii=False)
-        
-        # 返回下载数据
-        return dict(
-            content=json_str,
-            filename=filename,
-            type="application/json"
-        ), f"✅ 计算图摘要已导出为 {filename}"
-        
-    except Exception as e:
-        return dash.no_update, f"❌ 导出失败: {str(e)}"
+
 
 # 加载计算图
 @callback(
@@ -2322,6 +2409,226 @@ def get_arrow_connections_data():
                     connections.append(connection)
     
     return connections
+
+# 下拉菜单z-index管理的客户端回调
+app.clientside_callback(
+    """
+    function() {
+        // 监听所有下拉菜单的显示/隐藏事件
+        function setupDropdownListeners() {
+            // 移除所有现有的监听器
+            document.querySelectorAll('.dropdown-toggle').forEach(btn => {
+                btn.removeEventListener('click', handleDropdownToggle);
+            });
+            
+            // 添加新的监听器
+            document.querySelectorAll('.dropdown-toggle').forEach(btn => {
+                btn.addEventListener('click', handleDropdownToggle);
+            });
+            
+            // 监听点击外部区域关闭下拉菜单
+            document.addEventListener('click', handleOutsideClick);
+        }
+        
+        function handleDropdownToggle(event) {
+            const toggle = event.target.closest('.dropdown-toggle');
+            const dropdown = toggle ? toggle.closest('.dropdown') : null;
+            const nodeContainer = toggle ? toggle.closest('.node-container') : null;
+            
+            if (nodeContainer) {
+                // 重置所有节点的z-index
+                document.querySelectorAll('.node-container').forEach(node => {
+                    node.classList.remove('dropdown-active');
+                });
+                
+                // 如果下拉菜单即将显示，提升当前节点的层级
+                setTimeout(() => {
+                    const menu = dropdown ? dropdown.querySelector('.dropdown-menu') : null;
+                    if (menu && menu.classList.contains('show')) {
+                        nodeContainer.classList.add('dropdown-active');
+                    }
+                }, 10);
+            }
+        }
+        
+        function handleOutsideClick(event) {
+            if (!event.target.closest('.dropdown')) {
+                // 如果点击在下拉菜单外部，重置所有节点的z-index
+                document.querySelectorAll('.node-container').forEach(node => {
+                    node.classList.remove('dropdown-active');
+                });
+            }
+        }
+        
+        // 初始化监听器
+        setupDropdownListeners();
+        
+        // 使用MutationObserver监听DOM变化，重新设置监听器
+        const observer = new MutationObserver(function(mutations) {
+            let needsUpdate = false;
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1 && (
+                            node.classList.contains('node-container') ||
+                            node.querySelector('.dropdown-toggle')
+                        )) {
+                            needsUpdate = true;
+                        }
+                    });
+                }
+            });
+            if (needsUpdate) {
+                setTimeout(setupDropdownListeners, 100);
+            }
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("canvas-container", "id"),  # 虚拟输出
+    Input("canvas-container", "children")
+)
+
+# 深色主题切换回调
+# 折叠依赖关系面板的回调
+@callback(
+    Output("dependencies-collapse", "is_open"),
+    Output("collapse-dependencies-btn", "children"),
+    Input("collapse-dependencies-btn", "n_clicks"),
+    State("dependencies-collapse", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_dependencies_collapse(n_clicks, is_open):
+    """切换依赖关系面板的展开/折叠状态"""
+    if n_clicks:
+        new_state = not is_open
+        if new_state:
+            return new_state, ["🔼 ", html.Span("折叠")]
+        else:
+            return new_state, ["🔽 ", html.Span("展开")]
+    return is_open, ["🔽 ", html.Span("展开")]
+
+# 放大图表功能
+@callback(
+    Output("enlarged-plot-modal", "is_open"),
+    Output("enlarged-plot", "figure"),
+    Input("enlarge-plot-btn", "n_clicks"),
+    Input("close-enlarged-plot", "n_clicks"),
+    State("sensitivity-plot", "figure"),
+    State("enlarged-plot-modal", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_enlarged_plot(enlarge_clicks, close_clicks, current_figure, is_open):
+    """打开/关闭放大的图表模态窗口"""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+    
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if button_id == "enlarge-plot-btn" and enlarge_clicks:
+        if current_figure and current_figure.get('data'):
+            # 创建放大版本的图表
+            enlarged_figure = current_figure.copy()
+            
+            # 增强放大图表的样式
+            enlarged_figure['layout'].update({
+                'height': None,  # 让模态窗口控制高度
+                'font': {'size': 14},
+                'title': {
+                    'font': {'size': 20},
+                    'x': 0.5,
+                    'xanchor': 'center'
+                },
+                'xaxis': {
+                    **enlarged_figure['layout'].get('xaxis', {}),
+                    'title': {
+                        **enlarged_figure['layout'].get('xaxis', {}).get('title', {}),
+                        'font': {'size': 16}
+                    },
+                    'tickfont': {'size': 12}
+                },
+                'yaxis': {
+                    **enlarged_figure['layout'].get('yaxis', {}),
+                    'title': {
+                        **enlarged_figure['layout'].get('yaxis', {}).get('title', {}),
+                        'font': {'size': 16}
+                    },
+                    'tickfont': {'size': 12}
+                },
+                'margin': {'l': 80, 'r': 50, 't': 80, 'b': 80}
+            })
+            
+            return True, enlarged_figure
+        else:
+            return False, dash.no_update
+    
+    elif button_id == "close-enlarged-plot" and close_clicks:
+        return False, dash.no_update
+    
+    return is_open, dash.no_update
+
+@callback(
+    Output("theme-toggle", "children"),
+    Input("theme-toggle", "n_clicks"),
+    prevent_initial_call=True
+)
+def toggle_theme(n_clicks):
+    """切换深色/浅色主题"""
+    if n_clicks is None:
+        return "🌙"
+    
+    # 切换主题图标
+    return "☀️" if n_clicks % 2 == 1 else "🌙"
+
+# 客户端回调用于实际切换主题
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks === null) {
+            return window.dash_clientside.no_update;
+        }
+        
+        const body = document.body;
+        const isDark = n_clicks % 2 === 1;
+        
+        if (isDark) {
+            body.setAttribute('data-theme', 'dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            body.removeAttribute('data-theme');
+            localStorage.setItem('theme', 'light');
+        }
+        
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("theme-toggle", "id"),  # 虚拟输出
+    Input("theme-toggle", "n_clicks")
+)
+
+# 页面加载时恢复主题设置
+app.clientside_callback(
+    """
+    function() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.setAttribute('data-theme', 'dark');
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("theme-toggle", "title"),  # 虚拟输出
+    Input("theme-toggle", "id")
+)
+
+# 在现有的节点操作回调函数之前添加这些新回调
 
 if __name__ == "__main__":
     import argparse
