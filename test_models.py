@@ -215,8 +215,7 @@ def test_node_operations():
     assert node.parameters[0].name == "param2"
     
     # 测试获取参数历史记录
-    history = node.get_parameter_history("param2")
-    assert isinstance(history, list)
+
 
 def test_calculation_graph():
     """测试计算图"""
@@ -531,40 +530,4 @@ def test_dependency_chain_analysis():
     
     print("✅ 依赖链分析功能正常工作")
 
-def test_parameter_history_tracking():
-    """测试参数历史记录跟踪"""
-    # 创建计算图和参数
-    graph = CalculationGraph()
-    node = Node("HistoryTestNode", "历史记录测试节点")
-    
-    param = Parameter("tracked_param", 10.0, "V", 
-                     calculation_func="result = value * 2")
-    
-    node.add_parameter(param)
-    graph.add_node(node)
-    
-    # 记录初始历史长度
-    initial_history_length = len(param.history)
-    
-    # 执行计算
-    param.calculate()
-    
-    # 验证历史记录增加
-    assert len(param.history) == initial_history_length + 1
-    
-    # 验证历史记录内容
-    latest_history = param.history[-1]
-    assert 'timestamp' in latest_history
-    assert 'value' in latest_history
-    assert 'dependencies' in latest_history
-    assert latest_history['value'] == 20.0  # 10.0 * 2
-    
-    # 通过set_parameter_value更新
-    graph.set_parameter_value(param, 15.0)
-    param.calculate()
-    
-    # 验证历史记录继续追踪
-    assert len(param.history) == initial_history_length + 2
-    assert param.history[-1]['value'] == 30.0  # 15.0 * 2
-    
-    print("✅ 参数历史记录跟踪正常工作") 
+ 

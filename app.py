@@ -40,6 +40,11 @@ class IDMapper:
             return dash_id["index"]
         except (KeyError, TypeError):
             return None
+    
+    def update_node_name(self, node_id: str, new_name: str) -> None:
+        """更新节点名称"""
+        if node_id in self._node_mapping:
+            self._node_mapping[node_id]["name"] = new_name
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
@@ -374,6 +379,8 @@ def update_canvas(node_data=None):
                         ]),
                         dbc.DropdownMenu(
                             children=[
+                                dbc.DropdownMenuItem("编辑节点", id={"type": "edit-node", "node": node_id}, className="text-warning"),
+                                dbc.DropdownMenuItem(divider=True),
                                 dbc.DropdownMenuItem("上移", id={"type": "move-node-up", "node": node_id}, className="text-primary"),
                                 dbc.DropdownMenuItem("下移", id={"type": "move-node-down", "node": node_id}, className="text-primary"),
                                 dbc.DropdownMenuItem(divider=True),
@@ -686,11 +693,42 @@ app.layout = dbc.Container([
                 ], className="dependencies-header py-2"),
                 dbc.Collapse([
                     dbc.CardBody([
-                        html.Div(
-                            id="dependencies-display",
-                            style={"height": "350px", "overflowY": "auto"},
-                            children=[html.P("📊 加载依赖关系中...", className="text-muted text-center")]
-                        )
+                        # 使用标签页显示不同的视图
+                        dbc.Tabs([
+                            dbc.Tab([
+                                html.Div(
+                                    id="dependencies-display",
+                                    style={"height": "350px", "overflowY": "auto"},
+                                    children=[html.P("📊 加载依赖关系中...", className="text-muted text-center")]
+                                )
+                            ], label="🔗 依赖关系", tab_id="dependencies-tab"),
+                            dbc.Tab([
+                                html.Div(
+                                    id="calculation-flow-display",
+                                    style={"height": "350px", "overflowY": "auto"},
+                                    children=[html.P("🔄 加载计算流程中...", className="text-muted text-center")]
+                                )
+                            ], label="⚙️ 计算流程", tab_id="flow-tab"),
+                            dbc.Tab([
+                                html.Div([
+                                    html.H6("📊 实时计算分析", className="mb-3"),
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label("选择参数进行分析:"),
+                                            dbc.Select(id="analysis-param-selector", placeholder="选择要分析的参数")
+                                        ], width=8),
+                                        dbc.Col([
+                                            dbc.Button("开始分析", id="start-analysis-btn", color="primary", size="sm")
+                                        ], width=4)
+                                    ], className="mb-3"),
+                                    html.Div(
+                                        id="realtime-analysis-display",
+                                        style={"height": "280px", "overflowY": "auto"},
+                                        children=[html.P("选择参数后点击'开始分析'查看实时计算过程", className="text-muted text-center")]
+                                    )
+                                ], style={"padding": "15px"})
+                            ], label="📈 实时分析", tab_id="analysis-tab")
+                        ], id="dependencies-tabs", active_tab="dependencies-tab")
                     ], className="p-2")
                 ], id="dependencies-collapse", is_open=False)
             ], className="glass-card dependencies-panel"),
@@ -790,6 +828,48 @@ app.layout = dbc.Container([
     
     # 存储当前编辑的参数信息
     dcc.Store(id="param-edit-data", data={"node_id": None, "param_index": None}),
+    
+    # 节点编辑模态窗口
+    dbc.Modal([
+        dbc.ModalHeader([
+            html.H4("编辑节点", id="node-edit-title")
+        ]),
+        dbc.ModalBody([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("节点名称:"),
+                    dbc.Input(id="node-edit-name", placeholder="节点名称")
+                ], width=8),
+                dbc.Col([
+                    dbc.Label("节点类型:"),
+                    dbc.Select(
+                        id="node-edit-type",
+                        options=[
+                            {"label": "默认", "value": "default"},
+                            {"label": "输入", "value": "input"},
+                            {"label": "计算", "value": "calculation"},
+                            {"label": "输出", "value": "output"}
+                        ],
+                        value="default"
+                    )
+                ], width=4),
+            ], className="mb-3"),
+            
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("节点描述:"),
+                    dbc.Textarea(id="node-edit-description", placeholder="节点描述", rows=3)
+                ])
+            ], className="mb-3"),
+        ]),
+        dbc.ModalFooter([
+            dbc.Button("取消", id="node-edit-cancel", color="secondary", className="me-2"),
+            dbc.Button("保存", id="node-edit-save", color="primary")
+        ])
+    ], id="node-edit-modal", size="md", is_open=False),
+    
+    # 存储当前编辑的节点信息
+    dcc.Store(id="node-edit-data", data={"node_id": None}),
     
     # 放大图表模态窗口
     dbc.Modal([
@@ -2133,7 +2213,7 @@ def auto_update_range(x_param):
         return 0, 100
 
 def get_all_parameter_dependencies():
-    """获取计算图中所有参数的依赖关系"""
+    """获取计算图中所有参数的依赖关系，包括计算过程和历史"""
     if not graph.nodes:
         return []
     
@@ -2144,6 +2224,26 @@ def get_all_parameter_dependencies():
         node_name = id_mapper.get_node_name(node_id)
         
         for param_idx, param in enumerate(node.parameters):
+
+            
+            # 分析计算复杂度和执行状态
+            calculation_status = "无计算"
+            if param.calculation_func:
+                try:
+                    # 尝试解析计算函数的复杂度
+                    func_lines = param.calculation_func.split('\n')
+                    non_comment_lines = [line.strip() for line in func_lines if line.strip() and not line.strip().startswith('#')]
+                    complexity = len(non_comment_lines)
+                    
+                    if complexity <= 3:
+                        calculation_status = "简单计算"
+                    elif complexity <= 10:
+                        calculation_status = "中等复杂度"
+                    else:
+                        calculation_status = "复杂计算"
+                except:
+                    calculation_status = "计算函数"
+            
             param_info = {
                 'node_id': node_id,
                 'node_name': node_name,
@@ -2151,13 +2251,18 @@ def get_all_parameter_dependencies():
                 'param_value': param.value,
                 'param_unit': param.unit,
                 'param_description': param.description,
+                'param_confidence': getattr(param, 'confidence', 1.0),
                 'has_calculation': bool(param.calculation_func),
                 'calculation_func': param.calculation_func,
+                'calculation_status': calculation_status,
                 'dependencies': [],
-                'dependents': []
+                'dependents': [],
+                'calculation_chain': [],  # 完整的计算链条
+                'execution_time': None,   # 计算执行时间
+                'calculation_error': None # 计算错误信息
             }
             
-            # 获取直接依赖
+            # 获取直接依赖（增强版）
             for dep_param in param.dependencies:
                 # 找到依赖参数所在的节点
                 dep_node_id = None
@@ -2168,66 +2273,102 @@ def get_all_parameter_dependencies():
                         dep_node_name = id_mapper.get_node_name(search_node_id)
                         break
                 
+                # 计算依赖强度（基于参数类型）
+                dep_strength = "正常"
+                if dep_param.calculation_func:
+                    dep_strength = "计算参数"
+                else:
+                    dep_strength = "输入参数"
+                
                 param_info['dependencies'].append({
                     'node_id': dep_node_id,
                     'node_name': dep_node_name,
                     'param_name': dep_param.name,
                     'param_value': dep_param.value,
-                    'param_unit': dep_param.unit
+                    'param_unit': dep_param.unit,
+                    'param_obj': dep_param,
+                    'dependency_strength': dep_strength
                 })
             
-            # 获取依赖于当前参数的参数（使用计算图的反向依赖图）
-            if hasattr(graph, '_all_parameters') and hasattr(graph, '_dependents_map'):
-                param_id = id(param)
-                if param_id in graph._dependents_map:
-                    dependent_ids = graph._dependents_map[param_id]
-                    for dep_id in dependent_ids:
-                        if dep_id in graph._all_parameters:
-                            dependent_param = graph._all_parameters[dep_id]
-                            
-                            # 找到依赖参数所在的节点
-                            dep_node_id = None
-                            dep_node_name = None
-                            for search_node_id, search_node in graph.nodes.items():
-                                if dependent_param in search_node.parameters:
-                                    dep_node_id = search_node_id
-                                    dep_node_name = id_mapper.get_node_name(search_node_id)
-                                    break
-                            
-                            param_info['dependents'].append({
-                                'node_id': dep_node_id,
-                                'node_name': dep_node_name,
-                                'param_name': dependent_param.name,
-                                'param_value': dependent_param.value,
-                                'param_unit': dependent_param.unit
-                            })
+            # 获取依赖于当前参数的参数（反向依赖）
+            for search_node_id, search_node in graph.nodes.items():
+                for search_param in search_node.parameters:
+                    if param in search_param.dependencies:
+                        search_node_name = id_mapper.get_node_name(search_node_id)
+                        param_info['dependents'].append({
+                            'node_id': search_node_id,
+                            'node_name': search_node_name,
+                            'param_name': search_param.name,
+                            'param_value': search_param.value,
+                            'param_unit': search_param.unit,
+                            'param_obj': search_param,
+                            'has_calculation': bool(search_param.calculation_func)
+                        })
+            
+            # 构建完整的计算链条（如果存在计算函数）
+            if param.calculation_func and param.dependencies:
+                try:
+                    calculation_chain = []
+                    for i, dep_param in enumerate(param.dependencies):
+                        dep_name = dep_param.name
+                        dep_value = dep_param.value
+                        calculation_chain.append(f"dependencies[{i}] = {dep_name} = {dep_value}")
+                    
+                    # 添加计算过程
+                    calculation_chain.append("↓ 执行计算函数 ↓")
+                    calculation_chain.append(f"result = {param.value}")
+                    
+                    param_info['calculation_chain'] = calculation_chain
+                except Exception as e:
+                    param_info['calculation_error'] = str(e)
             
             dependencies_info.append(param_info)
     
     return dependencies_info
 
 def format_dependencies_display(dependencies_info):
-    """格式化依赖关系显示"""
+    """格式化依赖关系显示，包括计算过程和结果"""
     if not dependencies_info:
         return [html.P("暂无参数依赖关系", className="text-muted")]
     
     display_components = []
     
-    # 统计信息
+    # 增强的统计信息
     total_params = len(dependencies_info)
     params_with_deps = sum(1 for p in dependencies_info if p['dependencies'])
     params_with_calc = sum(1 for p in dependencies_info if p['has_calculation'])
+    calculation_errors = sum(1 for p in dependencies_info if p['calculation_error'])
+    
+    # 按计算状态分类统计
+    simple_calcs = sum(1 for p in dependencies_info if p['calculation_status'] == '简单计算')
+    medium_calcs = sum(1 for p in dependencies_info if p['calculation_status'] == '中等复杂度')
+    complex_calcs = sum(1 for p in dependencies_info if p['calculation_status'] == '复杂计算')
     
     display_components.append(
         dbc.Alert([
-            html.H6("📊 依赖关系统计", className="mb-2"),
-            html.P(f"总参数数量: {total_params}", className="mb-1"),
-            html.P(f"有依赖关系的参数: {params_with_deps}", className="mb-1"),
-            html.P(f"有计算函数的参数: {params_with_calc}", className="mb-0"),
+            html.H6("📊 计算图统计分析", className="mb-3"),
+            dbc.Row([
+                dbc.Col([
+                    html.P(f"📈 总参数数量: {total_params}", className="mb-1"),
+                    html.P(f"🔗 依赖参数: {params_with_deps}", className="mb-1"),
+                    html.P(f"⚙️ 计算参数: {params_with_calc}", className="mb-0"),
+                ], width=6),
+                dbc.Col([
+                    html.P(f"❌ 计算错误: {calculation_errors}", className="mb-1"),
+                    html.P(f"🎯 总体健康度: {((total_params - calculation_errors) / max(total_params, 1) * 100):.1f}%", className="mb-0"),
+                ], width=6),
+            ]),
+            html.Hr(),
+            html.H6("🔧 计算复杂度分布", className="mb-2"),
+            html.P([
+                dbc.Badge(f"简单 {simple_calcs}", color="success", className="me-2"),
+                dbc.Badge(f"中等 {medium_calcs}", color="warning", className="me-2"),
+                dbc.Badge(f"复杂 {complex_calcs}", color="danger", className="me-2"),
+            ], className="mb-0")
         ], color="info", className="mb-3")
     )
     
-    # 按节点分组显示
+    # 按节点分组显示，增加更多细节
     nodes_dict = {}
     for param_info in dependencies_info:
         node_name = param_info['node_name']
@@ -2241,74 +2382,302 @@ def format_dependencies_display(dependencies_info):
         for param_info in params:
             param_card_items = []
             
-            # 参数基本信息
+            # 参数基本信息（增强版）
+            confidence_color = "success" if param_info['param_confidence'] >= 0.8 else "warning" if param_info['param_confidence'] >= 0.5 else "danger"
             param_card_items.append(
-                html.P([
-                    html.Strong(f"{param_info['param_name']}"),
-                    f" = {param_info['param_value']} {param_info['param_unit']}",
-                    html.Br(),
-                    html.Small(param_info['param_description'], className="text-muted")
-                ], className="mb-2")
+                html.Div([
+                    html.Div([
+                        html.Strong(f"{param_info['param_name']}", className="me-2"),
+                        dbc.Badge(f"{param_info['calculation_status']}", 
+                                color="success" if param_info['has_calculation'] else "secondary", 
+                                className="me-2"),
+                        dbc.Badge(f"置信度 {param_info['param_confidence']:.1%}", 
+                                color=confidence_color, className="me-2"),
+                    ], className="d-flex align-items-center mb-2"),
+                    html.P([
+                        html.Code(f"{param_info['param_value']} {param_info['param_unit']}", className="me-2"),
+                        html.Small(param_info['param_description'], className="text-muted")
+                    ], className="mb-2")
+                ])
             )
             
-            # 计算函数信息
+            # 计算过程展示（新增）
             if param_info['has_calculation']:
+                calc_details = []
+                
+                # 计算函数代码
+                calc_details.append(
+                    dbc.Accordion([
+                        dbc.AccordionItem([
+                            html.Pre(param_info['calculation_func'] or "无计算函数", 
+                                   style={"fontSize": "0.8em", "backgroundColor": "#f8f9fa", "padding": "10px"})
+                        ], title="📝 计算函数代码")
+                    ], start_collapsed=True, className="mb-2")
+                )
+                
+                # 计算链条展示
+                if param_info['calculation_chain']:
+                    chain_items = []
+                    for step in param_info['calculation_chain']:
+                        if "dependencies[" in step:
+                            chain_items.append(html.Li(step, className="text-info"))
+                        elif "执行计算函数" in step:
+                            chain_items.append(html.Li(step, className="text-warning fw-bold"))
+                        else:
+                            chain_items.append(html.Li(step, className="text-success fw-bold"))
+                    
+                    calc_details.append(
+                        html.Div([
+                            html.H6("🔄 计算执行链条", className="mb-2"),
+                            html.Ol(chain_items, className="mb-2")
+                        ])
+                    )
+                
+
+                
+                # 计算错误展示
+                if param_info['calculation_error']:
+                    calc_details.append(
+                        dbc.Alert([
+                            html.H6("❌ 计算错误", className="mb-2"),
+                            html.Code(param_info['calculation_error'])
+                        ], color="danger", className="mb-2")
+                    )
+                
                 param_card_items.append(
-                    html.P([
-                        dbc.Badge("📊 计算参数", color="success", className="me-2"),
-                        html.Br(),
-                        html.Code(param_info['calculation_func'] or "无计算函数", style={"fontSize": "0.8em"})
+                    dbc.Card([
+                        dbc.CardHeader("⚙️ 计算详情"),
+                        dbc.CardBody(calc_details)
+                    ], className="mb-2", outline=True, color="light")
+                )
+            
+            # 依赖关系展示（增强版）
+            if param_info['dependencies']:
+                deps_details = []
+                for dep in param_info['dependencies']:
+                    strength_color = {
+                        "计算参数": "success",
+                        "输入参数": "secondary", 
+                        "正常": "info"
+                    }.get(dep['dependency_strength'], "info")
+                    
+                    deps_details.append(
+                        html.Li([
+                            html.Strong(f"{dep['node_name']}.{dep['param_name']}"),
+                            f" = {dep['param_value']} {dep['param_unit']} ",
+                            dbc.Badge(dep['dependency_strength'], color=strength_color, className="ms-2")
+                        ], className="mb-2")
+                    )
+                
+                param_card_items.append(
+                    html.Div([
+                        html.H6("⬅️ 输入依赖", className="mb-2 text-danger"),
+                        html.Ul(deps_details)
                     ], className="mb-2")
                 )
             
-            # 显示依赖关系
-            if param_info['dependencies']:
-                deps_text = []
-                for dep in param_info['dependencies']:
-                    dep_text = f"{dep['node_name']}.{dep['param_name']}"
-                    deps_text.append(dep_text)
-                
-                param_card_items.append(
-                    html.P([
-                        html.Strong("⬅️ 依赖于: "),
-                        ", ".join(deps_text)
-                    ], className="mb-2", style={"color": "#dc3545"})
-                )
-            
-            # 显示被依赖关系
+            # 被依赖关系展示（增强版）
             if param_info['dependents']:
-                dependents_text = []
+                dependents_details = []
                 for dep in param_info['dependents']:
-                    dep_text = f"{dep['node_name']}.{dep['param_name']}"
-                    dependents_text.append(dep_text)
+                    calc_badge = dbc.Badge("计算", color="success") if dep['has_calculation'] else dbc.Badge("直接", color="secondary")
+                    dependents_details.append(
+                        html.Li([
+                            html.Strong(f"{dep['node_name']}.{dep['param_name']}"),
+                            f" = {dep['param_value']} {dep['param_unit']} ",
+                            calc_badge
+                        ], className="mb-1")
+                    )
                 
                 param_card_items.append(
-                    html.P([
-                        html.Strong("➡️ 被依赖于: "),
-                        ", ".join(dependents_text)
-                    ], className="mb-2", style={"color": "#28a745"})
+                    html.Div([
+                        html.H6("➡️ 输出影响", className="mb-2 text-success"),
+                        html.Ul(dependents_details)
+                    ], className="mb-2")
                 )
             
-            # 如果没有任何依赖关系
+            # 独立参数标识
             if not param_info['dependencies'] and not param_info['dependents']:
                 param_card_items.append(
-                    html.P("🔸 独立参数（无依赖关系）", className="text-muted mb-2")
+                    dbc.Alert("🔸 独立参数（无依赖关系）", color="light", className="mb-2")
                 )
             
             node_card_content.append(
-                html.Div(param_card_items, className="border-start border-3 ps-3 mb-3")
+                html.Div(param_card_items, className="border-start border-4 border-primary ps-3 mb-4", 
+                        style={"backgroundColor": "#f8f9fa", "borderRadius": "0 5px 5px 0", "padding": "15px"})
             )
         
         display_components.append(
             dbc.Card([
-                dbc.CardHeader(html.H6(f"📦 {node_name}", className="mb-0")),
+                dbc.CardHeader([
+                    html.H5([
+                        "📦 ", node_name,
+                        dbc.Badge(f"{len(params)} 参数", color="info", className="ms-2")
+                    ], className="mb-0")
+                ]),
                 dbc.CardBody(node_card_content)
             ], className="mb-3")
         )
     
     return display_components
 
-# =============== 依赖关系显示回调函数 ===============
+def simulate_parameter_change_and_show_process(param_id, new_value):
+    """模拟参数变化并展示完整的计算传播过程"""
+    try:
+        # 找到对应的参数对象
+        target_param = None
+        target_node_id = None
+        target_param_idx = None
+        
+        for node_id, node in graph.nodes.items():
+            for param_idx, param in enumerate(node.parameters):
+                if id(param) == param_id:
+                    target_param = param
+                    target_node_id = node_id
+                    target_param_idx = param_idx
+                    break
+            if target_param:
+                break
+        
+        if not target_param:
+            return {"success": False, "message": "参数未找到"}
+        
+        # 记录原始值
+        original_value = target_param.value
+        
+        # 执行变化并收集传播过程
+        propagation_log = []
+        propagation_log.append({
+            "step": 0,
+            "action": "初始变化",
+            "param_name": target_param.name,
+            "old_value": original_value,
+            "new_value": new_value,
+            "node_name": id_mapper.get_node_name(target_node_id)
+        })
+        
+        # 设置新值
+        if hasattr(graph, 'set_parameter_value'):
+            update_result = graph.set_parameter_value(target_param, new_value)
+            
+            # 记录级联更新过程
+            if update_result and 'cascaded_updates' in update_result:
+                for i, cascade_info in enumerate(update_result['cascaded_updates']):
+                    param = cascade_info['param']
+                    
+                    # 找到参数所在的节点
+                    cascade_node_name = "未知节点"
+                    for node_id, node in graph.nodes.items():
+                        if param in node.parameters:
+                            cascade_node_name = id_mapper.get_node_name(node_id)
+                            break
+                    
+                    propagation_log.append({
+                        "step": i + 1,
+                        "action": "级联计算",
+                        "param_name": param.name,
+                        "old_value": cascade_info['old_value'],
+                        "new_value": cascade_info['new_value'],
+                        "node_name": cascade_node_name,
+                        "calculation_func": getattr(param, 'calculation_func', None)
+                    })
+        else:
+            # 简单设置值
+            target_param.value = new_value
+            
+        return {
+            "success": True,
+            "propagation_log": propagation_log,
+            "total_affected": len(propagation_log),
+            "original_value": original_value,
+            "final_value": new_value
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"模拟失败: {str(e)}"
+        }
+
+def create_calculation_flow_visualization(dependencies_info):
+    """创建计算流程可视化组件"""
+    if not dependencies_info:
+        return html.Div()
+    
+    # 找出有计算函数的参数
+    calc_params = [p for p in dependencies_info if p['has_calculation']]
+    
+    if not calc_params:
+        return dbc.Alert("当前没有计算参数", color="info")
+    
+    flow_components = []
+    
+    for param_info in calc_params:
+        # 创建计算流程图
+        flow_steps = []
+        
+        # 输入步骤
+        if param_info['dependencies']:
+            input_step = html.Div([
+                html.H6("📥 输入参数", className="text-primary"),
+                html.Ul([
+                    html.Li(f"{dep['node_name']}.{dep['param_name']} = {dep['param_value']} {dep['param_unit']}")
+                    for dep in param_info['dependencies']
+                ])
+            ], className="border p-3 mb-3 rounded bg-light")
+            flow_steps.append(input_step)
+        
+        # 计算步骤
+        calc_step = html.Div([
+            html.H6("⚙️ 计算过程", className="text-warning"),
+            dbc.Accordion([
+                dbc.AccordionItem([
+                    html.Pre(param_info['calculation_func'], 
+                           style={"fontSize": "0.85em", "background": "#f1f3f4"})
+                ], title="查看计算函数")
+            ], start_collapsed=True),
+            html.P(f"计算复杂度: {param_info['calculation_status']}", className="mt-2")
+        ], className="border p-3 mb-3 rounded bg-warning bg-opacity-10")
+        flow_steps.append(calc_step)
+        
+        # 输出步骤
+        output_step = html.Div([
+            html.H6("📤 输出结果", className="text-success"),
+            html.P([
+                html.Strong(f"{param_info['param_name']} = "),
+                html.Code(f"{param_info['param_value']} {param_info['param_unit']}")
+            ]),
+            html.Small(f"置信度: {param_info['param_confidence']:.1%}", className="text-muted")
+        ], className="border p-3 mb-3 rounded bg-success bg-opacity-10")
+        flow_steps.append(output_step)
+        
+        # 影响步骤
+        if param_info['dependents']:
+            impact_step = html.Div([
+                html.H6("🎯 影响范围", className="text-info"),
+                html.Ul([
+                    html.Li(f"{dep['node_name']}.{dep['param_name']}")
+                    for dep in param_info['dependents']
+                ])
+            ], className="border p-3 mb-3 rounded bg-info bg-opacity-10")
+            flow_steps.append(impact_step)
+        
+        # 组装完整的流程卡片
+        flow_card = dbc.Card([
+            dbc.CardHeader([
+                html.H5([
+                    "🔄 ", f"{param_info['node_name']}.{param_info['param_name']}",
+                    " 计算流程"
+                ])
+            ]),
+            dbc.CardBody(flow_steps)
+        ], className="mb-4")
+        
+        flow_components.append(flow_card)
+    
+    return html.Div(flow_components)
+
+# =============== 增强的依赖关系和计算流程显示回调函数 ===============
 
 # 初始化依赖关系显示
 @callback(
@@ -2329,46 +2698,249 @@ def initialize_dependencies_display(canvas_children):
             ], color="warning")
         ]
 
-# 手动刷新依赖关系
+# 初始化计算流程显示
+@callback(
+    Output("calculation-flow-display", "children"),
+    Input("canvas-container", "children"),
+    prevent_initial_call=False
+)
+def initialize_calculation_flow_display(canvas_children):
+    """初始化计算流程显示"""
+    try:
+        dependencies_info = get_all_parameter_dependencies()
+        return create_calculation_flow_visualization(dependencies_info)
+    except Exception as e:
+        return [
+            dbc.Alert([
+                html.H6("⚠️ 加载计算流程失败", className="mb-2"),
+                html.P(f"错误信息: {str(e)}", className="mb-0")
+            ], color="warning")
+        ]
+
+# 初始化实时分析参数选择器
+@callback(
+    Output("analysis-param-selector", "options"),
+    Input("canvas-container", "children"),
+    prevent_initial_call=False
+)
+def update_analysis_param_selector(canvas_children):
+    """更新实时分析的参数选择器"""
+    try:
+        options = []
+        for node_id, node in graph.nodes.items():
+            node_name = id_mapper.get_node_name(node_id)
+            for param_idx, param in enumerate(node.parameters):
+                option_value = f"{node_id}|{param_idx}"
+                option_label = f"{node_name}.{param.name} ({param.value} {param.unit})"
+                options.append({"label": option_label, "value": option_value})
+        
+        return options
+    except Exception as e:
+        return []
+
+# 手动刷新依赖关系和计算流程
 @callback(
     Output("dependencies-display", "children", allow_duplicate=True),
+    Output("calculation-flow-display", "children", allow_duplicate=True),
+    Output("analysis-param-selector", "options", allow_duplicate=True),
     Input("refresh-dependencies-btn", "n_clicks"),
     prevent_initial_call=True
 )
-def refresh_dependencies_display(n_clicks):
-    """手动刷新依赖关系显示"""
+def refresh_all_displays(n_clicks):
+    """手动刷新所有显示面板"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     
     try:
         dependencies_info = get_all_parameter_dependencies()
-        return format_dependencies_display(dependencies_info)
+        
+        # 刷新依赖关系显示
+        deps_display = format_dependencies_display(dependencies_info)
+        
+        # 刷新计算流程显示
+        flow_display = create_calculation_flow_visualization(dependencies_info)
+        
+        # 刷新参数选择器
+        options = []
+        for node_id, node in graph.nodes.items():
+            node_name = id_mapper.get_node_name(node_id)
+            for param_idx, param in enumerate(node.parameters):
+                option_value = f"{node_id}|{param_idx}"
+                option_label = f"{node_name}.{param.name} ({param.value} {param.unit})"
+                options.append({"label": option_label, "value": option_value})
+        
+        return deps_display, flow_display, options
+        
     except Exception as e:
-        return [
+        error_alert = [
             dbc.Alert([
-                html.H6("⚠️ 刷新依赖关系失败", className="mb-2"),
+                html.H6("⚠️ 刷新失败", className="mb-2"),
                 html.P(f"错误信息: {str(e)}", className="mb-0")
             ], color="danger")
         ]
+        return error_alert, error_alert, []
 
-# 当节点/参数发生变化时自动更新依赖关系
+# 当节点/参数发生变化时自动更新所有显示
 @callback(
     Output("dependencies-display", "children", allow_duplicate=True),
+    Output("calculation-flow-display", "children", allow_duplicate=True),
+    Output("analysis-param-selector", "options", allow_duplicate=True),
     Input("node-data", "data"),
     prevent_initial_call=True
 )
-def auto_update_dependencies_on_change(node_data):
-    """当节点或参数发生变化时自动更新依赖关系显示"""
+def auto_update_all_displays_on_change(node_data):
+    """当节点或参数发生变化时自动更新所有显示"""
     try:
         dependencies_info = get_all_parameter_dependencies()
-        return format_dependencies_display(dependencies_info)
+        
+        # 更新依赖关系显示
+        deps_display = format_dependencies_display(dependencies_info)
+        
+        # 更新计算流程显示
+        flow_display = create_calculation_flow_visualization(dependencies_info)
+        
+        # 更新参数选择器
+        options = []
+        for node_id, node in graph.nodes.items():
+            node_name = id_mapper.get_node_name(node_id)
+            for param_idx, param in enumerate(node.parameters):
+                option_value = f"{node_id}|{param_idx}"
+                option_label = f"{node_name}.{param.name} ({param.value} {param.unit})"
+                options.append({"label": option_label, "value": option_value})
+        
+        return deps_display, flow_display, options
+        
     except Exception as e:
-        return [
+        error_alert = [
             dbc.Alert([
-                html.H6("⚠️ 自动更新依赖关系失败", className="mb-2"),
+                html.H6("⚠️ 自动更新失败", className="mb-2"),
                 html.P(f"错误信息: {str(e)}", className="mb-0")
             ], color="warning")
         ]
+        return error_alert, error_alert, []
+
+# 实时分析功能
+@callback(
+    Output("realtime-analysis-display", "children"),
+    Input("start-analysis-btn", "n_clicks"),
+    State("analysis-param-selector", "value"),
+    prevent_initial_call=True
+)
+def perform_realtime_analysis(n_clicks, selected_param):
+    """执行实时计算分析"""
+    if not n_clicks or not selected_param:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 解析选择的参数
+        node_id, param_idx = selected_param.split('|')
+        param_idx = int(param_idx)
+        
+        # 获取参数对象
+        target_node = graph.nodes.get(node_id)
+        if not target_node or param_idx >= len(target_node.parameters):
+            return dbc.Alert("参数未找到", color="danger")
+        
+        target_param = target_node.parameters[param_idx]
+        node_name = id_mapper.get_node_name(node_id)
+        
+        # 创建分析结果
+        analysis_components = []
+        
+        # 参数信息卡片
+        analysis_components.append(
+            dbc.Card([
+                dbc.CardHeader([
+                    html.H6(f"🎯 分析目标: {node_name}.{target_param.name}")
+                ]),
+                dbc.CardBody([
+                    html.P(f"当前值: {target_param.value} {target_param.unit}"),
+                    html.P(f"描述: {target_param.description}"),
+                    html.P(f"置信度: {getattr(target_param, 'confidence', 1.0):.1%}")
+                ])
+            ], className="mb-3")
+        )
+        
+        # 计算链分析
+        if hasattr(target_param, 'calculation_func') and target_param.calculation_func:
+            dependencies_info = get_all_parameter_dependencies()
+            param_info = None
+            
+            for info in dependencies_info:
+                if info['node_id'] == node_id and info['param_name'] == target_param.name:
+                    param_info = info
+                    break
+            
+            if param_info and param_info['calculation_chain']:
+                analysis_components.append(
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H6("🔄 计算链条分析")
+                        ]),
+                        dbc.CardBody([
+                            html.P("执行步骤:", className="fw-bold"),
+                            html.Ol([
+                                html.Li(step, className={
+                                    "text-info": "dependencies[" in step,
+                                    "text-warning": "执行计算函数" in step,
+                                    "text-success": "result =" in step
+                                }.get(True, ""))
+                                for step in param_info['calculation_chain']
+                            ])
+                        ])
+                    ], className="mb-3")
+                )
+        
+        # 影响分析
+        dependent_params = []
+        for search_node_id, search_node in graph.nodes.items():
+            for search_param in search_node.parameters:
+                if target_param in search_param.dependencies:
+                    search_node_name = id_mapper.get_node_name(search_node_id)
+                    dependent_params.append({
+                        'node_name': search_node_name,
+                        'param_name': search_param.name,
+                        'value': search_param.value,
+                        'unit': search_param.unit
+                    })
+        
+        if dependent_params:
+            analysis_components.append(
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H6("📊 影响分析")
+                    ]),
+                    dbc.CardBody([
+                        html.P("修改此参数将影响以下计算:", className="fw-bold"),
+                        html.Ul([
+                            html.Li(f"{dep['node_name']}.{dep['param_name']} = {dep['value']} {dep['unit']}")
+                            for dep in dependent_params
+                        ])
+                    ])
+                ], className="mb-3")
+            )
+        
+        # 敏感性指标
+        sensitivity_score = len(dependent_params) * 10 + (50 if target_param.calculation_func else 0)
+        sensitivity_level = "高" if sensitivity_score > 80 else "中" if sensitivity_score > 40 else "低"
+        sensitivity_color = "danger" if sensitivity_level == "高" else "warning" if sensitivity_level == "中" else "success"
+        
+        analysis_components.append(
+            dbc.Alert([
+                html.H6("🎯 敏感性评估", className="mb-2"),
+                html.P(f"敏感性等级: {sensitivity_level} (评分: {sensitivity_score})", className="mb-1"),
+                html.P(f"影响参数数量: {len(dependent_params)}", className="mb-1"),
+                html.P(f"计算复杂度: {'高' if target_param.calculation_func else '无'}", className="mb-0")
+            ], color=sensitivity_color)
+        )
+        
+        return analysis_components
+        
+    except Exception as e:
+        return dbc.Alert([
+            html.H6("⚠️ 分析失败"),
+            html.P(f"错误信息: {str(e)}")
+        ], color="danger")
 
 def get_arrow_connections_data():
     """获取用于绘制箭头的连接数据"""
@@ -2628,7 +3200,111 @@ app.clientside_callback(
     Input("theme-toggle", "id")
 )
 
-# 在现有的节点操作回调函数之前添加这些新回调
+# 节点编辑相关回调函数
+
+# 打开节点编辑模态窗口
+@callback(
+    Output("node-edit-modal", "is_open"),
+    Output("node-edit-title", "children"),
+    Output("node-edit-name", "value"),
+    Output("node-edit-type", "value"),
+    Output("node-edit-description", "value"),
+    Output("node-edit-data", "data"),
+    Input({"type": "edit-node", "node": ALL}, "n_clicks"),
+    State("node-edit-modal", "is_open"),
+    prevent_initial_call=True
+)
+def open_node_edit_modal(edit_clicks, is_open):
+    if not ctx.triggered_id:
+        raise dash.exceptions.PreventUpdate
+    
+    # 检查触发值，避免重新创建组件时的误触发
+    trigger_value = ctx.triggered[0]["value"]
+    if not trigger_value or trigger_value == 0:
+        raise dash.exceptions.PreventUpdate
+    
+    # 获取被点击的节点信息
+    triggered_id = ctx.triggered_id
+    if isinstance(triggered_id, dict) and triggered_id["type"] == "edit-node":
+        node_id = triggered_id["node"]
+        
+        # 获取节点对象
+        if node_id not in graph.nodes:
+            raise dash.exceptions.PreventUpdate
+        
+        node = graph.nodes[node_id]
+        node_name = id_mapper.get_node_name(node_id)
+        
+        return (
+            True,  # 打开模态窗口
+            f"编辑节点: {node_name}",
+            node.name,
+            getattr(node, 'node_type', 'default'),
+            node.description,
+            {"node_id": node_id}
+        )
+    
+    raise dash.exceptions.PreventUpdate
+
+# 关闭节点编辑模态窗口
+@callback(
+    Output("node-edit-modal", "is_open", allow_duplicate=True),
+    Input("node-edit-cancel", "n_clicks"),
+    prevent_initial_call=True
+)
+def close_node_edit_modal(cancel_clicks):
+    if cancel_clicks:
+        return False
+    raise dash.exceptions.PreventUpdate
+
+# 保存节点编辑
+@callback(
+    Output("node-edit-modal", "is_open", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("node-edit-save", "n_clicks"),
+    State("node-edit-name", "value"),
+    State("node-edit-type", "value"),
+    State("node-edit-description", "value"),
+    State("node-edit-data", "data"),
+    prevent_initial_call=True
+)
+def save_node_changes(save_clicks, node_name, node_type, node_description, edit_data):
+    if not save_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 验证输入
+        if not node_name or not node_name.strip():
+            return True, dash.no_update, "错误: 节点名称不能为空"
+        
+        node_id = edit_data["node_id"]
+        
+        if node_id not in graph.nodes:
+            return True, dash.no_update, "错误: 节点不存在"
+        
+        node = graph.nodes[node_id]
+        old_name = node.name
+        
+        # 检查节点名称是否与其他节点重复（排除当前节点）
+        for other_node_id, other_node in graph.nodes.items():
+            if other_node_id != node_id and other_node.name == node_name.strip():
+                return True, dash.no_update, f"错误: 节点名称 '{node_name.strip()}' 已存在，请使用不同的名称"
+        
+        # 更新节点信息
+        node.name = node_name.strip()
+        node.node_type = node_type
+        node.description = node_description or ""
+        
+        # 更新ID映射器中的节点名称
+        id_mapper.update_node_name(node_id, node.name)
+        
+        # 关闭模态窗口并更新界面
+        success_message = f"节点 '{old_name}' 已更新为 '{node.name}'"
+        return False, update_canvas(), success_message
+        
+    except Exception as e:
+        return True, dash.no_update, f"错误: {str(e)}"
 
 if __name__ == "__main__":
     import argparse

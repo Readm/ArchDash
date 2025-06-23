@@ -48,15 +48,7 @@
   - `CalculationGraph.get_dependency_chain()`
   - 依赖树遍历和分析
 
-#### 5. `test_parameter_history_tracking()`
-- **测试目标**: 参数历史记录跟踪
-- **测试内容**:
-  - 验证计算历史记录的保存
-  - 测试历史记录的内容和格式
-  - 验证通过 `set_parameter_value()` 更新后的历史追踪
-- **覆盖的功能**:
-  - 参数历史记录机制
-  - 时间戳和依赖记录
+
 
 ### 🌐 **Web界面测试 (test_app.py)**
 
@@ -129,7 +121,6 @@
 - ✅ 参数更新传播 API (`set_parameter_value`, `propagate_updates`)
 - ✅ 依赖关系管理和级联计算
 - ✅ 循环依赖检测和错误处理
-- ✅ 参数历史记录跟踪
 - ✅ 依赖链分析功能
 
 ### **Web界面功能覆盖**
@@ -152,7 +143,6 @@
 pytest test_models.py::test_parameter_update_propagation -v  ✅ PASSED
 pytest test_models.py::test_circular_dependency_detection -v  ✅ PASSED
 pytest test_models.py::test_dependency_chain_analysis -v  ✅ PASSED
-pytest test_models.py::test_parameter_history_tracking -v  ✅ PASSED
 ```
 
 ### **Web界面测试**

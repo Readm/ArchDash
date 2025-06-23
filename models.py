@@ -21,7 +21,6 @@ class Parameter:
         confidence: 参数置信度（0-1之间）
         calculation_func: 计算函数（字符串形式）
         dependencies: 依赖参数列表
-        history: 参数历史记录
         _graph: 所属的计算图（用于自动更新传播）
     """
     name: str
@@ -30,7 +29,7 @@ class Parameter:
     confidence: float = 1.0
     calculation_func: Optional[str] = None
     dependencies: List['Parameter'] = field(default_factory=list)
-    history: List[Dict[str, Any]] = field(default_factory=list)
+
     _value: T = 0.0  # 内部值存储
     _graph: Optional['CalculationGraph'] = field(default=None, repr=False)  # 计算图引用
     
@@ -42,7 +41,6 @@ class Parameter:
         self.confidence = kwargs.get('confidence', 1.0)
         self.calculation_func = kwargs.get('calculation_func', None)
         self.dependencies = kwargs.get('dependencies', [])
-        self.history = kwargs.get('history', [])
         self._graph = kwargs.get('_graph', None)
     
     @property
@@ -138,11 +136,6 @@ class Parameter:
                 result = self.calculation_func(self)
             
             self.value = result
-            self.history.append({
-                "timestamp": datetime.now().isoformat(),
-                "value": result,
-                "dependencies": [dep.name for dep in self.dependencies]
-            })
             return result
         except Exception as e:
             raise ValueError(f"计算失败: {str(e)}")
@@ -156,8 +149,7 @@ class Parameter:
             "description": self.description,
             "confidence": self.confidence,
             "calculation_func": self.calculation_func,
-            "dependencies": [dep.name for dep in self.dependencies],
-            "history": self.history
+            "dependencies": [dep.name for dep in self.dependencies]
         }
     
     @classmethod
@@ -176,9 +168,6 @@ class Parameter:
         for dep_name in data["dependencies"]:
             if dep_name in param_dict:
                 param.add_dependency(param_dict[dep_name])
-        
-        # 恢复历史记录
-        param.history = data["history"]
         
         return param
 
@@ -215,10 +204,7 @@ class Node:
         """从节点移除参数"""
         self.parameters = [param for param in self.parameters if param.name != name]
     
-    def get_parameter_history(self, name: str) -> List[Dict[str, Any]]:
-        """获取参数历史记录"""
-        param = next((param for param in self.parameters if param.name == name), None)
-        return param.history if param else []
+
     
     def calculate_all(self) -> None:
         """计算所有参数"""
@@ -400,6 +386,11 @@ class CalculationGraph:
         
         return update_result
 
+    def recalculate_all(self):
+        """重新计算所有参数"""
+        for node in self.nodes.values():
+            node.calculate_all()
+
     def get_dependency_chain(self, param):
         """获取参数的完整依赖链信息
         
@@ -563,8 +554,7 @@ class CalculationGraph:
                     unit=param_data["unit"],
                     description=param_data.get("description", ""),
                     confidence=param_data.get("confidence", 1.0),
-                    calculation_func=param_data.get("calculation_func"),
-                    history=param_data.get("history", [])
+                    calculation_func=param_data.get("calculation_func")
                 )
                 
                 # 设置计算图引用
