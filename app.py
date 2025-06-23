@@ -1222,41 +1222,77 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
         if not trigger_value or trigger_value == 0:
             return node_data, dash.no_update, dash.no_update, dash.no_update
         
-        # 🔧 重要修复：直接从触发的属性中获取新值
-        # 解析触发的属性ID以找到对应的值
-        triggered_prop_id = ctx.triggered[0]["prop_id"]
-        
-        # 从所有输入和状态中找到对应的值
+        # 🔧 重要修复：使用ctx.triggered获取准确的新值
         new_value = None
         
-        # 构建完整的输入/状态ID列表以便匹配
-        if param_type == "param-name":
-            # 构建相同的ID结构来匹配
-            for i, (name_input_id, name_value) in enumerate(zip(
-                [{"type": "param-name", "node": n_id, "index": p_idx} 
-                 for n_id, node in graph.nodes.items() 
-                 for p_idx in range(len(node.parameters))],
-                param_names
-            )):
-                if (name_input_id["node"] == node_id and 
-                    name_input_id["index"] == param_index):
-                    new_value = name_value
-                    break
-        elif param_type == "param-value":
-            # 构建相同的ID结构来匹配
-            for i, (value_input_id, value_value) in enumerate(zip(
-                [{"type": "param-value", "node": n_id, "index": p_idx} 
-                 for n_id, node in graph.nodes.items() 
-                 for p_idx in range(len(node.parameters))],
-                param_values
-            )):
-                if (value_input_id["node"] == node_id and 
-                    value_input_id["index"] == param_index):
-                    new_value = value_value
-                    break
+        # 方法1：直接从ctx.triggered获取当前触发值（最可靠）
+        try:
+            # ctx.triggered[0]["value"] 包含实际触发的新值
+            new_value = ctx.triggered[0]["value"]
+            
+            # 对于n_blur和n_submit事件，我们需要从states中获取实际的输入值
+            if new_value in [1, True]:  # 这些是事件计数，不是实际值
+                # 构建精确的状态键来获取输入值
+                state_key = f'{{"index":{param_index},"node":"{node_id}","type":"{param_type}"}}.value'
+                
+                # 从ctx.states中查找匹配的状态
+                for state_id, state_value in ctx.states.items():
+                    if state_key == state_id or (isinstance(state_id, str) and state_key in state_id):
+                        new_value = state_value
+                        break
+                
+                # 如果还是没找到，尝试不同的键格式
+                if new_value in [1, True]:
+                    alt_key = f'{{"type":"{param_type}","node":"{node_id}","index":{param_index}}}.value'
+                    for state_id, state_value in ctx.states.items():
+                        if alt_key == state_id or (isinstance(state_id, str) and alt_key in state_id):
+                            new_value = state_value
+                            break
+        except Exception as e:
+            print(f"🔧 方法1失败: {e}")
+            new_value = None
+        
+        # 方法2：如果方法1失败，使用有序索引匹配（回退方案）
+        if new_value is None or new_value in [1, True]:
+            try:
+                # 创建与callback参数顺序一致的参数ID列表
+                ordered_param_ids = []
+                for n_id in sorted(graph.nodes.keys()):
+                    node = graph.nodes[n_id]
+                    for p_idx in range(len(node.parameters)):
+                        ordered_param_ids.append({"type": param_type, "node": n_id, "index": p_idx})
+                
+                # 找到目标参数在有序列表中的位置
+                target_param_id = {"type": param_type, "node": node_id, "index": param_index}
+                target_index = ordered_param_ids.index(target_param_id)
+                
+                # 获取对应的值
+                if param_type == "param-name" and target_index < len(param_names):
+                    new_value = param_names[target_index]
+                elif param_type == "param-value" and target_index < len(param_values):
+                    new_value = param_values[target_index]
+                    
+            except (ValueError, IndexError) as e:
+                print(f"🔧 方法2失败: {e}")
+                new_value = None
+        
+        # 方法3：最后的回退方案 - 保持当前值不变
+        if new_value is None or new_value in [1, True]:
+            node = graph.nodes.get(node_id)
+            if node and param_index < len(node.parameters):
+                current_param = node.parameters[param_index]
+                if param_type == "param-name":
+                    new_value = current_param.name
+                elif param_type == "param-value":
+                    new_value = current_param.value
+                print(f"🔧 使用回退方案，保持当前值: {new_value}")
+        
+        # 🔍 调试信息：记录获取到的值
+        print(f"🔍 调试：参数更新 - 节点:{node_id}, 索引:{param_index}, 类型:{param_type}, 获取值:{new_value}")
         
         # 检查值是否为空或无效
         if new_value is None or new_value == "":
+            print(f"⚠️ 警告：未能获取到有效值，跳过更新")
             return node_data, dash.no_update, dash.no_update, dash.no_update
         
         # 获取节点
@@ -1277,9 +1313,13 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
         if param_type == "param-name":
             # 更新参数名，检查是否真的有变化
             if new_value != current_param.name:
+                print(f"🔄 参数名更新: {current_param.name} → {new_value}")
                 current_param.name = new_value
                 should_update_canvas = True
                 update_message = f"参数名已更新为: {new_value}"
+            else:
+                print(f"📌 参数名无变化，跳过更新: {new_value}")
+                return node_data, dash.no_update, dash.no_update, dash.no_update
         elif param_type == "param-value":
             # 更新参数值
             try:
@@ -1292,6 +1332,13 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
                     new_value = 0
             except (ValueError, TypeError):
                 new_value = str(new_value) if new_value is not None else ""
+            
+            # 检查参数值是否真的有变化
+            if new_value == current_param.value:
+                print(f"📌 参数值无变化，跳过更新: {current_param.name} = {new_value}")
+                return node_data, dash.no_update, dash.no_update, dash.no_update
+            
+            print(f"🔄 参数值更新: {current_param.name}: {current_param.value} → {new_value}")
             
             # 使用数据流机制更新参数值，这会自动触发依赖参数的重新计算
             if hasattr(graph, 'set_parameter_value'):
