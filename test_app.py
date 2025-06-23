@@ -80,7 +80,7 @@ def test_add_node_with_grid_layout(dash_duo):
     layout_manager._init_grid()
 
     # 检查标题
-    assert dash_duo.find_element("h1").text == "ArchDash"
+    assert dash_duo.find_element("h1").text == "🎨 ArchDash"
 
     # 输入节点名称
     input_box = dash_duo.find_element("#node-name")

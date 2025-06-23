@@ -233,9 +233,16 @@ def create_empty_plot():
     )
     fig.update_layout(
         template="plotly_white",
-        showlegend=False,
+        showlegend=True,
         xaxis=dict(showgrid=False, showticklabels=False, title=""),
-        yaxis=dict(showgrid=False, showticklabels=False, title="")
+        yaxis=dict(showgrid=False, showticklabels=False, title=""),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        )
     )
     return fig
 
@@ -531,9 +538,37 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Card([
                 dbc.CardHeader([
-                    html.H5([ 
-                        html.Span("计算图", className="fw-bold")
-                    ], className="mb-0")
+                    html.Div([
+                        html.H5([ 
+                            html.Span("计算图", className="fw-bold")
+                        ], className="mb-0"),
+                        html.Button(
+                            html.Span(
+                                "➕",  # 使用加号emoji图标
+                                style={
+                                    "fontSize": "18px",
+                                    "fontWeight": "normal",
+                                    "lineHeight": "1"
+                                }
+                            ),
+                            id="add-node-from-graph-button",
+                            className="btn add-node-btn",
+                            style={
+                                "padding": "6px",
+                                "borderRadius": "50%",
+                                "border": "1px solid rgba(108, 117, 125, 0.3)",
+                                "backgroundColor": "transparent",
+                                "minWidth": "32px",
+                                "height": "32px",
+                                "display": "flex",
+                                "alignItems": "center",
+                                "justifyContent": "center",
+                                "transition": "all 0.3s ease",
+                                "color": "#6c757d"
+                            },
+                            title="添加新节点"
+                        )
+                    ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "width": "100%"})
                 ]),
                 dbc.CardBody([
                     html.Div(
@@ -548,7 +583,7 @@ app.layout = dbc.Container([
             dbc.Card([
                 dbc.CardHeader([
                     html.H5([
-                        html.Span("相关性性分析", className="fw-bold")
+                        html.Span("相关性分析", className="fw-bold")
                     ], className="mb-0")
                 ]),
                 dbc.CardBody([
@@ -625,6 +660,46 @@ app.layout = dbc.Container([
                                         className="form-control"
                                     )
                                 ], width=4),
+                            ], className="mb-2"),
+                            
+                            # 系列名称和累计绘图选项
+                            dbc.Row([
+                                dbc.Col([
+                                    html.Div([
+                                        dbc.InputGroup([
+                                            dbc.InputGroupText("系列名称:", style={"fontSize": "0.9rem", "minWidth": "85px"}),
+                                            dbc.Input(
+                                                id="series-name-input",
+                                                placeholder="自定义系列名称",
+                                                size="sm",
+                                                style={"fontSize": "0.9rem"}
+                                            )
+                                        ], size="sm"),
+                                        dbc.Tooltip(
+                                            "留空则使用默认名称",
+                                            target="series-name-input",
+                                            placement="top"
+                                        )
+                                    ]),
+                                ], width=8),
+                                dbc.Col([
+                                    html.Div([
+                                        dbc.Checklist(
+                                            options=[
+                                                {"label": "累计绘图", "value": "cumulative"}
+                                            ],
+                                            value=[],
+                                            id="cumulative-plot-checkbox",
+                                            inline=True,
+                                            style={"fontSize": "0.9rem"}
+                                        ),
+                                        dbc.Tooltip(
+                                            "每次生成累积在图表中",
+                                            target="cumulative-plot-checkbox",
+                                            placement="top"
+                                        )
+                                    ]),
+                                ], width=4, className="d-flex justify-content-end align-items-center"),
                             ], className="mb-2"),
                             
                             dbc.Row([
@@ -740,6 +815,7 @@ app.layout = dbc.Container([
     dcc.Store(id="node-data", data={}),  # 简化为空字典，布局由layout_manager管理
     dcc.Store(id="arrow-connections-data", data=[]),  # 存储箭头连接数据
     dcc.Store(id="dependencies-collapse-state", data={"is_open": False}),  # 存储依赖关系面板折叠状态
+    dcc.Store(id="cumulative-plot-data", data=[]),  # 存储累计绘图数据
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
     dcc.Download(id="download-graph"),  # 用于下载计算图文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
@@ -872,6 +948,45 @@ app.layout = dbc.Container([
     
     # 存储当前编辑的节点信息
     dcc.Store(id="node-edit-data", data={"node_id": None}),
+    
+    # 添加节点模态窗口
+    dbc.Modal([
+        dbc.ModalHeader([
+            html.H4("添加新节点", id="node-add-title")
+        ]),
+        dbc.ModalBody([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("节点名称:"),
+                    dbc.Input(id="node-add-name", placeholder="输入节点名称")
+                ], width=8),
+                dbc.Col([
+                    dbc.Label("节点类型:"),
+                    dbc.Select(
+                        id="node-add-type",
+                        options=[
+                            {"label": "默认", "value": "default"},
+                            {"label": "输入", "value": "input"},
+                            {"label": "计算", "value": "calculation"},
+                            {"label": "输出", "value": "output"}
+                        ],
+                        value="default"
+                    )
+                ], width=4),
+            ], className="mb-3"),
+            
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("节点描述:"),
+                    dbc.Textarea(id="node-add-description", placeholder="节点描述（可选）", rows=3)
+                ])
+            ], className="mb-3"),
+        ]),
+        dbc.ModalFooter([
+            dbc.Button("取消", id="node-add-cancel", color="secondary", className="me-2"),
+            dbc.Button("创建", id="node-add-save", color="primary")
+        ])
+    ], id="node-add-modal", size="md", is_open=False),
     
     # 放大图表模态窗口
     dbc.Modal([
@@ -1961,15 +2076,19 @@ def initialize_plot(selector_id):
 @callback(
     Output("sensitivity-plot", "figure", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
+    Output("cumulative-plot-data", "data", allow_duplicate=True),
     Input("generate-plot-btn", "n_clicks"),
     State("x-param-selector", "value"),
     State("y-param-selector", "value"),
     State("x-start-value", "value"),
     State("x-end-value", "value"),
     State("x-step-value", "value"),
+    State("cumulative-plot-checkbox", "value"),
+    State("cumulative-plot-data", "data"),
+    State("series-name-input", "value"),
     prevent_initial_call=True
 )
-def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step):
+def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step, cumulative_checkbox, cumulative_data, series_name):
     """生成参数敏感性分析图表"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
@@ -2029,16 +2148,57 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
     )
     
     if not result['success']:
-        return create_empty_plot(), f"❌ {result['message']}"
+        return create_empty_plot(), f"❌ {result['message']}", cumulative_data
+    
+    # 检查是否启用累计绘图
+    is_cumulative = "cumulative" in (cumulative_checkbox or [])
+    
+    # 确定系列名称：优先使用用户自定义名称，否则使用默认名称
+    final_series_name = series_name.strip() if series_name and series_name.strip() else f"{y_param_info['label']}"
+    
+    # 创建当前分析的数据项
+    current_trace_data = {
+        'x_values': result['x_values'],
+        'y_values': result['y_values'],
+        'x_label': result['x_label'],
+        'y_label': result['y_label'],
+        'trace_name': final_series_name,
+        'x_param': x_param,
+        'y_param': y_param,
+        'timestamp': datetime.now().isoformat()
+    }
     
     # 创建Plotly图表
     fig = go.Figure()
     
+    # 如果启用累计绘图，先添加历史数据
+    if is_cumulative and cumulative_data:
+        for i, trace_data in enumerate(cumulative_data):
+            # 为历史曲线使用不同的颜色和透明度
+            color_alpha = max(0.3, 1.0 - i * 0.1)  # 历史曲线逐渐变淡
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+            color = colors[i % len(colors)]
+            
+            fig.add_trace(go.Scatter(
+                x=trace_data['x_values'],
+                y=trace_data['y_values'],
+                mode='lines+markers',
+                name=f"{trace_data['trace_name']}",
+                line=dict(width=1.5, color=color),
+                marker=dict(size=4, color=color),
+                opacity=color_alpha,
+                hovertemplate='<b>%{fullData.name}</b><br>' +
+                              'X: %{x}<br>' +
+                              'Y: %{y}<br>' +
+                              '<extra></extra>'
+            ))
+    
+    # 添加当前数据曲线
     fig.add_trace(go.Scatter(
         x=result['x_values'],
         y=result['y_values'],
         mode='lines+markers',
-        name=f"{y_param_info['label']}",
+        name=f"{final_series_name} (当前)",
         line=dict(width=2, color='#1f77b4'),
         marker=dict(size=6, color='#1f77b4'),
         hovertemplate='<b>%{fullData.name}</b><br>' +
@@ -2047,9 +2207,17 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
                       '<extra></extra>'
     ))
     
+    # 更新累计数据
+    new_cumulative_data = cumulative_data.copy() if is_cumulative else []
+    if is_cumulative:
+        new_cumulative_data.append(current_trace_data)
+        # 限制最大存储数量，避免内存溢出
+        if len(new_cumulative_data) > 10:
+            new_cumulative_data = new_cumulative_data[-10:]
+    
     fig.update_layout(
         title=dict(
-            text=f"参数敏感性分析",
+            text=f"参数敏感性分析{'（累计模式）' if is_cumulative else ''}",
             x=0.5,
             font=dict(size=16)
         ),
@@ -2057,31 +2225,43 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         yaxis_title=result['y_label'],
         hovermode='x unified',
         template="plotly_white",
-        showlegend=True,
+        showlegend=True,  # 始终显示图例
         margin=dict(l=40, r=40, t=60, b=40),
-        height=350
+        height=350,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        )
     )
     
     # 添加网格线和样式优化
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.3)')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.3)')
     
-    return fig, f"✅ {result['message']}"
+    message = f"✅ {result['message']}"
+    if is_cumulative:
+        message += f" (累计: {len(new_cumulative_data)} 条曲线)"
+    
+    return fig, message, new_cumulative_data
 
 # 清除图表
 @callback(
     Output("sensitivity-plot", "figure", allow_duplicate=True),
     Output("x-param-selector", "value"),
     Output("y-param-selector", "value"),
+    Output("cumulative-plot-data", "data", allow_duplicate=True),
     Input("clear-plot-btn", "n_clicks"),
     prevent_initial_call=True
 )
 def clear_plot(n_clicks):
-    """清除图表和选择器"""
+    """清除图表、选择器和累计数据"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     
-    return create_empty_plot(), None, None
+    return create_empty_plot(), None, None, []
 
 # 导出绘图数据
 @callback(
@@ -2164,6 +2344,33 @@ def export_plot_data(n_clicks, figure, x_param, y_param):
         # 静默失败，不影响用户体验
         print(f"导出数据失败: {e}")
         raise dash.exceptions.PreventUpdate
+
+# 自动更新系列名称输入框的默认值
+@callback(
+    Output("series-name-input", "value"),
+    Input("y-param-selector", "value"),
+    prevent_initial_call=True
+)
+def auto_update_series_name(y_param):
+    """当Y轴参数改变时，自动设置系列名称为该参数的标签"""
+    if not y_param:
+        return ""
+    
+    try:
+        # 从参数值中解析节点ID和参数名
+        y_node_id, y_param_name = y_param.split('|')
+        
+        # 从graph中获取节点
+        y_node = graph.nodes.get(y_node_id)
+        if not y_node:
+            return ""
+        
+        # 构建默认系列名称
+        default_name = f"{y_node.name}.{y_param_name}"
+        return default_name
+        
+    except (ValueError, AttributeError):
+        return ""
 
 # 自动更新范围值（当选择X轴参数时）
 @callback(
@@ -3129,6 +3336,7 @@ def toggle_enlarged_plot(enlarge_clicks, close_clicks, current_figure, is_open):
                     },
                     'tickfont': {'size': 12}
                 },
+                'showlegend': True,  # 放大图表显示图例
                 'margin': {'l': 80, 'r': 50, 't': 80, 'b': 80}
             })
             
@@ -3296,6 +3504,81 @@ def save_node_changes(save_clicks, node_name, node_type, node_description, edit_
         
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{old_name}' 已更新为 '{node.name}'"
+        return False, update_canvas(), success_message
+        
+    except Exception as e:
+        return True, dash.no_update, f"错误: {str(e)}"
+
+# 添加节点模态窗口相关回调函数
+
+# 打开添加节点模态窗口
+@callback(
+    Output("node-add-modal", "is_open"),
+    Output("node-add-name", "value"),
+    Output("node-add-type", "value"),
+    Output("node-add-description", "value"),
+    Input("add-node-from-graph-button", "n_clicks"),
+    Input("node-add-cancel", "n_clicks"),
+    State("node-add-modal", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_node_add_modal(add_clicks, cancel_clicks, is_open):
+    if not ctx.triggered_id:
+        raise dash.exceptions.PreventUpdate
+    
+    if ctx.triggered_id == "add-node-from-graph-button":
+        # 打开模态窗口并清空输入
+        return True, "", "default", ""
+    elif ctx.triggered_id == "node-add-cancel":
+        # 关闭模态窗口
+        return False, "", "default", ""
+    
+    raise dash.exceptions.PreventUpdate
+
+# 创建新节点
+@callback(
+    Output("node-add-modal", "is_open", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("node-add-save", "n_clicks"),
+    State("node-add-name", "value"),
+    State("node-add-type", "value"),
+    State("node-add-description", "value"),
+    prevent_initial_call=True
+)
+def create_new_node(save_clicks, node_name, node_type, node_description):
+    if not save_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 验证输入
+        if not node_name or not node_name.strip():
+            return True, dash.no_update, "错误: 节点名称不能为空"
+        
+        node_name = node_name.strip()
+        
+        # 检查节点名称是否与其他节点重复
+        for existing_node in graph.nodes.values():
+            if existing_node.name == node_name:
+                return True, dash.no_update, f"错误: 节点名称 '{node_name}' 已存在，请使用不同的名称"
+        
+        # 创建新节点
+        from models import Node
+        node = Node(
+            name=node_name,
+            description=node_description or f"节点 {node_name}",
+            node_type=node_type
+        )
+        
+        # 添加到计算图
+        graph.add_node(node)
+        id_mapper.register_node(node.id, node_name)
+        
+        # 使用布局管理器放置节点
+        position = layout_manager.place_node(node.id)
+        
+        # 关闭模态窗口并更新界面
+        success_message = f"节点 '{node_name}' 已创建并添加到位置 ({position.row}, {position.col})"
         return False, update_canvas(), success_message
         
     except Exception as e:

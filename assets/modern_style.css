@@ -820,6 +820,62 @@ body > .dropdown-menu {
   transform: translateX(3px);
 }
 
+/* 添加节点按钮特殊样式 */
+.add-node-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-secondary) !important;
+}
+
+.add-node-btn:hover {
+  transform: scale(1.15) rotate(90deg) !important;
+  background: rgba(40, 167, 69, 0.1) !important;
+  color: #28a745 !important;
+  box-shadow: 0 4px 16px rgba(40, 167, 69, 0.2) !important;
+}
+
+.add-node-btn:active {
+  transform: scale(0.95) rotate(90deg) !important;
+  background: rgba(40, 167, 69, 0.2) !important;
+}
+
+.add-node-btn:focus {
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.25) !important;
+  outline: none !important;
+}
+
+.add-node-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(40, 167, 69, 0.2) 0%, transparent 70%);
+  transition: all 0.4s ease;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.add-node-btn:hover::before {
+  width: 40px;
+  height: 40px;
+}
+
+/* 图标动画 */
+.add-node-btn span {
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+.add-node-btn:hover span {
+  transform: rotate(90deg);
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .node-input-group {
@@ -839,6 +895,15 @@ body > .dropdown-menu {
   .section-label {
     font-size: 0.7rem;
     padding: 0.2rem 0.6rem;
+  }
+  
+  .add-node-btn {
+    min-width: 28px !important;
+    height: 28px !important;
+  }
+  
+  .add-node-btn span {
+    font-size: 14px !important;
   }
 }
 

@@ -21,7 +21,7 @@ def test_headless_demo(dash_duo):
     
     # 检查页面标题
     title = dash_duo.find_element("h1")
-    assert title.text == "ArchDash"
+    assert title.text == "🎨 ArchDash"
     print("✅ 页面标题验证成功")
     
     # 检查输入框是否存在
