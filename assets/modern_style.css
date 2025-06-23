@@ -380,13 +380,6 @@ h1 {
   z-index: 99999 !important;
 }
 
-/* 节点下拉菜单特殊样式 */
-.node-container .dropdown-menu {
-  position: fixed !important;
-  z-index: 99999 !important;
-  transform: none !important;
-}
-
 /* 活跃节点z-index */
 .node-container:has(.dropdown-menu.show) {
   z-index: 10000 !important;
@@ -397,18 +390,12 @@ h1 {
   position: relative;
 }
 
-.node-container.dropdown-active .dropdown-menu {
-  z-index: 99999 !important;
-  position: fixed !important;
-}
-
 /* 全局下拉菜单样式 */
 body > .dropdown-menu {
   z-index: 99999 !important;
 }
 
 .dropdown-menu.show {
-  animation: fadeInScale 0.2s ease-out;
   z-index: 99999 !important;
 }
 
@@ -858,6 +845,8 @@ body > .dropdown-menu {
 /* 依赖关系面板样式 - 扁平化圆角 */
 .dependencies-panel {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1 !important;
+  position: relative;
 }
 
 .dependencies-panel .card-header {
@@ -944,4 +933,229 @@ body > .dropdown-menu {
 
 .dependencies-header:hover::before {
   left: 100%;
+}
+
+/* 断开连接图标样式 */
+.unlink-icon {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  position: relative;
+}
+
+.unlink-icon:hover {
+  opacity: 1 !important;
+  transform: scale(1.2);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* 断开连接图标的状态指示 */
+.unlink-icon[title*="重新连接"] {
+  color: #dc3545;
+  animation: unlinkPulse 2s infinite;
+}
+
+.unlink-icon[title*="已连接"] {
+  color: #28a745;
+}
+
+@keyframes unlinkPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* 相关性分析下拉菜单优先级提升 - 使用绝对定位不影响布局 */
+#x-param-selector .Select-menu-outer,
+#y-param-selector .Select-menu-outer,
+#analysis-param-selector .Select-menu-outer,
+#x-param-selector .css-26l3qy-menu,
+#y-param-selector .css-26l3qy-menu,
+#analysis-param-selector .css-26l3qy-menu,
+#x-param-selector .css-1n7v3ny-option,
+#y-param-selector .css-1n7v3ny-option,
+#analysis-param-selector .css-1n7v3ny-option,
+#x-param-selector div[class*="menu"],
+#y-param-selector div[class*="menu"],
+#analysis-param-selector div[class*="menu"],
+#x-param-selector div[class*="option"],
+#y-param-selector div[class*="option"],
+#analysis-param-selector div[class*="option"] {
+  z-index: 99999 !important;
+}
+
+/* Dash下拉菜单通用样式 */
+.dash-dropdown .Select-menu-outer,
+.dash-dropdown .css-26l3qy-menu {
+  z-index: 99999 !important;
+}
+
+/* 相关性分析Card的z-index提升 */
+.glass-card:has(#x-param-selector, #y-param-selector, #analysis-param-selector) {
+  z-index: 200;
+}
+
+/* 相关性分析区域内的所有下拉组件 */
+.glass-card:has(#x-param-selector) .Select-control,
+.glass-card:has(#y-param-selector) .Select-control,
+.glass-card:has(#analysis-param-selector) .Select-control {
+  z-index: 10000;
+}
+
+/* Bootstrap下拉菜单的z-index处理 */
+.dropdown-menu {
+  z-index: 1000 !important;
+}
+
+/* 依赖关系面板的下拉菜单 */
+.dependencies-panel .dropdown-menu {
+  z-index: 1000 !important;
+}
+
+
+
+/* Dash下拉菜单的z-index处理 */
+.Select-menu-outer {
+  z-index: 1000 !important;
+}
+
+/* React-Select组件的z-index处理 */
+.css-26l3qy-menu {
+  z-index: 1000 !important;
+}
+
+/* 为相关性分析参数选择器提升z-index */
+#x-param-selector,
+#y-param-selector,
+#analysis-param-selector {
+  z-index: 100000 !important;
+}
+
+/* 确保相关性分析下拉菜单容器有足够高的z-index */
+#x-param-selector > div,
+#y-param-selector > div,
+#analysis-param-selector > div {
+  z-index: 100000 !important;
+}
+
+/* 下拉菜单z-index处理 */
+#x-param-selector .Select-menu,
+#y-param-selector .Select-menu,
+#analysis-param-selector .Select-menu,
+#x-param-selector [class*="menu"],
+#y-param-selector [class*="menu"],
+#analysis-param-selector [class*="menu"] {
+  z-index: 999999 !important;
+}
+
+
+
+
+
+/* 下拉菜单选项背景色修复 */
+#x-param-selector .Select-option,
+#y-param-selector .Select-option,
+#analysis-param-selector .Select-option,
+#x-param-selector div[class*="option"],
+#y-param-selector div[class*="option"],
+#analysis-param-selector div[class*="option"] {
+  background: white !important;
+  color: var(--text-primary) !important;
+  padding: 8px 12px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  transition: background-color 0.2s ease !important;
+}
+
+/* 下拉菜单选项悬停效果 */
+#x-param-selector .Select-option:hover,
+#y-param-selector .Select-option:hover,
+#analysis-param-selector .Select-option:hover,
+#x-param-selector div[class*="option"]:hover,
+#y-param-selector div[class*="option"]:hover,
+#analysis-param-selector div[class*="option"]:hover {
+  background: #f8f9fa !important;
+  color: var(--text-primary) !important;
+}
+
+/* 下拉菜单选项选中状态 */
+#x-param-selector .Select-option.is-selected,
+#y-param-selector .Select-option.is-selected,
+#analysis-param-selector .Select-option.is-selected,
+#x-param-selector div[class*="option"].is-selected,
+#y-param-selector div[class*="option"].is-selected,
+#analysis-param-selector div[class*="option"].is-selected {
+  background: var(--accent-primary) !important;
+  color: white !important;
+}
+
+/* React-Select现代类名支持 */
+#x-param-selector .css-1n7v3ny-option,
+#y-param-selector .css-1n7v3ny-option,
+#analysis-param-selector .css-1n7v3ny-option {
+  background: white !important;
+  color: var(--text-primary) !important;
+  padding: 8px 12px !important;
+}
+
+#x-param-selector .css-1n7v3ny-option:hover,
+#y-param-selector .css-1n7v3ny-option:hover,
+#analysis-param-selector .css-1n7v3ny-option:hover {
+  background: #f8f9fa !important;
+}
+
+/* 深色主题下的下拉菜单样式 */
+[data-theme="dark"] #x-param-selector .Select-option,
+[data-theme="dark"] #y-param-selector .Select-option,
+[data-theme="dark"] #analysis-param-selector .Select-option,
+[data-theme="dark"] #x-param-selector div[class*="option"],
+[data-theme="dark"] #y-param-selector div[class*="option"],
+[data-theme="dark"] #analysis-param-selector div[class*="option"],
+[data-theme="dark"] #x-param-selector .css-1n7v3ny-option,
+[data-theme="dark"] #y-param-selector .css-1n7v3ny-option,
+[data-theme="dark"] #analysis-param-selector .css-1n7v3ny-option {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] #x-param-selector .Select-option:hover,
+[data-theme="dark"] #y-param-selector .Select-option:hover,
+[data-theme="dark"] #analysis-param-selector .Select-option:hover,
+[data-theme="dark"] #x-param-selector div[class*="option"]:hover,
+[data-theme="dark"] #y-param-selector div[class*="option"]:hover,
+[data-theme="dark"] #analysis-param-selector div[class*="option"]:hover,
+[data-theme="dark"] #x-param-selector .css-1n7v3ny-option:hover,
+[data-theme="dark"] #y-param-selector .css-1n7v3ny-option:hover,
+[data-theme="dark"] #analysis-param-selector .css-1n7v3ny-option:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 深色主题下的菜单容器 */
+[data-theme="dark"] #x-param-selector [class*="menu"],
+[data-theme="dark"] #y-param-selector [class*="menu"],
+[data-theme="dark"] #analysis-param-selector [class*="menu"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+/* 强力规则：确保所有相关性分析相关的下拉菜单都有最高优先级 */
+[id*="param-selector"] *[class*="menu"] {
+  z-index: 999999 !important;
+}
+
+[id*="param-selector"] *[class*="option"] {
+  z-index: 999999 !important;
+}
+
+/* 强制设置依赖关系面板为最低层级 */
+.dependencies-panel,
+.dependencies-panel *,
+.dependencies-panel .card,
+.dependencies-panel .card-header,
+.dependencies-panel .card-body {
+  z-index: 1 !important;
+}
+
+/* 特别处理：确保下拉菜单Portal渲染到body时也有正确z-index */
+body > div[class*="Select"],
+body > div[class*="menu"] {
+  z-index: 999999 !important;
 }

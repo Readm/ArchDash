@@ -577,7 +577,8 @@ app.layout = dbc.Container([
                                         id="x-param-selector", 
                                         placeholder="选择X轴参数",
                                         clearable=True,
-                                        className="mb-1"
+                                        className="mb-1",
+                                        style={"zIndex": "9999"}
                                     )
                                 ], width=6),
                                 dbc.Col([
@@ -586,7 +587,8 @@ app.layout = dbc.Container([
                                         id="y-param-selector", 
                                         placeholder="选择Y轴参数",
                                         clearable=True,
-                                        className="mb-1"
+                                        className="mb-1",
+                                        style={"zIndex": "9999"}
                                     )
                                 ], width=6),
                             ], className="mb-2"),
@@ -655,8 +657,8 @@ app.layout = dbc.Container([
                                     ], className="w-100")
                                 ])
                             ])
-                        ], className="p-2")
-                    ], className="glass-card")
+                        ], className="p-2 dropdown-container")
+                    ], className="glass-card dropdown-safe-card")
                 ], className="p-1", style={"minHeight": "450px"})
             ], className="glass-card"),
         ], width=4),
@@ -715,7 +717,7 @@ app.layout = dbc.Container([
                                     dbc.Row([
                                         dbc.Col([
                                             dbc.Label("选择参数进行分析:"),
-                                            dbc.Select(id="analysis-param-selector", placeholder="选择要分析的参数")
+                                            dbc.Select(id="analysis-param-selector", placeholder="选择要分析的参数", style={"zIndex": "9999"})
                                         ], width=8),
                                         dbc.Col([
                                             dbc.Button("开始分析", id="start-analysis-btn", color="primary", size="sm")
@@ -729,9 +731,9 @@ app.layout = dbc.Container([
                                 ], style={"padding": "15px"})
                             ], label="📈 实时分析", tab_id="analysis-tab")
                         ], id="dependencies-tabs", active_tab="dependencies-tab")
-                    ], className="p-2")
+                    ], className="p-2 dropdown-container")
                 ], id="dependencies-collapse", is_open=False)
-            ], className="glass-card dependencies-panel"),
+            ], className="glass-card dependencies-panel dropdown-safe-card"),
         ], width=12),
     ], className="mt-2"),
 
@@ -1760,9 +1762,8 @@ def trigger_arrow_update_on_data_change(connections_data):
 app.clientside_callback(
     """
     function(connections_data, canvas_children) {
-        setTimeout(function() {
-            try {
-                var arrowContainer = document.getElementById('arrows-overlay-dynamic');
+        try {
+            var arrowContainer = document.getElementById('arrows-overlay-dynamic');
                 if (!arrowContainer) {
                     console.log('箭头容器未找到');
                     return;
@@ -1911,10 +1912,9 @@ app.clientside_callback(
                 
                 console.log('Pin悬停事件监听器已设置，总pin数:', pinElements.length);
                 
-            } catch (error) {
-                console.error('客户端回调错误:', error);
-            }
-        }, 300);
+        } catch (error) {
+            console.error('客户端回调错误:', error);
+        }
         
         return window.dash_clientside.no_update;
     }
@@ -3013,13 +3013,8 @@ app.clientside_callback(
                     node.classList.remove('dropdown-active');
                 });
                 
-                // 如果下拉菜单即将显示，提升当前节点的层级
-                setTimeout(() => {
-                    const menu = dropdown ? dropdown.querySelector('.dropdown-menu') : null;
-                    if (menu && menu.classList.contains('show')) {
-                        nodeContainer.classList.add('dropdown-active');
-                    }
-                }, 10);
+                // 立即提升当前节点的层级，不等待菜单显示
+                nodeContainer.classList.add('dropdown-active');
             }
         }
         

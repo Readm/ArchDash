@@ -21,6 +21,7 @@ class Parameter:
         confidence: 参数置信度（0-1之间）
         calculation_func: 计算函数（字符串形式）
         dependencies: 依赖参数列表
+        unlinked: 是否断开计算连接（用户手动设置值时为True）
         _graph: 所属的计算图（用于自动更新传播）
     """
     name: str
@@ -29,6 +30,7 @@ class Parameter:
     confidence: float = 1.0
     calculation_func: Optional[str] = None
     dependencies: List['Parameter'] = field(default_factory=list)
+    unlinked: bool = False  # 是否断开计算连接
 
     _value: T = 0.0  # 内部值存储
     _graph: Optional['CalculationGraph'] = field(default=None, repr=False)  # 计算图引用
@@ -41,6 +43,7 @@ class Parameter:
         self.confidence = kwargs.get('confidence', 1.0)
         self.calculation_func = kwargs.get('calculation_func', None)
         self.dependencies = kwargs.get('dependencies', [])
+        self.unlinked = kwargs.get('unlinked', False)
         self._graph = kwargs.get('_graph', None)
     
     @property
@@ -101,6 +104,10 @@ class Parameter:
         if not self.calculation_func:
             return self.value if self.value is not None else 0.0
         
+        # 如果参数被标记为unlinked，跳过自动计算
+        if self.unlinked:
+            return self.value if self.value is not None else 0.0
+        
         # 检查所有依赖是否都有值
         for dep in self.dependencies:
             if dep.value is None:
@@ -140,6 +147,28 @@ class Parameter:
         except Exception as e:
             raise ValueError(f"计算失败: {str(e)}")
     
+    def relink_and_calculate(self) -> T:
+        """重新连接参数并计算
+        
+        Returns:
+            T: 重新计算后的参数值
+        """
+        self.unlinked = False
+        if self.calculation_func:
+            return self.calculate()
+        return self.value
+    
+    def set_manual_value(self, new_value: T) -> None:
+        """手动设置参数值并标记为unlinked
+        
+        Args:
+            new_value: 新的参数值
+        """
+        if self.calculation_func and self.dependencies:
+            # 只有有计算函数和依赖的参数才能被unlink
+            self.unlinked = True
+        self.value = new_value
+    
     def to_dict(self) -> Dict[str, Any]:
         """将参数转换为字典"""
         return {
@@ -149,7 +178,8 @@ class Parameter:
             "description": self.description,
             "confidence": self.confidence,
             "calculation_func": self.calculation_func,
-            "dependencies": [dep.name for dep in self.dependencies]
+            "dependencies": [dep.name for dep in self.dependencies],
+            "unlinked": self.unlinked
         }
     
     @classmethod
@@ -161,7 +191,8 @@ class Parameter:
             unit=data["unit"],
             description=data["description"],
             confidence=data["confidence"],
-            calculation_func=data["calculation_func"]
+            calculation_func=data["calculation_func"],
+            unlinked=data.get("unlinked", False)
         )
         
         # 添加依赖
@@ -554,7 +585,8 @@ class CalculationGraph:
                     unit=param_data["unit"],
                     description=param_data.get("description", ""),
                     confidence=param_data.get("confidence", 1.0),
-                    calculation_func=param_data.get("calculation_func")
+                    calculation_func=param_data.get("calculation_func"),
+                    unlinked=param_data.get("unlinked", False)
                 )
                 
                 # 设置计算图引用
