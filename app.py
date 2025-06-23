@@ -460,82 +460,13 @@ def create_arrows():
     ]
 
 app.layout = dbc.Container([
-    # 深色主题切换按钮
-    html.Button(
-        "🌙", 
-        id="theme-toggle", 
-        className="theme-toggle",
-        title="切换深色/浅色主题"
-    ),
-    
     html.H1([
         "🎨 ArchDash"
     ], className="text-center my-2 fade-in"),
+
     dbc.Row([
         dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    # 节点添加 - 紧凑布局
-                    dbc.Row([
-                        dbc.Col([
-                            dcc.Input(
-                                id="node-name", 
-                                type="text", 
-                                placeholder="输入节点名称...",
-                                className="form-control"
-                            ),
-                        ], width=8),
-                        dbc.Col([
-                            html.Button(
-                                ["➕ ", html.Span("添加")], 
-                                id="add-node-button", 
-                                className="btn btn-primary w-100"
-                            ),
-                        ], width=4),
-                    ], className="mb-3"),
-                    
-                    # 画布自动管理列数
-                ])
-            ], className="glass-card fade-in"),
-        ], width=4),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.Div([
-                        html.Label("文件操作", className="fw-bold mb-0 me-auto"),
-                        html.Div([
-                            dcc.Upload(
-                                id="upload-graph",
-                                children=html.Button(
-                                    "📁", 
-                                    className="btn btn-info btn-sm me-2",
-                                    title="加载文件"
-                                ),
-                                accept=".json",
-                                multiple=False
-                            ),
-                            html.Button(
-                                "💾", 
-                                id="save-graph-button", 
-                                className="btn btn-success btn-sm",
-                                title="保存文件"
-                            ),
-                        ], className="d-flex"),
-                    ], className="d-flex align-items-center"),
-                ])
-            ], className="glass-card fade-in"),
-        ], width=4),
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    html.Label("操作状态", className="fw-bold mb-2"),
-                    html.Div(id="output-result", className="text-muted"),
-                ])
-            ], className="glass-card fade-in"),
-        ], width=4),
-    ], className="mb-2"),
-    dbc.Row([
-        dbc.Col([
+            # 计算图卡片
             dbc.Card([
                 dbc.CardHeader([
                     html.Div([
@@ -577,9 +508,62 @@ app.layout = dbc.Container([
                         style={"minHeight": "500px"}
                     ),
                 ], className="p-1")
-            ], className="glass-card"),
+            ], className="glass-card mb-2"),
+            
+            # 操作状态卡片
+            dbc.Card([
+                dbc.CardBody([
+                    html.Label("操作状态", className="fw-bold mb-2"),
+                    html.Div(id="output-result", className="text-muted"),
+                ])
+            ], className="glass-card fade-in"),
         ], width=8),
         dbc.Col([
+            # 文件操作卡片
+            dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        html.Label("文件操作", className="fw-bold mb-0 me-auto"),
+                        html.Div([
+                            dcc.Upload(
+                                id="upload-graph",
+                                children=html.Button(
+                                    "📁", 
+                                    className="btn btn-info btn-sm me-2",
+                                    title="加载文件"
+                                ),
+                                accept=".json",
+                                multiple=False
+                            ),
+                            html.Button(
+                                "💾", 
+                                id="save-graph-button", 
+                                className="btn btn-success btn-sm me-2",
+                                title="保存文件"
+                            ),
+                            # 竖线分隔符
+                            html.Div(
+                                style={
+                                    "borderLeft": "1px solid #dee2e6",
+                                    "height": "24px",
+                                    "marginLeft": "8px",
+                                    "marginRight": "8px"
+                                }
+                            ),
+                            # 主题切换按钮
+                            html.Button(
+                                "🌙", 
+                                id="theme-toggle", 
+                                className="btn btn-outline-secondary btn-sm",
+                                title="切换深色/浅色主题",
+                                style={"minWidth": "32px"}
+                            ),
+                        ], className="d-flex align-items-center"),
+                    ], className="d-flex align-items-center"),
+                ])
+            ], className="glass-card fade-in mb-2"),
+            
+            # 相关性分析卡片
             dbc.Card([
                 dbc.CardHeader([
                     html.H5([
@@ -738,6 +722,8 @@ app.layout = dbc.Container([
             ], className="glass-card"),
         ], width=4),
     ]),
+    
+
     
     # 参数依赖关系模块 - 可折叠，独立一行
     dbc.Row([
@@ -1099,46 +1085,21 @@ app.index_string = '''
     Output("output-result", "children"),
     Output("node-data", "data"),
     Output("canvas-container", "children"),
-    Input("add-node-button", "n_clicks"),
     Input({"type": "move-node-up", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-down", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-left", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-right", "node": ALL}, "n_clicks"),
     Input({"type": "add-param", "node": ALL}, "n_clicks"),
     Input({"type": "delete-node", "node": ALL}, "n_clicks"),
-    State("node-name", "value"),
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def handle_node_operations(add_node_clicks, move_up_clicks, move_down_clicks, 
+def handle_node_operations(move_up_clicks, move_down_clicks, 
                           move_left_clicks, move_right_clicks, 
                           add_param_clicks, delete_node_clicks,
-                          node_name, node_data):
+                          node_data):
     
-    if ctx.triggered_id == "add-node-button":
-        if not node_name:
-            return "请输入节点名称", node_data, update_canvas()
-        
-        try:
-            # 检查节点名称是否已存在
-            for existing_node in graph.nodes.values():
-                if existing_node.name == node_name:
-                    return f"错误：节点名称 '{node_name}' 已存在，请使用不同的名称", node_data, update_canvas()
-            
-            # 创建新节点
-            node = Node(name=node_name, description=f"节点 {node_name}")
-            graph.add_node(node)
-            id_mapper.register_node(node.id, node_name)
-            
-            # 使用布局管理器放置节点
-            position = layout_manager.place_node(node.id)
-            
-            return f"节点 {node_name} 已添加到位置 ({position.row}, {position.col})", node_data, update_canvas()
-            
-        except ValueError as e:
-            return f"错误：{str(e)}", node_data, update_canvas()
-    
-    elif isinstance(ctx.triggered_id, dict):
+    if isinstance(ctx.triggered_id, dict):
         operation_type = ctx.triggered_id.get("type")
         node_id = ctx.triggered_id.get("node")
         
