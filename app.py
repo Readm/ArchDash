@@ -175,16 +175,19 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
                 'message': f'数据点过多 ({len(x_range)} 点)，请减少范围或增大步长 (最大1000点)'
             }
         
+        # 在相关性分析开始前，如果X参数有计算依赖，将其设置为unlinked
+        x_was_unlinked = getattr(x_param, 'unlinked', False)
+        if x_param.calculation_func and x_param.dependencies and not x_was_unlinked:
+            x_param.set_manual_value(x_param.value)  # 保持当前值但断开计算
+        
         for x_val in x_range:
             try:
-                # 设置X参数值
-                if hasattr(graph, 'set_parameter_value'):
-                    update_result = graph.set_parameter_value(x_param, float(x_val))
-                else:
-                    x_param.value = float(x_val)
-                    # 如果Y参数有计算函数，触发重新计算
-                    if y_param.calculation_func:
-                        y_param.calculate()
+                # 设置X参数值（相关性分析中的手动设置）
+                x_param.value = float(x_val)
+                
+                # 如果Y参数有计算函数，触发重新计算
+                if y_param.calculation_func:
+                    y_param.calculate()
                 
                 x_values.append(float(x_val))
                 y_values.append(float(y_param.value))
@@ -211,15 +214,15 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
             'message': f"分析失败: {str(e)}"
         }
     finally:
-        # 恢复原始值
+        # 恢复原始值和连接状态
         try:
             if 'x_param' in locals() and 'original_x_value' in locals():
-                if hasattr(graph, 'set_parameter_value'):
-                    graph.set_parameter_value(x_param, original_x_value)
-                else:
-                    x_param.value = original_x_value
+                x_param.value = original_x_value
+                # 恢复原始的unlinked状态
+                if 'x_was_unlinked' in locals() and not x_was_unlinked:
+                    x_param.unlinked = False
         except Exception as e:
-            print(f"恢复原始值时出错: {e}")
+            print(f"恢复原始值和状态时出错: {e}")
 
 def create_empty_plot():
     """创建空的绘图"""
@@ -336,19 +339,40 @@ def update_canvas(node_data=None):
                                 style={"paddingRight": "8px", "width": "40%"}
                             ),
                             html.Td(
-                                dcc.Input(
-                                    id={"type": "param-value", "node": node_id, "index": param_idx},
-                                    value=str(param.value),
-                                    style={
-                                        "width": "100%", 
-                                        "border": "1px solid transparent", 
-                                        "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
-                                        "borderRadius": "3px", 
-                                        "padding": "2px 4px",
-                                        "transition": "background-color 2s ease-out"
-                                    },
-                                    className="param-input"
-                                ),
+                                html.Div([
+                                    dcc.Input(
+                                        id={"type": "param-value", "node": node_id, "index": param_idx},
+                                        value=str(param.value),
+                                        style={
+                                            "width": "calc(100% - 30px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                            "border": "1px solid transparent", 
+                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
+                                            "borderRadius": "3px", 
+                                            "padding": "2px 4px",
+                                            "transition": "background-color 2s ease-out"
+                                        },
+                                        className="param-input"
+                                    ),
+                                    # Unlink图标 - 只有有依赖计算且unlinked=True时显示
+                                    html.Div(
+                                        "🔓",
+                                        id={"type": "unlink-icon", "node": node_id, "index": param_idx},
+                                        className="unlink-icon",
+                                        style={
+                                            "cursor": "pointer",
+                                            "fontSize": "14px",
+                                            "opacity": "1",
+                                            "marginLeft": "4px",
+                                            "padding": "2px",
+                                            "borderRadius": "3px",
+                                            "display": "inline-block",
+                                            "minWidth": "20px",
+                                            "textAlign": "center",
+                                            "userSelect": "none"
+                                        },
+                                        title="重新连接 (点击恢复自动计算)"
+                                    ) if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else None
+                                ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
                                 style={"width": "40%"}
                             ),
                             html.Td(
@@ -1157,11 +1181,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
             
             # 添加参数到节点
-            if hasattr(graph, 'add_parameter_to_node'):
-                graph.add_parameter_to_node(node_id, param)
-            else:
-                graph.nodes[node_id].add_parameter(param)
-                param.set_graph(graph)
+            graph.add_parameter_to_node(node_id, param)
             
             return f"参数已添加到节点 {node_name}", node_data, update_canvas()
         
@@ -1340,8 +1360,14 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
             
             print(f"🔄 参数值更新: {current_param.name}: {current_param.value} → {new_value}")
             
-            # 使用数据流机制更新参数值，这会自动触发依赖参数的重新计算
-            if hasattr(graph, 'set_parameter_value'):
+            # 手动修改参数值时，如果参数有计算函数和依赖，自动设置为unlinked
+            if current_param.calculation_func and current_param.dependencies:
+                current_param.set_manual_value(new_value)
+                update_message = f"🔓 参数 {current_param.name} 已手动设置为 {new_value}（已断开自动计算）"
+                should_update_canvas = True
+                recently_updated_params.add(f"{node_id}-{param_index}")
+            else:
+                # 无计算依赖的参数，正常更新
                 # 清空之前的高亮标记
                 recently_updated_params.clear()
                 
@@ -1370,11 +1396,6 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
                     cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
                 
                 update_message = f"🔄 参数 {current_param.name} 已更新为 {new_value}{cascaded_info}"
-            else:
-                # 兼容旧方法
-                current_param.value = new_value
-                should_update_canvas = True
-                update_message = f"参数 {current_param.name} 已更新为 {new_value}"
         
         # 返回更新结果
         if should_update_canvas:
@@ -1445,6 +1466,57 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     
     # 参数操作完成，只更新数据和画布，不影响任何其他UI组件
     return node_data, update_canvas()
+
+# 处理unlink图标点击的回调函数
+@callback(
+    Output("node-data", "data", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input({"type": "unlink-icon", "node": ALL, "index": ALL}, "n_clicks"),
+    State("node-data", "data"),
+    prevent_initial_call=True
+)
+def handle_unlink_toggle(unlink_clicks, node_data):
+    """处理unlink图标点击，重新连接参数并计算"""
+    if not ctx.triggered_id:
+        return node_data, dash.no_update, dash.no_update
+    
+    triggered_id = ctx.triggered_id
+    if not isinstance(triggered_id, dict):
+        return node_data, dash.no_update, dash.no_update
+    
+    node_id = triggered_id.get("node")
+    param_index = triggered_id.get("index")
+    
+    # 检查点击数值，避免初始化时的误触发
+    trigger_value = ctx.triggered[0]["value"]
+    if not trigger_value or trigger_value == 0:
+        return node_data, dash.no_update, dash.no_update
+    
+    if not node_id or param_index is None:
+        return node_data, dash.no_update, dash.no_update
+    
+    # 获取节点和参数
+    node = graph.nodes.get(node_id)
+    if not node or param_index >= len(node.parameters):
+        return node_data, dash.no_update, dash.no_update
+    
+    param = node.parameters[param_index]
+    node_name = id_mapper.get_node_name(node_id)
+    
+    # 检查参数是否可以重新连接
+    if not param.calculation_func or not param.dependencies:
+        return node_data, dash.no_update, f"⚠️ 参数 {node_name}.{param.name} 无计算依赖"
+    
+    try:
+        # 重新连接参数（设置unlinked=False并重新计算）
+        new_value = param.relink_and_calculate()
+        result_message = f"🔗 参数 {node_name}.{param.name} 已重新连接，新值: {new_value}"
+        
+        return node_data, update_canvas(), result_message
+        
+    except Exception as e:
+        return node_data, dash.no_update, f"❌ 重新连接失败: {str(e)}"
 
 # 打开参数编辑模态窗口
 @callback(
@@ -1701,16 +1773,11 @@ def save_parameter_changes(save_clicks, param_name, param_value, param_unit, par
             new_value = str(param_value) if param_value is not None else ""
         
         # 使用数据流机制更新参数值，这会自动触发依赖参数的重新计算
-        if hasattr(graph, 'set_parameter_value'):
-            # 使用新的数据流更新机制
-            update_result = graph.set_parameter_value(param, new_value)
-            cascaded_info = ""
-            if update_result['cascaded_updates']:
-                affected_params = [update['param'].name for update in update_result['cascaded_updates']]
-                cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
-        else:
-            # 兼容旧方法
-            param.value = new_value
+        update_result = graph.set_parameter_value(param, new_value)
+        cascaded_info = ""
+        if update_result['cascaded_updates']:
+            affected_params = [update['param'].name for update in update_result['cascaded_updates']]
+            cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
         
         # 更新置信度
         try:
@@ -1730,8 +1797,7 @@ def save_parameter_changes(save_clicks, param_name, param_value, param_unit, par
             param.add_dependency(dep_param)
         
         # 确保依赖关系更新到计算图
-        if hasattr(graph, 'update_parameter_dependencies'):
-            graph.update_parameter_dependencies(param)
+        graph.update_parameter_dependencies(param)
         
         # 如果有计算函数，尝试执行计算
         if param.calculation_func:
@@ -2772,33 +2838,29 @@ def simulate_parameter_change_and_show_process(param_id, new_value):
         })
         
         # 设置新值
-        if hasattr(graph, 'set_parameter_value'):
-            update_result = graph.set_parameter_value(target_param, new_value)
-            
-            # 记录级联更新过程
-            if update_result and 'cascaded_updates' in update_result:
-                for i, cascade_info in enumerate(update_result['cascaded_updates']):
-                    param = cascade_info['param']
-                    
-                    # 找到参数所在的节点
-                    cascade_node_name = "未知节点"
-                    for node_id, node in graph.nodes.items():
-                        if param in node.parameters:
-                            cascade_node_name = id_mapper.get_node_name(node_id)
-                            break
-                    
-                    propagation_log.append({
-                        "step": i + 1,
-                        "action": "级联计算",
-                        "param_name": param.name,
-                        "old_value": cascade_info['old_value'],
-                        "new_value": cascade_info['new_value'],
-                        "node_name": cascade_node_name,
-                        "calculation_func": getattr(param, 'calculation_func', None)
-                    })
-        else:
-            # 简单设置值
-            target_param.value = new_value
+        update_result = graph.set_parameter_value(target_param, new_value)
+        
+        # 记录级联更新过程
+        if update_result and 'cascaded_updates' in update_result:
+            for i, cascade_info in enumerate(update_result['cascaded_updates']):
+                param = cascade_info['param']
+                
+                # 找到参数所在的节点
+                cascade_node_name = "未知节点"
+                for node_id, node in graph.nodes.items():
+                    if param in node.parameters:
+                        cascade_node_name = id_mapper.get_node_name(node_id)
+                        break
+                
+                propagation_log.append({
+                    "step": i + 1,
+                    "action": "级联计算",
+                    "param_name": param.name,
+                    "old_value": cascade_info['old_value'],
+                    "new_value": cascade_info['new_value'],
+                    "node_name": cascade_node_name,
+                    "calculation_func": getattr(param, 'calculation_func', None)
+                })
             
         return {
             "success": True,
