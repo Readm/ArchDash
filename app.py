@@ -164,16 +164,31 @@ def get_all_available_parameters(current_node_id, current_param_name):
 def generate_code_template(selected_dependencies):
     """生成基础计算函数模板"""
     if not selected_dependencies:
-        return "# 无依赖参数\nresult = value"
+        return """# 无依赖参数
+# 设置置信度 (可选，范围 0.0-1.0)
+# self.confidence = 0.9  # 示例：90% 置信度
+
+result = value"""
     
     code_lines = ["# 计算函数"]
     for i, dep_info in enumerate(selected_dependencies):
         code_lines.append(f"# {dep_info['param_name']} = dependencies[{i}].value")
+        code_lines.append(f"# {dep_info['param_name']}置信度 = dependencies[{i}].confidence")
     
     code_lines.extend([
         "",
+        "# 置信度处理示例：",
+        "# 可以根据依赖参数的置信度动态调整当前参数的置信度",
+        "# min_confidence = min(dep.confidence for dep in dependencies)",
+        "# self.confidence = min_confidence * 0.9  # 根据依赖降低置信度",
+        "",
+        "# 或者设置固定置信度：",
+        "# self.confidence = 0.8  # 80% 置信度",
+        "",
         "# 在这里编写计算逻辑",
-        "result = value  # 修改这里"
+        "result = value  # 修改这里",
+        "",
+        "# 注意：置信度会影响参数在依赖关系显示中的颜色标识"
     ])
     
     return "\n".join(code_lines)
@@ -400,7 +415,7 @@ def create_example_soc_graph():
     from models import Node, Parameter
     
     # 1. 工艺节点 - 基础参数
-    process_node = Node(name="工艺技术", description="半导体工艺技术参数", node_type="input")
+    process_node = Node(name="工艺技术", description="半导体工艺技术参数")
     process_node.add_parameter(Parameter("工艺节点", 7, "nm", description="制程工艺节点大小", confidence=0.95))
     process_node.add_parameter(Parameter("电压", 0.8, "V", description="工作电压", confidence=0.9))
     process_node.add_parameter(Parameter("温度", 85, "°C", description="工作温度", confidence=0.8))
@@ -410,7 +425,7 @@ def create_example_soc_graph():
     layout_manager.place_node(process_node.id, GridPosition(0, 0))
     
     # 2. CPU核心节点
-    cpu_core_node = Node(name="CPU核心", description="处理器核心参数", node_type="calculation")
+    cpu_core_node = Node(name="CPU核心", description="处理器核心参数")
     cpu_core_node.add_parameter(Parameter("基础频率", 2.5, "GHz", description="基础运行频率", confidence=0.9))
     cpu_core_node.add_parameter(Parameter("核心数量", 8, "个", description="CPU核心数量", confidence=1.0))
     
@@ -426,6 +441,12 @@ voltage = dependencies[1].value    # 电压
 # 频率随电压线性增长，电压越高频率越高
 voltage_factor = voltage / 0.8  # 归一化到标准电压
 result = base_freq * voltage_factor * 1.28  # 最大频率比基础频率高28%
+
+# 置信度处理：基于依赖参数的置信度
+base_confidence = dependencies[0].confidence  # 基础频率置信度
+voltage_confidence = dependencies[1].confidence  # 电压置信度
+# 计算结果的置信度取决于最不确定的输入参数
+self.confidence = min(base_confidence, voltage_confidence) * 0.95
 """
     cpu_core_node.add_parameter(max_freq_param)
     
@@ -434,7 +455,7 @@ result = base_freq * voltage_factor * 1.28  # 最大频率比基础频率高28%
     layout_manager.place_node(cpu_core_node.id, GridPosition(1, 0))
     
     # 3. 缓存系统节点
-    cache_node = Node(name="缓存系统", description="多级缓存参数", node_type="calculation")
+    cache_node = Node(name="缓存系统", description="多级缓存参数")
     cache_node.add_parameter(Parameter("L1缓存", 32, "KB", description="一级缓存大小", confidence=0.95))
     cache_node.add_parameter(Parameter("L2缓存", 256, "KB", description="二级缓存大小", confidence=0.9))
     cache_node.add_parameter(Parameter("L3缓存", 16, "MB", description="三级缓存大小", confidence=0.85))
@@ -456,6 +477,12 @@ core_count = dependencies[3].value   # 核心数量
 total_l1 = l1_per_core * core_count / 1024  # 转换为MB
 total_l2 = l2_per_core * core_count / 1024  # 转换为MB
 result = total_l1 + total_l2 + l3_shared
+
+# 置信度处理：多个依赖参数的置信度合成
+dep_confidences = [dep.confidence for dep in dependencies]
+# 使用几何平均数来合成置信度
+import math
+self.confidence = math.pow(math.prod(dep_confidences), 1/len(dep_confidences)) * 0.9
 """
     cache_node.add_parameter(total_cache_param)
     
@@ -464,7 +491,7 @@ result = total_l1 + total_l2 + l3_shared
     layout_manager.place_node(cache_node.id, GridPosition(2, 0))
     
     # 4. 内存控制器节点
-    memory_node = Node(name="内存系统", description="内存控制器和带宽", node_type="calculation")
+    memory_node = Node(name="内存系统", description="内存控制器和带宽")
     memory_node.add_parameter(Parameter("内存频率", 3200, "MHz", description="DDR4内存频率", confidence=0.9))
     memory_node.add_parameter(Parameter("内存通道", 2, "个", description="内存通道数量", confidence=1.0))
     memory_node.add_parameter(Parameter("总线宽度", 64, "bit", description="单通道总线宽度", confidence=1.0))
@@ -482,6 +509,10 @@ bus_width = dependencies[2].value    # 总线宽度
 
 # 带宽 = 频率 × 通道数 × 总线宽度 × 2 (DDR) / 8 (转换为字节)
 result = freq_mhz * channels * bus_width * 2 / 8 / 1000  # GB/s
+
+# 置信度处理：理论计算结果，但实际性能可能有差异
+# 设置相对较低的置信度，因为理论带宽与实际带宽通常有差距
+self.confidence = 0.7  # 固定70%置信度
 """
     memory_node.add_parameter(bandwidth_param)
     
@@ -490,7 +521,7 @@ result = freq_mhz * channels * bus_width * 2 / 8 / 1000  # GB/s
     layout_manager.place_node(memory_node.id, GridPosition(0, 1))
     
     # 5. 功耗分析节点
-    power_node = Node(name="功耗分析", description="芯片功耗计算", node_type="calculation")
+    power_node = Node(name="功耗分析", description="芯片功耗计算")
     
     # CPU功耗 - 依赖频率、电压、核心数
     cpu_power_param = Parameter("CPU功耗", 65, "W", description="CPU总功耗", confidence=0.75)
@@ -555,7 +586,7 @@ result = cpu_power + cache_power + memory_power + other_power
     layout_manager.place_node(power_node.id, GridPosition(1, 1))
     
     # 6. 性能分析节点
-    performance_node = Node(name="性能分析", description="系统性能指标", node_type="calculation")
+    performance_node = Node(name="性能分析", description="系统性能指标")
     
     # 单核性能 - 依赖频率和缓存
     single_core_param = Parameter("单核性能", 2500, "分", description="单核心性能评分", confidence=0.8)
@@ -599,7 +630,7 @@ result = single_score * core_count * scaling_efficiency
     layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
     # 7. 热设计功耗节点
-    thermal_node = Node(name="热设计", description="散热和温度管理", node_type="calculation")
+    thermal_node = Node(name="热设计", description="散热和温度管理")
     
     # 热阻 - 依赖工艺和功耗
     thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="芯片热阻", confidence=0.7)
@@ -638,7 +669,7 @@ result = ambient_temp + total_power * thermal_resistance
     layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
     
     # 8. 成本分析节点
-    cost_node = Node(name="成本分析", description="芯片成本估算", node_type="calculation")
+    cost_node = Node(name="成本分析", description="芯片成本估算")
     
     # 芯片面积 - 依赖工艺、核心数、缓存
     die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片裸片面积", confidence=0.6)
@@ -682,7 +713,7 @@ result = area_cost + 5  # 固定成本
     layout_manager.place_node(cost_node.id, GridPosition(1, 2))
     
     # 9. 能效分析节点
-    efficiency_node = Node(name="能效分析", description="性能功耗比分析", node_type="calculation")
+    efficiency_node = Node(name="能效分析", description="性能功耗比分析")
     
     # 性能功耗比 - 依赖多核性能和总功耗
     perf_watt_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.8)
@@ -764,7 +795,7 @@ def update_canvas(node_data=None):
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
                             html.Span(style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
-                            "点击左上角 ",
+                            "点击右上角 ",
                             html.Strong("➕", className="text-primary"),
                             " 按钮添加新节点"
                         ], className="mb-3 p-3 border rounded bg-light"),
@@ -906,7 +937,7 @@ def update_canvas(node_data=None):
                                         dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": param_idx}, disabled=param_idx==len(node.parameters)-1),
                                     ],
                                     toggle_class_name="param-menu-btn",
-                                    label="⋮",
+                                    label="",
                                     size="sm",
                                     direction="left"
                                 ),
@@ -917,35 +948,73 @@ def update_canvas(node_data=None):
             
             param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "4px"}) if param_rows else None
             
-            # 获取节点在网格中的位置信息
-            position = layout_manager.get_node_position(node_id)
-            position_info = f"({position.row},{position.col})" if position else ""
-            
             node_div = html.Div(
                 [
                     html.Div([
                         html.Div([
-                            html.Span(f"节点: {node_name}", className="node-name"),
-                            html.Small(f" {position_info}", className="text-muted", style={"fontSize": "0.6em"})
+                            html.Span(f"节点: {node_name}", className="node-name")
                         ]),
-                        dbc.DropdownMenu(
-                            children=[
-                                dbc.DropdownMenuItem("编辑节点", id={"type": "edit-node", "node": node_id}, className="text-warning"),
-                                dbc.DropdownMenuItem(divider=True),
-                                dbc.DropdownMenuItem("上移", id={"type": "move-node-up", "node": node_id}, className="text-primary"),
-                                dbc.DropdownMenuItem("下移", id={"type": "move-node-down", "node": node_id}, className="text-primary"),
-                                dbc.DropdownMenuItem(divider=True),
-                                dbc.DropdownMenuItem("左移", id={"type": "move-node-left", "node": node_id}, className="text-info"),
-                                dbc.DropdownMenuItem("右移", id={"type": "move-node-right", "node": node_id}, className="text-info"),
-                                dbc.DropdownMenuItem(divider=True),
-                                dbc.DropdownMenuItem("添加参数", id={"type": "add-param", "node": node_id}, className="text-success"),
-                                dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
-                            ],
-                            toggle_class_name="node-menu-btn",
-                            label="⋮",
-                            size="sm",
-                            direction="left"
-                        )
+                        html.Div([
+                            # 添加参数按钮（标题栏）
+                            html.Button(
+                                html.Span(
+                                    "➕",
+                                    style={
+                                        "fontSize": "14px",
+                                        "fontWeight": "normal",
+                                        "lineHeight": "1"
+                                    }
+                                ),
+                                id={"type": "add-param-header", "node": node_id},
+                                className="btn add-param-btn",
+                                style={
+                                    "padding": "4px",
+                                    "borderRadius": "50%",
+                                    "border": "none",
+                                    "backgroundColor": "transparent",
+                                    "minWidth": "24px",
+                                    "height": "24px",
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "transition": "all 0.3s ease",
+                                    "color": "#6c757d",
+                                    "marginRight": "6px"
+                                },
+                                title="添加参数"
+                            ),
+                            dbc.DropdownMenu(
+                                children=[
+                                    dbc.DropdownMenuItem("编辑节点", id={"type": "edit-node", "node": node_id}, className="text-warning"),
+                                    dbc.DropdownMenuItem(divider=True),
+                                    dbc.DropdownMenuItem("上移", id={"type": "move-node-up", "node": node_id}, className="text-primary"),
+                                    dbc.DropdownMenuItem("下移", id={"type": "move-node-down", "node": node_id}, className="text-primary"),
+                                    dbc.DropdownMenuItem(divider=True),
+                                    dbc.DropdownMenuItem("左移", id={"type": "move-node-left", "node": node_id}, className="text-info"),
+                                    dbc.DropdownMenuItem("右移", id={"type": "move-node-right", "node": node_id}, className="text-info"),
+                                    dbc.DropdownMenuItem(divider=True),
+                                    dbc.DropdownMenuItem("添加参数", id={"type": "add-param", "node": node_id}, className="text-success"),
+                                    dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
+                                ],
+                                toggle_class_name="node-menu-btn",
+                                toggle_style={
+                                    "border": "none",
+                                    "background": "transparent",
+                                    "padding": "4px",
+                                    "fontSize": "12px",
+                                    "color": "#6c757d",
+                                    "height": "24px",
+                                    "minWidth": "24px",
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "borderRadius": "3px"
+                                },
+                                label="",
+                                size="sm",
+                                direction="left"
+                            )
+                        ], style={"display": "flex", "alignItems": "center"})
                     ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
                     param_table,
                     html.Div(id=f"node-content-{node_id}", className="node-content")
@@ -1019,18 +1088,7 @@ app.layout = dbc.Container([
                             html.Span("计算图", className="fw-bold")
                         ], className="mb-0"),
                         html.Div([
-                            # 列管理下拉菜单
-                            dbc.DropdownMenu([
-                                dbc.DropdownMenuItem("➕ 添加列", id="add-column-btn", className="text-success"),
-                                dbc.DropdownMenuItem("➖ 删除列", id="remove-column-btn", className="text-danger"),
-                                dbc.DropdownMenuItem(divider=True),
-                                dbc.DropdownMenuItem(id="column-status", disabled=True),
-                            ], 
-                            label="📊",
-                            color="outline-secondary",
-                            size="sm",
-                            className="me-2"
-                            ),
+                            # 添加节点按钮（移到前面）
                             html.Button(
                                 html.Span(
                                     "➕",  # 使用加号emoji图标
@@ -1053,9 +1111,19 @@ app.layout = dbc.Container([
                                     "alignItems": "center",
                                     "justifyContent": "center",
                                     "transition": "all 0.3s ease",
-                                    "color": "#6c757d"
+                                    "color": "#6c757d",
+                                    "marginRight": "8px"
                                 },
                                 title="添加新节点"
+                            ),
+                            # 列管理下拉菜单（移到后面）
+                            dbc.DropdownMenu([
+                                dbc.DropdownMenuItem("➕ 添加列", id="add-column-btn", className="text-success"),
+                                dbc.DropdownMenuItem("➖ 删除列", id="remove-column-btn", className="text-danger"),
+                            ], 
+                            label="",
+                            color="outline-secondary",
+                            size="sm"
                             )
                         ], style={"display": "flex", "alignItems": "center"})
                     ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "width": "100%"})
@@ -1221,12 +1289,12 @@ app.layout = dbc.Container([
                                 dbc.Col([
                                     html.Div([
                                         dbc.InputGroup([
-                                            dbc.InputGroupText("系列名称:", style={"fontSize": "0.9rem", "minWidth": "85px"}),
+                                            dbc.InputGroupText("系列名称:", style={"fontSize": "0.8rem", "minWidth": "75px"}),
                                             dbc.Input(
                                                 id="series-name-input",
                                                 placeholder="自定义系列名称",
                                                 size="sm",
-                                                style={"fontSize": "0.9rem"}
+                                                style={"fontSize": "0.8rem"}
                                             )
                                         ], size="sm"),
                                         dbc.Tooltip(
@@ -1245,7 +1313,7 @@ app.layout = dbc.Container([
                                             value=[],
                                             id="cumulative-plot-checkbox",
                                             inline=True,
-                                            style={"fontSize": "0.9rem"}
+                                            style={"fontSize": "0.8rem"}
                                         ),
                                         dbc.Tooltip(
                                             "每次生成累积在图表中",
@@ -1288,8 +1356,8 @@ app.layout = dbc.Container([
                             ])
                         ], className="p-2 dropdown-container")
                     ], className="glass-card dropdown-safe-card")
-                ], className="p-1", style={"minHeight": "450px"})
-            ], className="glass-card"),
+                ], className="p-1 sensitivity-analysis-card", style={"minHeight": "450px"})
+            ], className="glass-card sensitivity-analysis-container"),
         ], width=4),
     ]),
     
@@ -1455,20 +1523,7 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Label("节点名称:"),
                     dbc.Input(id="node-edit-name", placeholder="节点名称")
-                ], width=8),
-                dbc.Col([
-                    dbc.Label("节点类型:"),
-                    dbc.Select(
-                        id="node-edit-type",
-                        options=[
-                            {"label": "默认", "value": "default"},
-                            {"label": "输入", "value": "input"},
-                            {"label": "计算", "value": "calculation"},
-                            {"label": "输出", "value": "output"}
-                        ],
-                        value="default"
-                    )
-                ], width=4),
+                ], width=12),
             ], className="mb-3"),
             
             dbc.Row([
@@ -1497,20 +1552,7 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Label("节点名称:"),
                     dbc.Input(id="node-add-name", placeholder="输入节点名称")
-                ], width=8),
-                dbc.Col([
-                    dbc.Label("节点类型:"),
-                    dbc.Select(
-                        id="node-add-type",
-                        options=[
-                            {"label": "默认", "value": "default"},
-                            {"label": "输入", "value": "input"},
-                            {"label": "计算", "value": "calculation"},
-                            {"label": "输出", "value": "output"}
-                        ],
-                        value="default"
-                    )
-                ], width=4),
+                ], width=12),
             ], className="mb-3"),
             
             dbc.Row([
@@ -1590,32 +1632,93 @@ app.index_string = '''
                 border-radius: 3px !important;
             }
             
-            /* 箭头样式保持 */
+            /* 节点标题栏加号按钮样式 */
+            .add-param-btn:hover {
+                background: rgba(0, 123, 255, 0.1) !important;
+                color: #007bff !important;
+                transform: scale(1.05);
+            }
+            
+            /* 节点菜单按钮悬停样式优化 */
+            .node-menu-btn:hover {
+                background: rgba(108, 117, 125, 0.1) !important;
+                color: #495057 !important;
+            }
+            
+            /* SVG箭头样式 - 美化版 */
             #arrows-overlay {
                 pointer-events: none;
                 z-index: 10;
             }
             
-            .dependency-arrow {
-                transition: all 0.2s ease;
-                cursor: pointer;
-                pointer-events: auto;
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+            #arrows-overlay svg {
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             }
             
-            .dependency-arrow:hover {
-                filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+            /* 流动虚线动画 - 修正方向 */
+            @keyframes flow-dash {
+                0% {
+                    stroke-dashoffset: 20;
+                }
+                100% {
+                    stroke-dashoffset: 0;
+                }
             }
             
-            .dependency-arrow-head {
-                transition: all 0.2s ease;
-                cursor: pointer;
-                pointer-events: auto;
-                filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+            /* 脉冲动画 */
+            @keyframes pulse-glow {
+                0% {
+                    opacity: 0.8;
+                }
+                100% {
+                    opacity: 1;
+                }
             }
             
-            .dependency-arrow-head:hover {
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+            /* 箭头出现动画 */
+            @keyframes arrow-appear {
+                0% {
+                    opacity: 0;
+                    stroke-dasharray: 1000;
+                    stroke-dashoffset: 1000;
+                }
+                60% {
+                    opacity: 0.8;
+                }
+                100% {
+                    opacity: 1;
+                    stroke-dasharray: none;
+                    stroke-dashoffset: 0;
+                }
+            }
+            
+            /* 美化pin点的悬停效果 */
+            .param-pin {
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            .param-pin:hover {
+                transform: scale(1.2);
+                background-color: #007bff !important;
+            }
+            
+            .param-pin.active {
+                animation: pin-pulse 1.5s ease-in-out infinite;
+                background-color: #e74c3c !important;
+            }
+            
+            @keyframes pin-pulse {
+                0%, 100% {
+                    transform: scale(1);
+                }
+                50% {
+                    transform: scale(1.15);
+                }
+            }
+            
+            /* 深色模式下的箭头效果 */
+            [data-theme="dark"] #arrows-overlay svg {
+                opacity: 0.9;
             }
         </style>
     </head>
@@ -1640,13 +1743,14 @@ app.index_string = '''
     Input({"type": "move-node-left", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-right", "node": ALL}, "n_clicks"),
     Input({"type": "add-param", "node": ALL}, "n_clicks"),
+    Input({"type": "add-param-header", "node": ALL}, "n_clicks"),
     Input({"type": "delete-node", "node": ALL}, "n_clicks"),
     State("node-data", "data"),
     prevent_initial_call=True
 )
 def handle_node_operations(move_up_clicks, move_down_clicks, 
                           move_left_clicks, move_right_clicks, 
-                          add_param_clicks, delete_node_clicks,
+                          add_param_clicks, add_param_header_clicks, delete_node_clicks,
                           node_data):
     
     if isinstance(ctx.triggered_id, dict):
@@ -1711,6 +1815,15 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return result_message, node_data, update_canvas()
         
         elif operation_type == "add-param":
+            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
+            
+            # 添加参数到节点
+            graph.add_parameter_to_node(node_id, param)
+            
+            return f"参数已添加到节点 {node_name}", node_data, update_canvas()
+        
+        elif operation_type == "add-param-header":
+            # 标题栏加号按钮：添加参数功能，与下拉菜单中的"添加参数"功能相同
             param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
             
             # 添加参数到节点
@@ -2096,8 +2209,14 @@ def open_param_edit_modal(edit_clicks, is_open):
         # 获取所有可用的依赖参数
         available_params = get_all_available_parameters(node_id, param.name)
         
-        # 获取当前参数的依赖列表
-        current_dependencies = [f"{dep_param.name}" for dep_param in param.dependencies]
+        # 获取当前参数的依赖列表 - 需要构建完整的display_name格式
+        current_dependencies = []
+        for dep_param in param.dependencies:
+            # 找到依赖参数所在的节点名称
+            for check_node_id, check_node in graph.nodes.items():
+                if dep_param in check_node.parameters:
+                    current_dependencies.append(f"{check_node.name}.{dep_param.name}")
+                    break
         
         # 创建依赖复选框
         dependency_checkboxes = create_dependency_checkboxes(available_params, current_dependencies)
@@ -2588,7 +2707,7 @@ app.clientside_callback(
                     }, 200);
                 };
                 
-                // 绘制箭头的函数
+                // 绘制箭头的函数 - 使用SVG路径
                 function drawArrows(connections, activePinId) {
                     var containerRect = window.arrowContainer.getBoundingClientRect();
                     
@@ -2613,47 +2732,158 @@ app.clientside_callback(
                             var dx = x2 - x1;
                             var dy = y2 - y1;
                             var length = Math.sqrt(dx * dx + dy * dy);
-                            var angle = Math.atan2(dy, dx) * 180 / Math.PI;
                             
                             if (length > 5) {
-                                // 确定箭头颜色（当前pin相关的用特殊颜色）
+                                // 确定箭头颜色和样式
                                 var isActiveConnection = (connection.source_pin_id === activePinId || connection.target_pin_id === activePinId);
                                 var arrowColor = isActiveConnection ? '#e74c3c' : '#007bff';
                                 var arrowOpacity = isActiveConnection ? '1' : '0.6';
+                                var strokeWidth = isActiveConnection ? '3' : '2';
                                 
-                                // 创建连接线
-                                var line = document.createElement('div');
-                                line.style.position = 'absolute';
-                                line.style.left = x1 + 'px';
-                                line.style.top = (y1 - 1) + 'px';
-                                line.style.width = length + 'px';
-                                line.style.height = isActiveConnection ? '3px' : '2px';
-                                line.style.backgroundColor = arrowColor;
-                                line.style.opacity = arrowOpacity;
-                                line.style.transformOrigin = '0 50%';
-                                line.style.transform = 'rotate(' + angle + 'deg)';
-                                line.style.zIndex = isActiveConnection ? '1002' : '1000';
-                                line.className = 'dependency-arrow';
-                                line.title = connection.source_node_name + '.' + connection.source_param_name + 
-                                            ' → ' + connection.target_node_name + '.' + connection.target_param_name;
+                                // 创建SVG元素
+                                var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                                svg.style.position = 'absolute';
+                                svg.style.top = '0';
+                                svg.style.left = '0';
+                                svg.style.width = '100%';
+                                svg.style.height = '100%';
+                                svg.style.pointerEvents = 'none';
+                                svg.style.zIndex = isActiveConnection ? '1002' : '1000';
+                                svg.style.overflow = 'visible';
                                 
-                                window.arrowContainer.appendChild(line);
+                                // 创建定义区域（包含渐变、滤镜等）
+                                var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
                                 
-                                // 创建箭头头部
-                                var arrowHead = document.createElement('div');
-                                arrowHead.style.position = 'absolute';
-                                arrowHead.style.left = (x2 - 6) + 'px';
-                                arrowHead.style.top = (y2 - 3) + 'px';
-                                arrowHead.style.width = '0';
-                                arrowHead.style.height = '0';
-                                arrowHead.style.borderLeft = '6px solid ' + arrowColor;
-                                arrowHead.style.borderTop = '3px solid transparent';
-                                arrowHead.style.borderBottom = '3px solid transparent';
-                                arrowHead.style.opacity = arrowOpacity;
-                                arrowHead.style.zIndex = isActiveConnection ? '1003' : '1001';
-                                arrowHead.className = 'dependency-arrow-head';
+                                // 创建线性渐变
+                                var gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+                                var gradientId = 'gradient-' + i + '-' + (isActiveConnection ? 'active' : 'normal');
+                                gradient.setAttribute('id', gradientId);
+                                gradient.setAttribute('x1', '0%');
+                                gradient.setAttribute('y1', '0%');
+                                gradient.setAttribute('x2', '100%');
+                                gradient.setAttribute('y2', '0%');
                                 
-                                window.arrowContainer.appendChild(arrowHead);
+                                // 根据连接状态设置渐变色
+                                var startColor, endColor;
+                                if (isActiveConnection) {
+                                    startColor = 'rgba(231, 76, 60, 0.8)';   // 活跃连接：半透明红色
+                                    endColor = 'rgba(192, 57, 43, 0.9)';     // 到深红色
+                                } else {
+                                    startColor = 'rgba(52, 152, 219, 0.6)';  // 普通连接：半透明蓝色
+                                    endColor = 'rgba(41, 128, 185, 0.7)';    // 到深蓝色
+                                }
+                                
+                                var stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+                                stop1.setAttribute('offset', '0%');
+                                stop1.setAttribute('stop-color', startColor);
+                                
+                                var stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+                                stop2.setAttribute('offset', '70%');
+                                stop2.setAttribute('stop-color', endColor);
+                                
+                                var stop3 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+                                stop3.setAttribute('offset', '100%');
+                                stop3.setAttribute('stop-color', startColor);
+                                
+                                gradient.appendChild(stop1);
+                                gradient.appendChild(stop2);
+                                gradient.appendChild(stop3);
+                                defs.appendChild(gradient);
+                                
+                                // 创建箭头标记
+                                var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                                var arrowId = 'arrow-' + i + '-' + (isActiveConnection ? 'active' : 'normal');
+                                
+                                marker.setAttribute('id', arrowId);
+                                marker.setAttribute('viewBox', '0 0 12 12');
+                                marker.setAttribute('refX', '11');
+                                marker.setAttribute('refY', '6');
+                                marker.setAttribute('markerWidth', '8');
+                                marker.setAttribute('markerHeight', '8');
+                                marker.setAttribute('orient', 'auto');
+                                marker.setAttribute('markerUnits', 'strokeWidth');
+                                
+                                // 创建箭头路径（改为更优雅的形状）
+                                var arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                                arrowPath.setAttribute('d', 'M2,2 L10,6 L2,10 L4,6 Z');  // 更优雅的箭头形状
+                                arrowPath.setAttribute('fill', 'url(#' + gradientId + ')');
+                                
+                                marker.appendChild(arrowPath);
+                                defs.appendChild(marker);
+                                svg.appendChild(defs);
+                                
+                                // 计算贝塞尔曲线控制点（可选：使用曲线让箭头更美观）
+                                var useCurve = Math.abs(dx) > 100; // 距离较远时使用曲线
+                                var pathData;
+                                
+                                if (useCurve) {
+                                    // 使用三次贝塞尔曲线
+                                    var cp1x = x1 + Math.abs(dx) * 0.3;
+                                    var cp1y = y1;
+                                    var cp2x = x2 - Math.abs(dx) * 0.3;
+                                    var cp2y = y2;
+                                    pathData = 'M' + x1 + ',' + y1 + ' C' + cp1x + ',' + cp1y + ' ' + cp2x + ',' + cp2y + ' ' + x2 + ',' + y2;
+                                } else {
+                                    // 使用直线
+                                    pathData = 'M' + x1 + ',' + y1 + ' L' + x2 + ',' + y2;
+                                }
+                                
+                                // 创建主路径
+                                var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                                path.setAttribute('d', pathData);
+                                path.setAttribute('stroke', 'url(#' + gradientId + ')');
+                                path.setAttribute('stroke-width', strokeWidth);
+                                path.setAttribute('fill', 'none');
+                                path.setAttribute('stroke-linecap', 'round');
+                                path.setAttribute('stroke-linejoin', 'round');
+                                path.setAttribute('marker-end', 'url(#' + arrowId + ')');
+                                path.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+                                
+                                // 添加交互效果
+                                path.style.cursor = 'pointer';
+                                path.style.pointerEvents = 'stroke';
+                                
+                                // 添加流动动画（可选）
+                                if (isActiveConnection) {
+                                    var animationLength = length;
+                                    path.style.strokeDasharray = '5 5';
+                                    path.style.strokeDashoffset = '0';
+                                    path.style.animation = 'flow-dash 2s linear infinite';
+                                }
+                                
+                                // 增强的悬停效果
+                                path.addEventListener('mouseenter', function() {
+                                    this.setAttribute('stroke-width', parseFloat(strokeWidth) + 2);
+                                    this.style.opacity = '1';
+                                    
+                                    // 添加脉冲动画
+                                    this.style.animation = 'pulse-glow 1s ease-in-out infinite alternate';
+                                });
+                                
+                                path.addEventListener('mouseleave', function() {
+                                    this.setAttribute('stroke-width', strokeWidth);
+                                    this.style.opacity = '';
+                                    
+                                    // 恢复原始动画
+                                    if (isActiveConnection) {
+                                        this.style.animation = 'flow-dash 2s linear infinite';
+                                    } else {
+                                        this.style.animation = 'none';
+                                    }
+                                });
+                                
+                                // 设置工具提示
+                                var title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                                title.textContent = connection.source_node_name + '.' + connection.source_param_name + 
+                                                  ' → ' + connection.target_node_name + '.' + connection.target_param_name;
+                                path.appendChild(title);
+                                
+                                svg.appendChild(path);
+                                
+                                // 添加箭头出现动画
+                                svg.style.animation = 'arrow-appear 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+                                
+                                window.arrowContainer.appendChild(svg);
                             }
                         }
                     }
@@ -3788,7 +4018,6 @@ app.clientside_callback(
     Output("node-edit-modal", "is_open"),
     Output("node-edit-title", "children"),
     Output("node-edit-name", "value"),
-    Output("node-edit-type", "value"),
     Output("node-edit-description", "value"),
     Output("node-edit-data", "data"),
     Input({"type": "edit-node", "node": ALL}, "n_clicks"),
@@ -3820,7 +4049,6 @@ def open_node_edit_modal(edit_clicks, is_open):
             True,  # 打开模态窗口
             f"编辑节点: {node_name}",
             node.name,
-            getattr(node, 'node_type', 'default'),
             node.description,
             {"node_id": node_id}
         )
@@ -3845,12 +4073,11 @@ def close_node_edit_modal(cancel_clicks):
     Output("output-result", "children", allow_duplicate=True),
     Input("node-edit-save", "n_clicks"),
     State("node-edit-name", "value"),
-    State("node-edit-type", "value"),
     State("node-edit-description", "value"),
     State("node-edit-data", "data"),
     prevent_initial_call=True
 )
-def save_node_changes(save_clicks, node_name, node_type, node_description, edit_data):
+def save_node_changes(save_clicks, node_name, node_description, edit_data):
     if not save_clicks:
         raise dash.exceptions.PreventUpdate
     
@@ -3874,7 +4101,6 @@ def save_node_changes(save_clicks, node_name, node_type, node_description, edit_
         
         # 更新节点信息
         node.name = node_name.strip()
-        node.node_type = node_type
         node.description = node_description or ""
         
         # 更新ID映射器中的节点名称
@@ -3893,7 +4119,6 @@ def save_node_changes(save_clicks, node_name, node_type, node_description, edit_
 @callback(
     Output("node-add-modal", "is_open"),
     Output("node-add-name", "value"),
-    Output("node-add-type", "value"),
     Output("node-add-description", "value"),
     Input("add-node-from-graph-button", "n_clicks"),
     Input("node-add-cancel", "n_clicks"),
@@ -3906,10 +4131,10 @@ def toggle_node_add_modal(add_clicks, cancel_clicks, is_open):
     
     if ctx.triggered_id == "add-node-from-graph-button":
         # 打开模态窗口并清空输入
-        return True, "", "default", ""
+        return True, "", ""
     elif ctx.triggered_id == "node-add-cancel":
         # 关闭模态窗口
-        return False, "", "default", ""
+        return False, "", ""
     
     raise dash.exceptions.PreventUpdate
 
@@ -3920,11 +4145,10 @@ def toggle_node_add_modal(add_clicks, cancel_clicks, is_open):
     Output("output-result", "children", allow_duplicate=True),
     Input("node-add-save", "n_clicks"),
     State("node-add-name", "value"),
-    State("node-add-type", "value"),
     State("node-add-description", "value"),
     prevent_initial_call=True
 )
-def create_new_node(save_clicks, node_name, node_type, node_description):
+def create_new_node(save_clicks, node_name, node_description):
     if not save_clicks:
         raise dash.exceptions.PreventUpdate
     
@@ -3944,8 +4168,7 @@ def create_new_node(save_clicks, node_name, node_type, node_description):
         from models import Node
         node = Node(
             name=node_name,
-            description=node_description or f"节点 {node_name}",
-            node_type=node_type
+            description=node_description or f"节点 {node_name}"
         )
         
         # 添加到计算图
@@ -3966,11 +4189,13 @@ def create_new_node(save_clicks, node_name, node_type, node_description):
 @callback(
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
+    Output("remove-column-btn", "disabled"),
     Input("add-column-btn", "n_clicks"),
     Input("remove-column-btn", "n_clicks"),
+    State("canvas-container", "children"),  # 添加状态以获取当前列信息
     prevent_initial_call=True
 )
-def handle_column_management(add_clicks, remove_clicks):
+def handle_column_management(add_clicks, remove_clicks, canvas_children):
     """处理手动添加/删除列操作"""
     global column_manager
     
@@ -3980,43 +4205,39 @@ def handle_column_management(add_clicks, remove_clicks):
     
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
     
+    # 检查删除按钮是否应该被禁用
+    can_remove, _ = column_manager.can_remove_column()
+    should_disable_remove = not can_remove
+    
     if button_id == "add-column-btn" and add_clicks:
         success, message = column_manager.add_column()
         status = "✅" if success else "❌"
-        return update_canvas(), f"{status} {message}"
+        # 重新检查删除按钮状态
+        can_remove_after, _ = column_manager.can_remove_column()
+        return update_canvas(), f"{status} {message}", not can_remove_after
     
     elif button_id == "remove-column-btn" and remove_clicks:
         success, message = column_manager.remove_column()
         status = "✅" if success else "❌"
-        return update_canvas(), f"{status} {message}"
+        # 重新检查删除按钮状态
+        can_remove_after, _ = column_manager.can_remove_column()
+        return update_canvas(), f"{status} {message}", not can_remove_after
     
     raise dash.exceptions.PreventUpdate
 
-# 更新列状态显示
+# 初始化删除按钮状态
 @callback(
-    Output("column-status", "children"),
+    Output("remove-column-btn", "disabled", allow_duplicate=True),
     Input("canvas-container", "children"),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
-def update_column_status(canvas_children):
-    """更新列状态显示"""
+def update_remove_button_status(canvas_children):
+    """更新删除列按钮的禁用状态"""
     global column_manager
     
-    current_cols = layout_manager.cols
-    min_cols = column_manager.minimum_cols
-    
-    # 检查删除条件
-    can_remove, remove_reason = column_manager.can_remove_column()
-    can_add, add_reason = column_manager.can_add_column()
-    
-    status_text = f"当前: {current_cols}列 (最少{min_cols}列)"
-    
-    if not can_remove:
-        status_text += f" | 删除: {remove_reason}"
-    if not can_add:
-        status_text += f" | 添加: {add_reason}"
-    
-    return status_text
+    # 检查是否可以删除列
+    can_remove, _ = column_manager.can_remove_column()
+    return not can_remove
 
 if __name__ == "__main__":
     import argparse

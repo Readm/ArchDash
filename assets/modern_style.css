@@ -1232,3 +1232,38 @@ body > div[class*="menu"] {
 .node-container .text-muted {
   font-size: 0.6rem !important;
 }
+
+/* 相关性分析卡片字体缩小 */
+.sensitivity-analysis-container label,
+.sensitivity-analysis-container .form-label,
+.sensitivity-analysis-container .dropdown,
+.sensitivity-analysis-container .form-control,
+.sensitivity-analysis-container .btn,
+.sensitivity-analysis-container .input-group-text,
+.sensitivity-analysis-container .form-check-label,
+.sensitivity-analysis-container p,
+.sensitivity-analysis-container span,
+.sensitivity-analysis-container div {
+  font-size: 0.8rem !important;
+}
+
+/* 相关性分析卡片标题保持正常大小 */
+.sensitivity-analysis-container .card-header h5 {
+  font-size: 1rem !important;
+}
+
+/* 相关性分析按钮组字体 */
+.sensitivity-analysis-container .btn-group .btn {
+  font-size: 0.75rem !important;
+}
+
+/* 相关性分析下拉菜单字体 */
+.sensitivity-analysis-container .dropdown-menu,
+.sensitivity-analysis-container .dropdown-menu .dropdown-item {
+  font-size: 0.8rem !important;
+}
+
+/* Tooltip字体保持正常大小 */
+.sensitivity-analysis-container .tooltip-inner {
+  font-size: 0.7rem !important;
+}
