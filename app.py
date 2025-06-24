@@ -48,14 +48,101 @@ class IDMapper:
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
+class ColumnManager:
+    """集中管理布局列数的类"""
+    def __init__(self, layout_manager):
+        self.layout_manager = layout_manager
+        self.minimum_cols = 3
+    
+    def ensure_minimum_columns(self):
+        """确保布局至少有最小列数，如果需要会自动扩展"""
+        while self.layout_manager.cols < self.minimum_cols:
+            if not self.layout_manager.add_column():
+                break
+        return self.layout_manager.cols >= self.minimum_cols
+    
+    def can_remove_column(self):
+        """检查是否可以删除最后一列（空列且不低于最小列数）"""
+        if self.layout_manager.cols <= self.minimum_cols:
+            return False, "已达到最小列数限制"
+        
+        # 检查最后一列是否为空
+        last_col = self.layout_manager.cols - 1
+        for row in range(self.layout_manager.rows):
+            if self.layout_manager.grid[row][last_col] is not None:
+                return False, "最后一列不为空，无法删除"
+        
+        return True, "可以删除"
+    
+    def can_add_column(self):
+        """检查是否可以添加列"""
+        max_cols = 6  # 设置最大列数限制
+        if self.layout_manager.cols >= max_cols:
+            return False, f"已达到最大列数限制({max_cols})"
+        return True, "可以添加"
+    
+    def add_column(self):
+        """手动添加一列"""
+        can_add, reason = self.can_add_column()
+        if not can_add:
+            return False, reason
+        
+        if self.layout_manager.add_column():
+            return True, f"已添加新列，当前共{self.layout_manager.cols}列"
+        else:
+            return False, "添加列失败"
+    
+    def remove_column(self):
+        """手动删除最后一列"""
+        can_remove, reason = self.can_remove_column()
+        if not can_remove:
+            return False, reason
+        
+        if self.layout_manager.remove_column():
+            return True, f"已删除空列，当前共{self.layout_manager.cols}列"
+        else:
+            return False, "删除列失败"
+    
+    def auto_remove_empty_last_columns(self):
+        """自动删除空的最后一列，但保持最小列数"""
+        removed_count = 0
+        
+        while self.layout_manager.cols > self.minimum_cols:
+            can_remove, _ = self.can_remove_column()
+            if can_remove:
+                if self.layout_manager.remove_column():
+                    removed_count += 1
+                else:
+                    break
+            else:
+                break
+        
+        if removed_count > 0:
+            return f"自动删除了{removed_count}个空列（保持最少{self.minimum_cols}列）"
+        return None
+    
+    def auto_expand_for_node_movement(self, node_id, direction):
+        """节点移动时自动扩展列数（仅在右移到边界时）"""
+        if direction == "right":
+            position = self.layout_manager.get_node_position(node_id)
+            if position and position.col >= self.layout_manager.cols - 1:
+                # 节点在最右边，尝试添加新列
+                success, message = self.add_column()
+                if success:
+                    return f"自动添加新列以容纳节点移动"
+        return None
+
 # 全局数据模型
 graph = CalculationGraph()
 id_mapper = IDMapper()
-layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 新增：布局管理器
+layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 设置为3列
 recently_updated_params = set()  # 新增：存储最近更新的参数ID，用于高亮显示
 
 # 将布局管理器与计算图关联
 graph.set_layout_manager(layout_manager)
+
+# 初始化全局列管理器
+column_manager = ColumnManager(layout_manager)
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -251,15 +338,16 @@ def create_empty_plot():
 
 # 自动删除空的最后一列的辅助函数
 def auto_remove_empty_last_column():
-    """检查并自动删除空的最后一列
+    """检查并自动删除空的最后一列，但至少保留3列
     
     Returns:
         str: 删除结果的描述，如果没有删除则返回None
     """
     removed_count = 0
+    minimum_cols = 3  # 设置最小列数为3
     
-    # 持续检查并删除空的最后一列，直到最后一列不为空或只剩一列
-    while layout_manager.cols > 1:
+    # 持续检查并删除空的最后一列，直到最后一列不为空或只剩最小列数
+    while layout_manager.cols > minimum_cols:
         # 检查最后一列是否为空
         last_col = layout_manager.cols - 1
         is_empty = True
@@ -280,21 +368,34 @@ def auto_remove_empty_last_column():
     
     if removed_count > 0:
         if removed_count == 1:
-            return f"自动删除了1个空列"
+            return f"自动删除了1个空列（保持最少{minimum_cols}列）"
         else:
-            return f"自动删除了{removed_count}个空列"
+            return f"自动删除了{removed_count}个空列（保持最少{minimum_cols}列）"
     
     return None
 
+def ensure_minimum_columns():
+    """确保布局至少有3列，如果需要会自动扩展"""
+    global column_manager
+    return column_manager.ensure_minimum_columns()
+
+def auto_remove_empty_last_column():
+    """检查并自动删除空的最后一列，但至少保留3列"""
+    global column_manager
+    return column_manager.auto_remove_empty_last_columns()
+
 def create_example_soc_graph():
     """创建多核SoC示例计算图"""
-    global graph, layout_manager, id_mapper
+    global graph, layout_manager, id_mapper, column_manager
     
     # 清空现有数据
     graph = CalculationGraph()
-    layout_manager = CanvasLayoutManager(initial_cols=4, initial_rows=12)  # 增加列数以容纳更多节点
+    layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)  # 设置为3列布局
     id_mapper = IDMapper()
     graph.set_layout_manager(layout_manager)
+    
+    # 重新初始化列管理器
+    column_manager = ColumnManager(layout_manager)
     
     from models import Node, Parameter
     
@@ -386,7 +487,7 @@ result = freq_mhz * channels * bus_width * 2 / 8 / 1000  # GB/s
     
     graph.add_node(memory_node)
     id_mapper.register_node(memory_node.id, memory_node.name)
-    layout_manager.place_node(memory_node.id, GridPosition(3, 0))
+    layout_manager.place_node(memory_node.id, GridPosition(0, 1))
     
     # 5. 功耗分析节点
     power_node = Node(name="功耗分析", description="芯片功耗计算", node_type="calculation")
@@ -451,7 +552,7 @@ result = cpu_power + cache_power + memory_power + other_power
     
     graph.add_node(power_node)
     id_mapper.register_node(power_node.id, power_node.name)
-    layout_manager.place_node(power_node.id, GridPosition(0, 1))
+    layout_manager.place_node(power_node.id, GridPosition(1, 1))
     
     # 6. 性能分析节点
     performance_node = Node(name="性能分析", description="系统性能指标", node_type="calculation")
@@ -495,7 +596,7 @@ result = single_score * core_count * scaling_efficiency
     
     graph.add_node(performance_node)
     id_mapper.register_node(performance_node.id, performance_node.name)
-    layout_manager.place_node(performance_node.id, GridPosition(1, 1))
+    layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
     # 7. 热设计功耗节点
     thermal_node = Node(name="热设计", description="散热和温度管理", node_type="calculation")
@@ -534,7 +635,7 @@ result = ambient_temp + total_power * thermal_resistance
     
     graph.add_node(thermal_node)
     id_mapper.register_node(thermal_node.id, thermal_node.name)
-    layout_manager.place_node(thermal_node.id, GridPosition(2, 1))
+    layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
     
     # 8. 成本分析节点
     cost_node = Node(name="成本分析", description="芯片成本估算", node_type="calculation")
@@ -578,7 +679,7 @@ result = area_cost + 5  # 固定成本
     
     graph.add_node(cost_node)
     id_mapper.register_node(cost_node.id, cost_node.name)
-    layout_manager.place_node(cost_node.id, GridPosition(3, 1))
+    layout_manager.place_node(cost_node.id, GridPosition(1, 2))
     
     # 9. 能效分析节点
     efficiency_node = Node(name="能效分析", description="性能功耗比分析", node_type="calculation")
@@ -613,7 +714,7 @@ result = multi_core_score / manufacturing_cost
     
     graph.add_node(efficiency_node)
     id_mapper.register_node(efficiency_node.id, efficiency_node.name)
-    layout_manager.place_node(efficiency_node.id, GridPosition(0, 2))
+    layout_manager.place_node(efficiency_node.id, GridPosition(2, 2))
     
     # 触发所有参数的计算以建立完整的依赖关系
     for node in graph.nodes.values():
@@ -635,32 +736,34 @@ result = multi_core_score / manufacturing_cost
 # 画布更新函数 - 使用新的布局管理器
 def update_canvas(node_data=None):
     """使用布局管理器渲染画布"""
+    # 确保至少有3列的布局
+    ensure_minimum_columns()
+    
     canvas_content = []
     
     # 检查是否有节点，如果没有则显示空状态提示
     print(f"🔍 update_canvas调用: graph.nodes = {graph.nodes}")
     print(f"🔍 graph.nodes是否为空: {not graph.nodes}")
     print(f"🔍 graph.nodes长度: {len(graph.nodes)}")
+    print(f"🔍 当前布局列数: {layout_manager.cols}")
     
     if not graph.nodes:
-        print("✅ 触发空状态显示 - 计算图为空，显示引导提示")
         empty_state_content = html.Div([
             html.Div([
                 html.Div([
                     html.I(className="fas fa-project-diagram", style={"fontSize": "4rem", "color": "#dee2e6", "marginBottom": "1rem"}),
-                    html.H4("计算图为空", className="text-muted mb-3"),
                     html.P([
-                        "开始构建您的计算图：",
+                        "开始构建计算图：",
                     ], className="text-muted mb-4"),
                     html.Div([
                         html.Div([
-                            html.Span("🎯", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span( style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
                             "点击右上角 ",
                             html.Strong("🎯", className="text-warning"),
                             " 按钮载入SoC示例计算图"
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
-                            html.Span("➕", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span(style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
                             "点击左上角 ",
                             html.Strong("➕", className="text-primary"),
                             " 按钮添加新节点"
@@ -777,7 +880,7 @@ def update_canvas(node_data=None):
                                         className="unlink-icon",
                                         style={
                                             "cursor": "pointer",
-                                            "fontSize": "14px",
+                                            "fontSize": "12px",
                                             "opacity": "1",
                                             "marginLeft": "4px",
                                             "padding": "2px",
@@ -812,7 +915,7 @@ def update_canvas(node_data=None):
                         ])
                     )
             
-            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.95em", "marginTop": "4px"}) if param_rows else None
+            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "4px"}) if param_rows else None
             
             # 获取节点在网格中的位置信息
             position = layout_manager.get_node_position(node_id)
@@ -823,7 +926,7 @@ def update_canvas(node_data=None):
                     html.Div([
                         html.Div([
                             html.Span(f"节点: {node_name}", className="node-name"),
-                            html.Small(f" {position_info}", className="text-muted", style={"fontSize": "0.7em"})
+                            html.Small(f" {position_info}", className="text-muted", style={"fontSize": "0.6em"})
                         ]),
                         dbc.DropdownMenu(
                             children=[
@@ -853,8 +956,9 @@ def update_canvas(node_data=None):
             )
             col_content.append(node_div)
         
-        # 计算列宽
-        col_width = max(1, 12 // layout_manager.cols)
+        # 计算列宽 - 优化布局，确保至少3列时有合理的宽度分布
+        total_cols = max(3, layout_manager.cols)  # 至少按3列计算宽度
+        col_width = max(2, 12 // total_cols)  # 每列至少占2个Bootstrap列宽
         canvas_content.append(dbc.Col(col_content, width=col_width))
     
     # 创建箭头连接
@@ -914,32 +1018,46 @@ app.layout = dbc.Container([
                         html.H5([ 
                             html.Span("计算图", className="fw-bold")
                         ], className="mb-0"),
-                        html.Button(
-                            html.Span(
-                                "➕",  # 使用加号emoji图标
-                                style={
-                                    "fontSize": "18px",
-                                    "fontWeight": "normal",
-                                    "lineHeight": "1"
-                                }
+                        html.Div([
+                            # 列管理下拉菜单
+                            dbc.DropdownMenu([
+                                dbc.DropdownMenuItem("➕ 添加列", id="add-column-btn", className="text-success"),
+                                dbc.DropdownMenuItem("➖ 删除列", id="remove-column-btn", className="text-danger"),
+                                dbc.DropdownMenuItem(divider=True),
+                                dbc.DropdownMenuItem(id="column-status", disabled=True),
+                            ], 
+                            label="📊",
+                            color="outline-secondary",
+                            size="sm",
+                            className="me-2"
                             ),
-                            id="add-node-from-graph-button",
-                            className="btn add-node-btn",
-                            style={
-                                "padding": "6px",
-                                "borderRadius": "50%",
-                                "border": "1px solid rgba(108, 117, 125, 0.3)",
-                                "backgroundColor": "transparent",
-                                "minWidth": "32px",
-                                "height": "32px",
-                                "display": "flex",
-                                "alignItems": "center",
-                                "justifyContent": "center",
-                                "transition": "all 0.3s ease",
-                                "color": "#6c757d"
-                            },
-                            title="添加新节点"
-                        )
+                            html.Button(
+                                html.Span(
+                                    "➕",  # 使用加号emoji图标
+                                    style={
+                                        "fontSize": "18px",
+                                        "fontWeight": "normal",
+                                        "lineHeight": "1"
+                                    }
+                                ),
+                                id="add-node-from-graph-button",
+                                className="btn add-node-btn",
+                                style={
+                                    "padding": "6px",
+                                    "borderRadius": "50%",
+                                    "border": "1px solid rgba(108, 117, 125, 0.3)",
+                                    "backgroundColor": "transparent",
+                                    "minWidth": "32px",
+                                    "height": "32px",
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "transition": "all 0.3s ease",
+                                    "color": "#6c757d"
+                                },
+                                title="添加新节点"
+                            )
+                        ], style={"display": "flex", "alignItems": "center"})
                     ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "width": "100%"})
                 ]),
                 dbc.CardBody([
@@ -1184,7 +1302,7 @@ app.layout = dbc.Container([
                 dbc.CardHeader([
                     html.Div([
                         html.H5([ 
-                            html.Span("参数依赖关系", className="fw-bold"),
+                            html.Span("计算过程", className="fw-bold"),
                         ], className="mb-0 d-inline-flex align-items-center"),
                         html.Div([
                             dbc.Button(
@@ -1193,7 +1311,7 @@ app.layout = dbc.Container([
                                 color="outline-primary", 
                                 size="sm", 
                                 className="me-2",
-                                title="刷新依赖关系"
+                                title="刷新"
                             ),
                             dbc.Button(
                                 ["🔽 ", html.Span("展开")], 
@@ -1201,7 +1319,7 @@ app.layout = dbc.Container([
                                 color="outline-secondary", 
                                 size="sm",
                                 className="collapse-btn",
-                                title="展开/折叠依赖关系面板"
+                                title="展开/折叠"
                             ),
                         ], className="d-flex")
                     ], className="d-flex justify-content-between align-items-center w-100")
@@ -1216,33 +1334,15 @@ app.layout = dbc.Container([
                                     style={"height": "350px", "overflowY": "auto"},
                                     children=[html.P("📊 加载依赖关系中...", className="text-muted text-center")]
                                 )
-                            ], label="🔗 依赖关系", tab_id="dependencies-tab"),
+                            ], label="依赖关系", tab_id="dependencies-tab"),
                             dbc.Tab([
                                 html.Div(
                                     id="calculation-flow-display",
                                     style={"height": "350px", "overflowY": "auto"},
                                     children=[html.P("🔄 加载计算流程中...", className="text-muted text-center")]
                                 )
-                            ], label="⚙️ 计算流程", tab_id="flow-tab"),
-                            dbc.Tab([
-                                html.Div([
-                                    html.H6("📊 实时计算分析", className="mb-3"),
-                                    dbc.Row([
-                                        dbc.Col([
-                                            dbc.Label("选择参数进行分析:"),
-                                            dbc.Select(id="analysis-param-selector", placeholder="选择要分析的参数", style={"zIndex": "9999"})
-                                        ], width=8),
-                                        dbc.Col([
-                                            dbc.Button("开始分析", id="start-analysis-btn", color="primary", size="sm")
-                                        ], width=4)
-                                    ], className="mb-3"),
-                                    html.Div(
-                                        id="realtime-analysis-display",
-                                        style={"height": "280px", "overflowY": "auto"},
-                                        children=[html.P("选择参数后点击'开始分析'查看实时计算过程", className="text-muted text-center")]
-                                    )
-                                ], style={"padding": "15px"})
-                            ], label="📈 实时分析", tab_id="analysis-tab")
+                            ], label="计算流程", tab_id="flow-tab"),
+
                         ], id="dependencies-tabs", active_tab="dependencies-tab")
                     ], className="p-2 dropdown-container")
                 ], id="dependencies-collapse", is_open=False)
@@ -1504,7 +1604,6 @@ app.index_string = '''
             }
             
             .dependency-arrow:hover {
-                transform: scaleY(1.5);
                 filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
             }
             
@@ -1516,7 +1615,6 @@ app.index_string = '''
             }
             
             .dependency-arrow-head:hover {
-                transform: scale(1.2);
                 filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
             }
         </style>
@@ -1568,7 +1666,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         if operation_type == "move-node-up":
             success = layout_manager.move_node_up(node_id)
             result_message = f"节点 {node_name} 已上移" if success else f"节点 {node_name} 无法上移"
-            # 节点移动后检查并自动删除空的最后一列
+            # 节点移动后检查并自动删除空的最后一列，但保持至少3列
             if success:
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
@@ -1578,7 +1676,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         elif operation_type == "move-node-down":
             success = layout_manager.move_node_down(node_id)
             result_message = f"节点 {node_name} 已下移" if success else f"节点 {node_name} 无法下移"
-            # 节点移动后检查并自动删除空的最后一列
+            # 节点移动后检查并自动删除空的最后一列，但保持至少3列
             if success:
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
@@ -1588,7 +1686,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         elif operation_type == "move-node-left":
             success = layout_manager.move_node_left(node_id)
             result_message = f"节点 {node_name} 已左移" if success else f"节点 {node_name} 无法左移"
-            # 节点移动后检查并自动删除空的最后一列
+            # 节点移动后检查并自动删除空的最后一列，但保持至少3列
             if success:
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
@@ -1596,10 +1694,17 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return result_message, node_data, update_canvas()
         
         elif operation_type == "move-node-right":
+            # 右移前先检查是否需要自动扩展列
+            global column_manager
+            expand_result = column_manager.auto_expand_for_node_movement(node_id, "right")
+            
             success = layout_manager.move_node_right(node_id)
             result_message = f"节点 {node_name} 已右移" if success else f"节点 {node_name} 无法右移"
-            # 节点移动后检查并自动删除空的最后一列
-            if success:
+            
+            if success and expand_result:
+                result_message += f"，{expand_result}"
+            elif success:
+                # 节点移动后检查并自动删除空的最后一列，但保持至少3列
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
                     result_message += f"，{auto_remove_result}"
@@ -1624,7 +1729,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                 del id_mapper._node_mapping[node_id]
             
             result_message = f"节点 {node_name} 已删除"
-            # 删除节点后检查并自动删除空的最后一列
+            # 删除节点后检查并自动删除空的最后一列，但保持至少3列
             auto_remove_result = auto_remove_empty_last_column()
             if auto_remove_result:
                 result_message += f"，{auto_remove_result}"
@@ -2356,7 +2461,7 @@ def load_calculation_graph(contents, filename):
             return dash.no_update, "❌ 无效的计算图文件格式"
         
         # 清空现有数据
-        global graph, layout_manager, id_mapper
+        global graph, layout_manager, id_mapper, column_manager
         
         # 重新创建布局管理器
         layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
@@ -2368,6 +2473,9 @@ def load_calculation_graph(contents, filename):
         id_mapper = IDMapper()
         for node_id, node in graph.nodes.items():
             id_mapper.register_node(node_id, node.name)
+        
+        # 重新初始化列管理器
+        column_manager = ColumnManager(layout_manager)
         
         # 更新画布显示
         updated_canvas = update_canvas()
@@ -2968,23 +3076,7 @@ def get_all_parameter_dependencies():
         for param_idx, param in enumerate(node.parameters):
 
             
-            # 分析计算复杂度和执行状态
-            calculation_status = "无计算"
-            if param.calculation_func:
-                try:
-                    # 尝试解析计算函数的复杂度
-                    func_lines = param.calculation_func.split('\n')
-                    non_comment_lines = [line.strip() for line in func_lines if line.strip() and not line.strip().startswith('#')]
-                    complexity = len(non_comment_lines)
-                    
-                    if complexity <= 3:
-                        calculation_status = "简单计算"
-                    elif complexity <= 10:
-                        calculation_status = "中等复杂度"
-                    else:
-                        calculation_status = "复杂计算"
-                except:
-                    calculation_status = "计算函数"
+
             
             param_info = {
                 'node_id': node_id,
@@ -2996,7 +3088,6 @@ def get_all_parameter_dependencies():
                 'param_confidence': getattr(param, 'confidence', 1.0),
                 'has_calculation': bool(param.calculation_func),
                 'calculation_func': param.calculation_func,
-                'calculation_status': calculation_status,
                 'dependencies': [],
                 'dependents': [],
                 'calculation_chain': [],  # 完整的计算链条
@@ -3081,10 +3172,7 @@ def format_dependencies_display(dependencies_info):
     params_with_calc = sum(1 for p in dependencies_info if p['has_calculation'])
     calculation_errors = sum(1 for p in dependencies_info if p['calculation_error'])
     
-    # 按计算状态分类统计
-    simple_calcs = sum(1 for p in dependencies_info if p['calculation_status'] == '简单计算')
-    medium_calcs = sum(1 for p in dependencies_info if p['calculation_status'] == '中等复杂度')
-    complex_calcs = sum(1 for p in dependencies_info if p['calculation_status'] == '复杂计算')
+
     
     display_components.append(
         dbc.Alert([
@@ -3097,16 +3185,9 @@ def format_dependencies_display(dependencies_info):
                 ], width=6),
                 dbc.Col([
                     html.P(f"❌ 计算错误: {calculation_errors}", className="mb-1"),
-                    html.P(f"🎯 总体健康度: {((total_params - calculation_errors) / max(total_params, 1) * 100):.1f}%", className="mb-0"),
                 ], width=6),
             ]),
-            html.Hr(),
-            html.H6("🔧 计算复杂度分布", className="mb-2"),
-            html.P([
-                dbc.Badge(f"简单 {simple_calcs}", color="success", className="me-2"),
-                dbc.Badge(f"中等 {medium_calcs}", color="warning", className="me-2"),
-                dbc.Badge(f"复杂 {complex_calcs}", color="danger", className="me-2"),
-            ], className="mb-0")
+
         ], color="info", className="mb-3")
     )
     
@@ -3130,9 +3211,7 @@ def format_dependencies_display(dependencies_info):
                 html.Div([
                     html.Div([
                         html.Strong(f"{param_info['param_name']}", className="me-2"),
-                        dbc.Badge(f"{param_info['calculation_status']}", 
-                                color="success" if param_info['has_calculation'] else "secondary", 
-                                className="me-2"),
+
                         dbc.Badge(f"置信度 {param_info['param_confidence']:.1%}", 
                                 color=confidence_color, className="me-2"),
                     ], className="d-flex align-items-center mb-2"),
@@ -3263,79 +3342,7 @@ def format_dependencies_display(dependencies_info):
     
     return display_components
 
-def simulate_parameter_change_and_show_process(param_id, new_value):
-    """模拟参数变化并展示完整的计算传播过程"""
-    try:
-        # 找到对应的参数对象
-        target_param = None
-        target_node_id = None
-        target_param_idx = None
-        
-        for node_id, node in graph.nodes.items():
-            for param_idx, param in enumerate(node.parameters):
-                if id(param) == param_id:
-                    target_param = param
-                    target_node_id = node_id
-                    target_param_idx = param_idx
-                    break
-            if target_param:
-                break
-        
-        if not target_param:
-            return {"success": False, "message": "参数未找到"}
-        
-        # 记录原始值
-        original_value = target_param.value
-        
-        # 执行变化并收集传播过程
-        propagation_log = []
-        propagation_log.append({
-            "step": 0,
-            "action": "初始变化",
-            "param_name": target_param.name,
-            "old_value": original_value,
-            "new_value": new_value,
-            "node_name": id_mapper.get_node_name(target_node_id)
-        })
-        
-        # 设置新值
-        update_result = graph.set_parameter_value(target_param, new_value)
-        
-        # 记录级联更新过程
-        if update_result and 'cascaded_updates' in update_result:
-            for i, cascade_info in enumerate(update_result['cascaded_updates']):
-                param = cascade_info['param']
-                
-                # 找到参数所在的节点
-                cascade_node_name = "未知节点"
-                for node_id, node in graph.nodes.items():
-                    if param in node.parameters:
-                        cascade_node_name = id_mapper.get_node_name(node_id)
-                        break
-                
-                propagation_log.append({
-                    "step": i + 1,
-                    "action": "级联计算",
-                    "param_name": param.name,
-                    "old_value": cascade_info['old_value'],
-                    "new_value": cascade_info['new_value'],
-                    "node_name": cascade_node_name,
-                    "calculation_func": getattr(param, 'calculation_func', None)
-                })
-            
-        return {
-            "success": True,
-            "propagation_log": propagation_log,
-            "total_affected": len(propagation_log),
-            "original_value": original_value,
-            "final_value": new_value
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "message": f"模拟失败: {str(e)}"
-        }
+
 
 def create_calculation_flow_visualization(dependencies_info):
     """创建计算流程可视化组件"""
@@ -3374,7 +3381,7 @@ def create_calculation_flow_visualization(dependencies_info):
                            style={"fontSize": "0.85em", "background": "#f1f3f4"})
                 ], title="查看计算函数")
             ], start_collapsed=True),
-            html.P(f"计算复杂度: {param_info['calculation_status']}", className="mt-2")
+
         ], className="border p-3 mb-3 rounded bg-warning bg-opacity-10")
         flow_steps.append(calc_step)
         
@@ -3455,32 +3462,12 @@ def initialize_calculation_flow_display(canvas_children):
             ], color="warning")
         ]
 
-# 初始化实时分析参数选择器
-@callback(
-    Output("analysis-param-selector", "options"),
-    Input("canvas-container", "children"),
-    prevent_initial_call=False
-)
-def update_analysis_param_selector(canvas_children):
-    """更新实时分析的参数选择器"""
-    try:
-        options = []
-        for node_id, node in graph.nodes.items():
-            node_name = id_mapper.get_node_name(node_id)
-            for param_idx, param in enumerate(node.parameters):
-                option_value = f"{node_id}|{param_idx}"
-                option_label = f"{node_name}.{param.name} ({param.value} {param.unit})"
-                options.append({"label": option_label, "value": option_value})
-        
-        return options
-    except Exception as e:
-        return []
+
 
 # 手动刷新依赖关系和计算流程
 @callback(
     Output("dependencies-display", "children", allow_duplicate=True),
     Output("calculation-flow-display", "children", allow_duplicate=True),
-    Output("analysis-param-selector", "options", allow_duplicate=True),
     Input("refresh-dependencies-btn", "n_clicks"),
     prevent_initial_call=True
 )
@@ -3498,16 +3485,7 @@ def refresh_all_displays(n_clicks):
         # 刷新计算流程显示
         flow_display = create_calculation_flow_visualization(dependencies_info)
         
-        # 刷新参数选择器
-        options = []
-        for node_id, node in graph.nodes.items():
-            node_name = id_mapper.get_node_name(node_id)
-            for param_idx, param in enumerate(node.parameters):
-                option_value = f"{node_id}|{param_idx}"
-                option_label = f"{node_name}.{param.name} ({param.value} {param.unit})"
-                options.append({"label": option_label, "value": option_value})
-        
-        return deps_display, flow_display, options
+        return deps_display, flow_display
         
     except Exception as e:
         error_alert = [
@@ -3516,13 +3494,12 @@ def refresh_all_displays(n_clicks):
                 html.P(f"错误信息: {str(e)}", className="mb-0")
             ], color="danger")
         ]
-        return error_alert, error_alert, []
+        return error_alert, error_alert
 
 # 当节点/参数发生变化时自动更新所有显示
 @callback(
     Output("dependencies-display", "children", allow_duplicate=True),
     Output("calculation-flow-display", "children", allow_duplicate=True),
-    Output("analysis-param-selector", "options", allow_duplicate=True),
     Input("node-data", "data"),
     prevent_initial_call=True
 )
@@ -3537,16 +3514,7 @@ def auto_update_all_displays_on_change(node_data):
         # 更新计算流程显示
         flow_display = create_calculation_flow_visualization(dependencies_info)
         
-        # 更新参数选择器
-        options = []
-        for node_id, node in graph.nodes.items():
-            node_name = id_mapper.get_node_name(node_id)
-            for param_idx, param in enumerate(node.parameters):
-                option_value = f"{node_id}|{param_idx}"
-                option_label = f"{node_name}.{param.name} ({param.value} {param.unit})"
-                options.append({"label": option_label, "value": option_value})
-        
-        return deps_display, flow_display, options
+        return deps_display, flow_display
         
     except Exception as e:
         error_alert = [
@@ -3555,130 +3523,9 @@ def auto_update_all_displays_on_change(node_data):
                 html.P(f"错误信息: {str(e)}", className="mb-0")
             ], color="warning")
         ]
-        return error_alert, error_alert, []
+        return error_alert, error_alert
 
-# 实时分析功能
-@callback(
-    Output("realtime-analysis-display", "children"),
-    Input("start-analysis-btn", "n_clicks"),
-    State("analysis-param-selector", "value"),
-    prevent_initial_call=True
-)
-def perform_realtime_analysis(n_clicks, selected_param):
-    """执行实时计算分析"""
-    if not n_clicks or not selected_param:
-        raise dash.exceptions.PreventUpdate
-    
-    try:
-        # 解析选择的参数
-        node_id, param_idx = selected_param.split('|')
-        param_idx = int(param_idx)
-        
-        # 获取参数对象
-        target_node = graph.nodes.get(node_id)
-        if not target_node or param_idx >= len(target_node.parameters):
-            return dbc.Alert("参数未找到", color="danger")
-        
-        target_param = target_node.parameters[param_idx]
-        node_name = id_mapper.get_node_name(node_id)
-        
-        # 创建分析结果
-        analysis_components = []
-        
-        # 参数信息卡片
-        analysis_components.append(
-            dbc.Card([
-                dbc.CardHeader([
-                    html.H6(f"🎯 分析目标: {node_name}.{target_param.name}")
-                ]),
-                dbc.CardBody([
-                    html.P(f"当前值: {target_param.value} {target_param.unit}"),
-                    html.P(f"描述: {target_param.description}"),
-                    html.P(f"置信度: {getattr(target_param, 'confidence', 1.0):.1%}")
-                ])
-            ], className="mb-3")
-        )
-        
-        # 计算链分析
-        if hasattr(target_param, 'calculation_func') and target_param.calculation_func:
-            dependencies_info = get_all_parameter_dependencies()
-            param_info = None
-            
-            for info in dependencies_info:
-                if info['node_id'] == node_id and info['param_name'] == target_param.name:
-                    param_info = info
-                    break
-            
-            if param_info and param_info['calculation_chain']:
-                analysis_components.append(
-                    dbc.Card([
-                        dbc.CardHeader([
-                            html.H6("🔄 计算链条分析")
-                        ]),
-                        dbc.CardBody([
-                            html.P("执行步骤:", className="fw-bold"),
-                            html.Ol([
-                                html.Li(step, className={
-                                    "text-info": "dependencies[" in step,
-                                    "text-warning": "执行计算函数" in step,
-                                    "text-success": "result =" in step
-                                }.get(True, ""))
-                                for step in param_info['calculation_chain']
-                            ])
-                        ])
-                    ], className="mb-3")
-                )
-        
-        # 影响分析
-        dependent_params = []
-        for search_node_id, search_node in graph.nodes.items():
-            for search_param in search_node.parameters:
-                if target_param in search_param.dependencies:
-                    search_node_name = id_mapper.get_node_name(search_node_id)
-                    dependent_params.append({
-                        'node_name': search_node_name,
-                        'param_name': search_param.name,
-                        'value': search_param.value,
-                        'unit': search_param.unit
-                    })
-        
-        if dependent_params:
-            analysis_components.append(
-                dbc.Card([
-                    dbc.CardHeader([
-                        html.H6("📊 影响分析")
-                    ]),
-                    dbc.CardBody([
-                        html.P("修改此参数将影响以下计算:", className="fw-bold"),
-                        html.Ul([
-                            html.Li(f"{dep['node_name']}.{dep['param_name']} = {dep['value']} {dep['unit']}")
-                            for dep in dependent_params
-                        ])
-                    ])
-                ], className="mb-3")
-            )
-        
-        # 敏感性指标
-        sensitivity_score = len(dependent_params) * 10 + (50 if target_param.calculation_func else 0)
-        sensitivity_level = "高" if sensitivity_score > 80 else "中" if sensitivity_score > 40 else "低"
-        sensitivity_color = "danger" if sensitivity_level == "高" else "warning" if sensitivity_level == "中" else "success"
-        
-        analysis_components.append(
-            dbc.Alert([
-                html.H6("🎯 敏感性评估", className="mb-2"),
-                html.P(f"敏感性等级: {sensitivity_level} (评分: {sensitivity_score})", className="mb-1"),
-                html.P(f"影响参数数量: {len(dependent_params)}", className="mb-1"),
-                html.P(f"计算复杂度: {'高' if target_param.calculation_func else '无'}", className="mb-0")
-            ], color=sensitivity_color)
-        )
-        
-        return analysis_components
-        
-    except Exception as e:
-        return dbc.Alert([
-            html.H6("⚠️ 分析失败"),
-            html.P(f"错误信息: {str(e)}")
-        ], color="danger")
+
 
 def get_arrow_connections_data():
     """获取用于绘制箭头的连接数据"""
@@ -4114,6 +3961,62 @@ def create_new_node(save_clicks, node_name, node_type, node_description):
         
     except Exception as e:
         return True, dash.no_update, f"错误: {str(e)}"
+
+# 列管理回调函数
+@callback(
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("add-column-btn", "n_clicks"),
+    Input("remove-column-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def handle_column_management(add_clicks, remove_clicks):
+    """处理手动添加/删除列操作"""
+    global column_manager
+    
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+    
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if button_id == "add-column-btn" and add_clicks:
+        success, message = column_manager.add_column()
+        status = "✅" if success else "❌"
+        return update_canvas(), f"{status} {message}"
+    
+    elif button_id == "remove-column-btn" and remove_clicks:
+        success, message = column_manager.remove_column()
+        status = "✅" if success else "❌"
+        return update_canvas(), f"{status} {message}"
+    
+    raise dash.exceptions.PreventUpdate
+
+# 更新列状态显示
+@callback(
+    Output("column-status", "children"),
+    Input("canvas-container", "children"),
+    prevent_initial_call=False
+)
+def update_column_status(canvas_children):
+    """更新列状态显示"""
+    global column_manager
+    
+    current_cols = layout_manager.cols
+    min_cols = column_manager.minimum_cols
+    
+    # 检查删除条件
+    can_remove, remove_reason = column_manager.can_remove_column()
+    can_add, add_reason = column_manager.can_add_column()
+    
+    status_text = f"当前: {current_cols}列 (最少{min_cols}列)"
+    
+    if not can_remove:
+        status_text += f" | 删除: {remove_reason}"
+    if not can_add:
+        status_text += f" | 添加: {add_reason}"
+    
+    return status_text
 
 if __name__ == "__main__":
     import argparse
