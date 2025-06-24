@@ -286,12 +286,429 @@ def auto_remove_empty_last_column():
     
     return None
 
+def create_example_soc_graph():
+    """创建多核SoC示例计算图"""
+    global graph, layout_manager, id_mapper
+    
+    # 清空现有数据
+    graph = CalculationGraph()
+    layout_manager = CanvasLayoutManager(initial_cols=4, initial_rows=12)  # 增加列数以容纳更多节点
+    id_mapper = IDMapper()
+    graph.set_layout_manager(layout_manager)
+    
+    from models import Node, Parameter
+    
+    # 1. 工艺节点 - 基础参数
+    process_node = Node(name="工艺技术", description="半导体工艺技术参数", node_type="input")
+    process_node.add_parameter(Parameter("工艺节点", 7, "nm", description="制程工艺节点大小", confidence=0.95))
+    process_node.add_parameter(Parameter("电压", 0.8, "V", description="工作电压", confidence=0.9))
+    process_node.add_parameter(Parameter("温度", 85, "°C", description="工作温度", confidence=0.8))
+    graph.add_node(process_node)
+    id_mapper.register_node(process_node.id, process_node.name)
+    from models import GridPosition
+    layout_manager.place_node(process_node.id, GridPosition(0, 0))
+    
+    # 2. CPU核心节点
+    cpu_core_node = Node(name="CPU核心", description="处理器核心参数", node_type="calculation")
+    cpu_core_node.add_parameter(Parameter("基础频率", 2.5, "GHz", description="基础运行频率", confidence=0.9))
+    cpu_core_node.add_parameter(Parameter("核心数量", 8, "个", description="CPU核心数量", confidence=1.0))
+    
+    # 最大频率 - 依赖基础频率和工艺
+    max_freq_param = Parameter("最大频率", 3.2, "GHz", description="最大加速频率", confidence=0.8)
+    max_freq_param.add_dependency(cpu_core_node.parameters[0])  # 基础频率
+    max_freq_param.add_dependency(process_node.parameters[1])   # 电压
+    max_freq_param.calculation_func = """
+# 最大频率计算：基于基础频率和电压
+base_freq = dependencies[0].value  # 基础频率
+voltage = dependencies[1].value    # 电压
+
+# 频率随电压线性增长，电压越高频率越高
+voltage_factor = voltage / 0.8  # 归一化到标准电压
+result = base_freq * voltage_factor * 1.28  # 最大频率比基础频率高28%
+"""
+    cpu_core_node.add_parameter(max_freq_param)
+    
+    graph.add_node(cpu_core_node)
+    id_mapper.register_node(cpu_core_node.id, cpu_core_node.name)
+    layout_manager.place_node(cpu_core_node.id, GridPosition(1, 0))
+    
+    # 3. 缓存系统节点
+    cache_node = Node(name="缓存系统", description="多级缓存参数", node_type="calculation")
+    cache_node.add_parameter(Parameter("L1缓存", 32, "KB", description="一级缓存大小", confidence=0.95))
+    cache_node.add_parameter(Parameter("L2缓存", 256, "KB", description="二级缓存大小", confidence=0.9))
+    cache_node.add_parameter(Parameter("L3缓存", 16, "MB", description="三级缓存大小", confidence=0.85))
+    
+    # 总缓存大小 - 依赖各级缓存
+    total_cache_param = Parameter("总缓存", 24.3, "MB", description="总缓存容量", confidence=0.8)
+    total_cache_param.add_dependency(cache_node.parameters[0])  # L1
+    total_cache_param.add_dependency(cache_node.parameters[1])  # L2
+    total_cache_param.add_dependency(cache_node.parameters[2])  # L3
+    total_cache_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
+    total_cache_param.calculation_func = """
+# 总缓存计算
+l1_per_core = dependencies[0].value  # L1缓存每核心
+l2_per_core = dependencies[1].value  # L2缓存每核心  
+l3_shared = dependencies[2].value    # L3共享缓存
+core_count = dependencies[3].value   # 核心数量
+
+# 每个核心有独立的L1和L2，L3是共享的
+total_l1 = l1_per_core * core_count / 1024  # 转换为MB
+total_l2 = l2_per_core * core_count / 1024  # 转换为MB
+result = total_l1 + total_l2 + l3_shared
+"""
+    cache_node.add_parameter(total_cache_param)
+    
+    graph.add_node(cache_node)
+    id_mapper.register_node(cache_node.id, cache_node.name)
+    layout_manager.place_node(cache_node.id, GridPosition(2, 0))
+    
+    # 4. 内存控制器节点
+    memory_node = Node(name="内存系统", description="内存控制器和带宽", node_type="calculation")
+    memory_node.add_parameter(Parameter("内存频率", 3200, "MHz", description="DDR4内存频率", confidence=0.9))
+    memory_node.add_parameter(Parameter("内存通道", 2, "个", description="内存通道数量", confidence=1.0))
+    memory_node.add_parameter(Parameter("总线宽度", 64, "bit", description="单通道总线宽度", confidence=1.0))
+    
+    # 内存带宽 - 依赖频率、通道数和总线宽度
+    bandwidth_param = Parameter("内存带宽", 51.2, "GB/s", description="理论内存带宽", confidence=0.7)
+    bandwidth_param.add_dependency(memory_node.parameters[0])  # 频率
+    bandwidth_param.add_dependency(memory_node.parameters[1])  # 通道数
+    bandwidth_param.add_dependency(memory_node.parameters[2])  # 总线宽度
+    bandwidth_param.calculation_func = """
+# 内存带宽计算
+freq_mhz = dependencies[0].value     # 内存频率
+channels = dependencies[1].value     # 通道数量
+bus_width = dependencies[2].value    # 总线宽度
+
+# 带宽 = 频率 × 通道数 × 总线宽度 × 2 (DDR) / 8 (转换为字节)
+result = freq_mhz * channels * bus_width * 2 / 8 / 1000  # GB/s
+"""
+    memory_node.add_parameter(bandwidth_param)
+    
+    graph.add_node(memory_node)
+    id_mapper.register_node(memory_node.id, memory_node.name)
+    layout_manager.place_node(memory_node.id, GridPosition(3, 0))
+    
+    # 5. 功耗分析节点
+    power_node = Node(name="功耗分析", description="芯片功耗计算", node_type="calculation")
+    
+    # CPU功耗 - 依赖频率、电压、核心数
+    cpu_power_param = Parameter("CPU功耗", 65, "W", description="CPU总功耗", confidence=0.75)
+    cpu_power_param.add_dependency(cpu_core_node.parameters[2])  # 最大频率
+    cpu_power_param.add_dependency(process_node.parameters[1])   # 电压
+    cpu_power_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
+    cpu_power_param.calculation_func = """
+# CPU功耗计算 (P = C × V² × f × N)
+frequency = dependencies[0].value    # 频率 GHz
+voltage = dependencies[1].value      # 电压 V
+core_count = dependencies[2].value   # 核心数量
+
+# 简化的功耗模型：功耗与电压平方和频率成正比
+capacitance = 2.5  # 等效电容常数
+result = capacitance * voltage * voltage * frequency * core_count
+"""
+    power_node.add_parameter(cpu_power_param)
+    
+    # 缓存功耗 - 依赖总缓存大小
+    cache_power_param = Parameter("缓存功耗", 8, "W", description="缓存系统功耗", confidence=0.8)
+    cache_power_param.add_dependency(cache_node.parameters[3])  # 总缓存
+    cache_power_param.calculation_func = """
+# 缓存功耗计算
+total_cache_mb = dependencies[0].value  # 总缓存 MB
+
+# 缓存功耗大约每MB消耗0.3W
+result = total_cache_mb * 0.33
+"""
+    power_node.add_parameter(cache_power_param)
+    
+    # 内存控制器功耗 - 依赖内存带宽
+    memory_power_param = Parameter("内存控制器功耗", 6, "W", description="内存控制器功耗", confidence=0.8)
+    memory_power_param.add_dependency(memory_node.parameters[3])  # 内存带宽
+    memory_power_param.calculation_func = """
+# 内存控制器功耗
+bandwidth = dependencies[0].value  # 内存带宽 GB/s
+
+# 功耗与带宽成正比，大约每10GB/s消耗1W
+result = bandwidth * 0.12
+"""
+    power_node.add_parameter(memory_power_param)
+    
+    # 总功耗 - 依赖各个子系统功耗
+    total_power_param = Parameter("总功耗", 85, "W", description="芯片总功耗(TDP)", confidence=0.7)
+    total_power_param.add_dependency(power_node.parameters[0])  # CPU功耗
+    total_power_param.add_dependency(power_node.parameters[1])  # 缓存功耗
+    total_power_param.add_dependency(power_node.parameters[2])  # 内存控制器功耗
+    total_power_param.calculation_func = """
+# 总功耗计算
+cpu_power = dependencies[0].value       # CPU功耗
+cache_power = dependencies[1].value     # 缓存功耗
+memory_power = dependencies[2].value    # 内存控制器功耗
+
+# 其他功耗（GPU、IO等）约占15%
+other_power = 10
+result = cpu_power + cache_power + memory_power + other_power
+"""
+    power_node.add_parameter(total_power_param)
+    
+    graph.add_node(power_node)
+    id_mapper.register_node(power_node.id, power_node.name)
+    layout_manager.place_node(power_node.id, GridPosition(0, 1))
+    
+    # 6. 性能分析节点
+    performance_node = Node(name="性能分析", description="系统性能指标", node_type="calculation")
+    
+    # 单核性能 - 依赖频率和缓存
+    single_core_param = Parameter("单核性能", 2500, "分", description="单核心性能评分", confidence=0.8)
+    single_core_param.add_dependency(cpu_core_node.parameters[2])  # 最大频率
+    single_core_param.add_dependency(cache_node.parameters[2])     # L3缓存
+    single_core_param.calculation_func = """
+# 单核性能计算
+frequency = dependencies[0].value  # 最大频率 GHz
+l3_cache = dependencies[1].value   # L3缓存 MB
+
+# 性能基准：3GHz + 16MB L3 = 2500分
+base_score = 2500
+freq_factor = frequency / 3.0      # 频率因子
+cache_factor = l3_cache / 16.0     # 缓存因子
+
+result = base_score * freq_factor * (0.7 + 0.3 * cache_factor)
+"""
+    performance_node.add_parameter(single_core_param)
+    
+    # 多核性能 - 依赖单核性能、核心数、缓存
+    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75)
+    multi_core_param.add_dependency(performance_node.parameters[0])  # 单核性能
+    multi_core_param.add_dependency(cpu_core_node.parameters[1])     # 核心数量
+    multi_core_param.add_dependency(memory_node.parameters[3])       # 内存带宽
+    multi_core_param.calculation_func = """
+# 多核性能计算
+single_score = dependencies[0].value    # 单核性能
+core_count = dependencies[1].value      # 核心数量
+bandwidth = dependencies[2].value       # 内存带宽
+
+# 多核扩展效率受内存带宽限制
+bandwidth_factor = min(1.0, bandwidth / 30.0)  # 30GB/s为理想带宽
+scaling_efficiency = 0.8 + 0.2 * bandwidth_factor
+
+result = single_score * core_count * scaling_efficiency
+"""
+    performance_node.add_parameter(multi_core_param)
+    
+    graph.add_node(performance_node)
+    id_mapper.register_node(performance_node.id, performance_node.name)
+    layout_manager.place_node(performance_node.id, GridPosition(1, 1))
+    
+    # 7. 热设计功耗节点
+    thermal_node = Node(name="热设计", description="散热和温度管理", node_type="calculation")
+    
+    # 热阻 - 依赖工艺和功耗
+    thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="芯片热阻", confidence=0.7)
+    thermal_resistance_param.add_dependency(process_node.parameters[0])  # 工艺节点
+    thermal_resistance_param.add_dependency(power_node.parameters[3])    # 总功耗
+    thermal_resistance_param.calculation_func = """
+# 热阻计算
+process_nm = dependencies[0].value    # 工艺节点
+total_power = dependencies[1].value   # 总功耗
+
+# 先进工艺热阻更低，功耗越高热阻相对增加
+base_thermal_resistance = 1.2 - (28 - process_nm) * 0.015
+power_factor = 1 + (total_power - 65) * 0.002
+result = base_thermal_resistance * power_factor
+"""
+    thermal_node.add_parameter(thermal_resistance_param)
+    
+    # 结温 - 依赖环境温度、功耗、热阻
+    junction_temp_param = Parameter("结温", 70, "°C", description="芯片结点温度", confidence=0.75)
+    junction_temp_param.add_dependency(process_node.parameters[2])       # 环境温度
+    junction_temp_param.add_dependency(power_node.parameters[3])         # 总功耗
+    junction_temp_param.add_dependency(thermal_node.parameters[0])       # 热阻
+    junction_temp_param.calculation_func = """
+# 结温计算
+ambient_temp = dependencies[0].value      # 环境温度
+total_power = dependencies[1].value       # 总功耗
+thermal_resistance = dependencies[2].value # 热阻
+
+# 结温 = 环境温度 + 功耗 × 热阻
+result = ambient_temp + total_power * thermal_resistance
+"""
+    thermal_node.add_parameter(junction_temp_param)
+    
+    graph.add_node(thermal_node)
+    id_mapper.register_node(thermal_node.id, thermal_node.name)
+    layout_manager.place_node(thermal_node.id, GridPosition(2, 1))
+    
+    # 8. 成本分析节点
+    cost_node = Node(name="成本分析", description="芯片成本估算", node_type="calculation")
+    
+    # 芯片面积 - 依赖工艺、核心数、缓存
+    die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片裸片面积", confidence=0.6)
+    die_area_param.add_dependency(process_node.parameters[0])    # 工艺节点
+    die_area_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
+    die_area_param.add_dependency(cache_node.parameters[3])     # 总缓存
+    die_area_param.calculation_func = """
+# 芯片面积计算
+process_nm = dependencies[0].value    # 工艺节点
+core_count = dependencies[1].value    # 核心数量
+total_cache = dependencies[2].value   # 总缓存
+
+# 基础面积模型（7nm基准）
+process_factor = (process_nm / 7.0) ** 2  # 面积与工艺平方成反比
+core_area = core_count * 15  # 每核心约15mm²
+cache_area = total_cache * 2.5  # 每MB缓存约2.5mm²
+other_area = 50  # 其他逻辑面积
+
+result = (core_area + cache_area + other_area) * process_factor
+"""
+    cost_node.add_parameter(die_area_param)
+    
+    # 制造成本 - 依赖面积和工艺
+    manufacturing_cost_param = Parameter("制造成本", 45, "$", description="芯片制造成本", confidence=0.6)
+    manufacturing_cost_param.add_dependency(cost_node.parameters[0])     # 芯片面积
+    manufacturing_cost_param.add_dependency(process_node.parameters[0])  # 工艺节点
+    manufacturing_cost_param.calculation_func = """
+# 制造成本计算
+die_area = dependencies[0].value      # 芯片面积
+process_nm = dependencies[1].value    # 工艺节点
+
+# 先进工艺成本更高，面积越大成本越高
+process_cost_factor = (7.0 / process_nm) ** 1.5  # 先进工艺成本指数增长
+area_cost = die_area * 0.2 * process_cost_factor  # 每mm²基础成本
+result = area_cost + 5  # 固定成本
+"""
+    cost_node.add_parameter(manufacturing_cost_param)
+    
+    graph.add_node(cost_node)
+    id_mapper.register_node(cost_node.id, cost_node.name)
+    layout_manager.place_node(cost_node.id, GridPosition(3, 1))
+    
+    # 9. 能效分析节点
+    efficiency_node = Node(name="能效分析", description="性能功耗比分析", node_type="calculation")
+    
+    # 性能功耗比 - 依赖多核性能和总功耗
+    perf_watt_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.8)
+    perf_watt_param.add_dependency(performance_node.parameters[1])  # 多核性能
+    perf_watt_param.add_dependency(power_node.parameters[3])        # 总功耗
+    perf_watt_param.calculation_func = """
+# 性能功耗比计算
+multi_core_score = dependencies[0].value  # 多核性能
+total_power = dependencies[1].value        # 总功耗
+
+# 每瓦性能 = 总性能 / 总功耗
+result = multi_core_score / total_power
+"""
+    efficiency_node.add_parameter(perf_watt_param)
+    
+    # 性价比 - 依赖多核性能和制造成本
+    value_ratio_param = Parameter("性价比", 400, "分/$", description="每美元性能", confidence=0.7)
+    value_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
+    value_ratio_param.add_dependency(cost_node.parameters[1])         # 制造成本
+    value_ratio_param.calculation_func = """
+# 性价比计算
+multi_core_score = dependencies[0].value  # 多核性能
+manufacturing_cost = dependencies[1].value # 制造成本
+
+# 每美元性能 = 总性能 / 制造成本
+result = multi_core_score / manufacturing_cost
+"""
+    efficiency_node.add_parameter(value_ratio_param)
+    
+    graph.add_node(efficiency_node)
+    id_mapper.register_node(efficiency_node.id, efficiency_node.name)
+    layout_manager.place_node(efficiency_node.id, GridPosition(0, 2))
+    
+    # 触发所有参数的计算以建立完整的依赖关系
+    for node in graph.nodes.values():
+        for param in node.parameters:
+            if param.calculation_func and param.dependencies:
+                try:
+                    param.calculate()
+                except Exception as e:
+                    print(f"计算参数 {param.name} 时出错: {e}")
+    
+    return {
+        "nodes_created": len(graph.nodes),
+        "total_params": sum(len(node.parameters) for node in graph.nodes.values()),
+        "calculated_params": sum(1 for node in graph.nodes.values() 
+                               for param in node.parameters 
+                               if param.calculation_func and param.dependencies)
+    }
+
 # 画布更新函数 - 使用新的布局管理器
 def update_canvas(node_data=None):
     """使用布局管理器渲染画布"""
     canvas_content = []
     
+    # 检查是否有节点，如果没有则显示空状态提示
+    print(f"🔍 update_canvas调用: graph.nodes = {graph.nodes}")
+    print(f"🔍 graph.nodes是否为空: {not graph.nodes}")
+    print(f"🔍 graph.nodes长度: {len(graph.nodes)}")
+    
+    if not graph.nodes:
+        print("✅ 触发空状态显示 - 计算图为空，显示引导提示")
+        empty_state_content = html.Div([
+            html.Div([
+                html.Div([
+                    html.I(className="fas fa-project-diagram", style={"fontSize": "4rem", "color": "#dee2e6", "marginBottom": "1rem"}),
+                    html.H4("计算图为空", className="text-muted mb-3"),
+                    html.P([
+                        "开始构建您的计算图：",
+                    ], className="text-muted mb-4"),
+                    html.Div([
+                        html.Div([
+                            html.Span("🎯", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            "点击右上角 ",
+                            html.Strong("🎯", className="text-warning"),
+                            " 按钮载入SoC示例计算图"
+                        ], className="mb-3 p-3 border rounded bg-light"),
+                        html.Div([
+                            html.Span("➕", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            "点击左上角 ",
+                            html.Strong("➕", className="text-primary"),
+                            " 按钮添加新节点"
+                        ], className="mb-3 p-3 border rounded bg-light"),
+                        html.Div([
+                            html.Span("📁", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            "或从文件加载已有的计算图"
+                        ], className="p-3 border rounded bg-light")
+                    ])
+                ], className="text-center p-5"),
+            ], className="d-flex justify-content-center align-items-center", style={"minHeight": "400px"})
+        ])
+        
+        # 创建画布内容，只包含空状态提示
+        canvas_with_arrows = html.Div([
+            # 空状态内容
+            empty_state_content,
+            # 箭头覆盖层（空状态下不需要，但保持结构一致）
+            html.Div(
+                [],
+                style={
+                    "position": "absolute",
+                    "top": "0",
+                    "left": "0", 
+                    "width": "100%",
+                    "height": "100%",
+                    "pointerEvents": "none",
+                    "zIndex": "10"
+                },
+                id="arrows-overlay"
+            )
+        ], style={"position": "relative"})
+        
+        print("🎨 空状态内容已创建并返回")
+        
+        # 添加JavaScript控制台打印
+        canvas_with_arrows.children.append(
+            html.Script("""
+                console.log('🎨 ArchDash: 空状态提示已显示');
+                console.log('✅ 如果您看到这条消息，说明空状态逻辑正常工作');
+                console.log('📋 请检查页面是否显示了"计算图为空"和三个引导卡片');
+            """)
+        )
+        
+        return canvas_with_arrows
+    
     # 按列组织内容
+    print(f"🏗️ 渲染正常模式 - 有{len(graph.nodes)}个节点")
     for col in range(layout_manager.cols):
         col_content = []
         col_nodes = layout_manager.get_column_nodes(col)
@@ -529,7 +946,8 @@ app.layout = dbc.Container([
                     html.Div(
                         id="canvas-container", 
                         className="position-relative",
-                        style={"minHeight": "500px"}
+                        style={"minHeight": "500px"},
+                        children=update_canvas()  # 直接在布局中调用，确保初始渲染
                     ),
                 ], className="p-1")
             ], className="glass-card mb-2"),
@@ -547,43 +965,53 @@ app.layout = dbc.Container([
             dbc.Card([
                 dbc.CardBody([
                     html.Div([
-                        html.Label("文件操作", className="fw-bold mb-0 me-auto"),
-                        html.Div([
-                            dcc.Upload(
-                                id="upload-graph",
-                                children=html.Button(
-                                    "📁", 
-                                    className="btn btn-info btn-sm me-2",
-                                    title="加载文件"
-                                ),
-                                accept=".json",
-                                multiple=False
+                        dcc.Upload(
+                            id="upload-graph",
+                            children=html.Button(
+                                "📁", 
+                                className="btn btn-info btn-sm",
+                                title="加载文件"
                             ),
-                            html.Button(
-                                "💾", 
-                                id="save-graph-button", 
-                                className="btn btn-success btn-sm me-2",
-                                title="保存文件"
-                            ),
-                            # 竖线分隔符
-                            html.Div(
-                                style={
-                                    "borderLeft": "1px solid #dee2e6",
-                                    "height": "24px",
-                                    "marginLeft": "8px",
-                                    "marginRight": "8px"
-                                }
-                            ),
-                            # 主题切换按钮
-                            html.Button(
-                                "🌙", 
-                                id="theme-toggle", 
-                                className="btn btn-outline-secondary btn-sm",
-                                title="切换深色/浅色主题",
-                                style={"minWidth": "32px"}
-                            ),
-                        ], className="d-flex align-items-center"),
-                    ], className="d-flex align-items-center"),
+                            accept=".json",
+                            multiple=False
+                        ),
+                        html.Button(
+                            "💾", 
+                            id="save-graph-button", 
+                            className="btn btn-success btn-sm",
+                            title="保存文件"
+                        ),
+                        # 分隔符1
+                        html.Div(
+                            style={
+                                "borderLeft": "1px solid #dee2e6",
+                                "height": "24px",
+                                "margin": "0 12px"
+                            }
+                        ),
+                        html.Button(
+                            "🎯", 
+                            id="load-example-graph-button", 
+                            className="btn btn-warning btn-sm",
+                            title="加载示例计算图"
+                        ),
+                        # 分隔符2
+                        html.Div(
+                            style={
+                                "borderLeft": "1px solid #dee2e6",
+                                "height": "24px",
+                                "margin": "0 12px"
+                            }
+                        ),
+                        # 主题切换按钮
+                        html.Button(
+                            "🌙", 
+                            id="theme-toggle", 
+                            className="btn btn-outline-secondary btn-sm",
+                            title="切换深色/浅色主题",
+                            style={"minWidth": "32px"}
+                        ),
+                    ], className="d-flex align-items-center justify-content-around w-100"),
                 ])
             ], className="glass-card fade-in mb-2"),
             
@@ -714,25 +1142,25 @@ app.layout = dbc.Container([
                                 dbc.Col([
                                     dbc.ButtonGroup([
                                         dbc.Button(
-                                            ["🔄 ", html.Span("生成")], 
+                                            [html.Span("生成")], 
                                             id="generate-plot-btn", 
                                             color="primary", 
                                             size="sm"
                                         ),
                                         dbc.Button(
-                                            ["🔍 ", html.Span("放大")], 
+                                            [html.Span("放大")], 
                                             id="enlarge-plot-btn", 
                                             color="success", 
                                             size="sm"
                                         ),
                                         dbc.Button(
-                                            ["🗑️ ", html.Span("清除")], 
+                                            [html.Span("清除")], 
                                             id="clear-plot-btn", 
                                             color="secondary", 
                                             size="sm"
                                         ),
                                         dbc.Button(
-                                            ["📊 ", html.Span("导出")], 
+                                            [html.Span("导出")], 
                                             id="export-plot-data-btn", 
                                             color="info", 
                                             size="sm"
@@ -1866,6 +2294,37 @@ def save_calculation_graph(n_clicks):
 
 
 
+# 加载示例计算图
+@callback(
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("load-example-graph-button", "n_clicks"),
+    prevent_initial_call=True
+)
+def load_example_soc_graph(n_clicks):
+    """加载多核SoC示例计算图"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 创建示例计算图
+        result = create_example_soc_graph()
+        
+        # 更新画布显示
+        updated_canvas = update_canvas()
+        
+        success_message = (
+            f"✅ 已加载多核SoC示例计算图："
+            f"{result['nodes_created']}个节点，"
+            f"{result['total_params']}个参数，"
+            f"其中{result['calculated_params']}个计算参数"
+        )
+        
+        return updated_canvas, success_message
+        
+    except Exception as e:
+        return dash.no_update, f"❌ 加载示例失败: {str(e)}"
+
 # 加载计算图
 @callback(
     Output("canvas-container", "children", allow_duplicate=True),
@@ -2145,6 +2604,8 @@ def update_param_selectors(canvas_children):
 def initialize_plot(selector_id):
     """初始化空图表"""
     return create_empty_plot()
+
+
 
 # 生成敏感性分析图表
 @callback(
