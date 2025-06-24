@@ -797,7 +797,7 @@ def update_canvas(node_data=None):
                             html.Span(style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
                             "点击右上角 ",
                             html.Strong("➕", className="text-primary"),
-                            " 按钮添加新节点"
+                            " 按钮添加新节点，并添加参数"
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
                             html.Span("📁", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
@@ -872,7 +872,7 @@ def update_canvas(node_data=None):
                                             "backgroundColor": "#007bff",
                                             "border": "2px solid #fff",
                                             "boxShadow": "0 0 0 1px #007bff",
-                                            "marginRight": "8px",
+                                            "marginRight": "4px",
                                             "marginTop": "6px",
                                             "flex": "none"
                                         },
@@ -883,11 +883,11 @@ def update_canvas(node_data=None):
                                     dcc.Input(
                                         id={"type": "param-name", "node": node_id, "index": param_idx},
                                         value=param.name,
-                                        style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "2px 4px"},
+                                        style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "1px 3px"},
                                         className="param-input"
                                     )
                                 ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
-                                style={"paddingRight": "8px", "width": "40%"}
+                                style={"paddingRight": "2px", "width": "45%"}
                             ),
                             html.Td(
                                 html.Div([
@@ -895,11 +895,11 @@ def update_canvas(node_data=None):
                                         id={"type": "param-value", "node": node_id, "index": param_idx},
                                         value=str(param.value),
                                         style={
-                                            "width": "calc(100% - 30px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                            "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
                                             "border": "1px solid transparent", 
                                             "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
                                             "borderRadius": "3px", 
-                                            "padding": "2px 4px",
+                                            "padding": "1px 3px",
                                             "transition": "background-color 2s ease-out"
                                         },
                                         className="param-input"
@@ -913,18 +913,18 @@ def update_canvas(node_data=None):
                                             "cursor": "pointer",
                                             "fontSize": "12px",
                                             "opacity": "1",
-                                            "marginLeft": "4px",
+                                            "marginLeft": "2px",
                                             "padding": "2px",
                                             "borderRadius": "3px",
                                             "display": "inline-block",
-                                            "minWidth": "20px",
+                                            "minWidth": "18px",
                                             "textAlign": "center",
                                             "userSelect": "none"
                                         },
                                         title="重新连接 (点击恢复自动计算)"
                                     ) if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else None
                                 ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
-                                style={"width": "40%"}
+                                style={"width": "40%", "paddingLeft": "2px", "paddingRight": "2px"}
                             ),
                             html.Td(
                                 dbc.DropdownMenu(
@@ -941,18 +941,18 @@ def update_canvas(node_data=None):
                                     size="sm",
                                     direction="left"
                                 ),
-                                style={"width": "20%", "textAlign": "right", "paddingLeft": "4px"}
+                                style={"width": "15%", "textAlign": "right", "paddingLeft": "2px"}
                             )
                         ])
                     )
             
-            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "4px"}) if param_rows else None
+            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "2px"}) if param_rows else None
             
             node_div = html.Div(
                 [
                     html.Div([
                         html.Div([
-                            html.Span(f"节点: {node_name}", className="node-name")
+                            html.Span(f"{node_name}", className="node-name")
                         ]),
                         html.Div([
                             # 添加参数按钮（标题栏）
@@ -1019,7 +1019,7 @@ def update_canvas(node_data=None):
                     param_table,
                     html.Div(id=f"node-content-{node_id}", className="node-content")
                 ],
-                className="p-3 node-container node-entrance fade-in",
+                className="p-2 node-container node-entrance fade-in",
                 id=id_mapper.get_html_id(node_id),
                 **{"data-row": row, "data-col": col, "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
             )
@@ -1084,7 +1084,7 @@ app.layout = dbc.Container([
             dbc.Card([
                 dbc.CardHeader([
                     html.Div([
-                        html.H5([ 
+                        html.H6([ 
                             html.Span("计算图", className="fw-bold")
                         ], className="mb-0"),
                         html.Div([
@@ -1430,47 +1430,72 @@ app.layout = dbc.Container([
     # 参数编辑模态窗口
     dbc.Modal([
         dbc.ModalHeader([
-            html.H4("编辑参数", id="param-edit-title")
+            html.H4("编辑参数", id="param-edit-title", style={"fontSize": "1.2rem"})
         ]),
         dbc.ModalBody([
             # 基本参数信息
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("参数名称:"),
-                    dbc.Input(id="param-edit-name", placeholder="参数名称")
+                    dbc.Label("参数名称:", style={"fontSize": "0.9rem"}),
+                    dbc.Input(id="param-edit-name", placeholder="参数名称", style={"fontSize": "0.85rem"})
                 ], width=8),
                 dbc.Col([
-                    dbc.Label("单位:"),
-                    dbc.Input(id="param-edit-unit", placeholder="单位")
+                    dbc.Label("单位:", style={"fontSize": "0.9rem"}),
+                    dbc.Input(id="param-edit-unit", placeholder="单位", style={"fontSize": "0.85rem"})
                 ], width=4),
             ], className="mb-3"),
             
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("参数值:"),
-                    dbc.Input(id="param-edit-value", placeholder="参数值", type="number")
+                    dbc.Label("参数值:", style={"fontSize": "0.9rem"}),
+                    html.Div(id="param-edit-value-display", style={
+                        "padding": "6px 12px",
+                        "backgroundColor": "#f8f9fa",
+                        "border": "1px solid #dee2e6",
+                        "borderRadius": "4px",
+                        "fontSize": "0.85rem",
+                        "color": "#495057"
+                    })
                 ], width=6),
                 dbc.Col([
-                    dbc.Label("置信度:"),
-                    dbc.Input(id="param-edit-confidence", placeholder="0.0-1.0", type="number", min=0, max=1, step=0.1)
+                    dbc.Label("置信度:", style={"fontSize": "0.9rem"}),
+                    html.Div(id="param-edit-confidence-display", style={
+                        "padding": "6px 12px",
+                        "backgroundColor": "#f8f9fa",
+                        "border": "1px solid #dee2e6",
+                        "borderRadius": "4px",
+                        "fontSize": "0.85rem",
+                        "color": "#495057"
+                    })
                 ], width=6),
             ], className="mb-3"),
             
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("描述:"),
-                    dbc.Textarea(id="param-edit-description", placeholder="参数描述", rows=2)
+                    dbc.Label("描述:", style={"fontSize": "0.9rem"}),
+                    dbc.Textarea(id="param-edit-description", placeholder="参数描述", rows=2, style={"fontSize": "0.85rem"})
                 ])
             ], className="mb-3"),
             
             html.Hr(),
             
-            # 依赖参数选择
+            # 依赖参数选择 - 可折叠
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("依赖参数:"),
-                    html.Div(id="dependency-selector-container"),
-                    html.Small("选择此参数计算时依赖的其他参数", className="text-muted")
+                    html.Div([
+                        dbc.Button(
+                            ["🔽 ", html.Span("依赖参数")],
+                            id="dependencies-collapse-btn-modal",
+                            color="outline-secondary",
+                            size="sm",
+                            className="mb-2",
+                            style={"fontSize": "0.85rem"}
+                        ),
+                        dbc.Collapse([
+                            html.Div(id="dependency-selector-container", style={"fontSize": "0.85rem"}),
+                            html.Small("选择此参数计算时依赖的其他参数", className="text-muted", style={"fontSize": "0.8rem"})
+                        ], id="dependencies-collapse-modal", is_open=False)
+                    ])
                 ])
             ], className="mb-3"),
             
@@ -1480,33 +1505,33 @@ app.layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     html.Div([
-                        dbc.Label("计算函数:", className="d-inline"),
+                        dbc.Label("计算函数:", className="d-inline", style={"fontSize": "0.9rem"}),
                         dbc.ButtonGroup([
-                            dbc.Button("Reset", id="param-edit-reset", size="sm", color="secondary", className="ms-2"),
-                            dbc.Button("测试", id="param-edit-test", size="sm", color="info", className="ms-1"),
+                            dbc.Button("Reset", id="param-edit-reset", size="sm", color="secondary", className="ms-2", style={"fontSize": "0.8rem"}),
+                            dbc.Button("测试", id="param-edit-test", size="sm", color="info", className="ms-1", style={"fontSize": "0.8rem"}),
                         ], className="float-end")
                     ]),
                     dbc.Textarea(
                         id="param-edit-calculation", 
                         placeholder="# 计算函数\n# 在这里编写计算逻辑\nresult = value",
                         rows=8,
-                        style={"fontFamily": "monospace", "fontSize": "12px"}
+                        style={"fontFamily": "monospace", "fontSize": "11px"}
                     ),
-                    html.Small("使用 dependencies[i].value 访问依赖参数值，将结果赋值给 result 变量", className="text-muted")
+                    html.Small("使用 dependencies[i].value 访问依赖参数值，将结果赋值给 result 变量", className="text-muted", style={"fontSize": "0.8rem"})
                 ])
             ], className="mb-3"),
             
             # 计算结果预览
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("计算结果预览:"),
-                    dbc.Alert(id="param-edit-preview", color="light", children="点击'测试'按钮查看计算结果")
+                    dbc.Label("计算结果预览:", style={"fontSize": "0.9rem"}),
+                    dbc.Alert(id="param-edit-preview", color="light", children="点击'测试'按钮查看计算结果", style={"fontSize": "0.85rem"})
                 ])
             ], className="mb-3"),
         ]),
         dbc.ModalFooter([
-            dbc.Button("取消", id="param-edit-cancel", color="secondary", className="me-2"),
-            dbc.Button("保存", id="param-edit-save", color="primary")
+            dbc.Button("取消", id="param-edit-cancel", color="secondary", className="me-2", style={"fontSize": "0.85rem"}),
+            dbc.Button("保存", id="param-edit-save", color="primary", style={"fontSize": "0.85rem"})
         ])
     ], id="param-edit-modal", size="lg", is_open=False),
     
@@ -2169,10 +2194,10 @@ def handle_unlink_toggle(unlink_clicks, node_data):
     Output("param-edit-modal", "is_open"),
     Output("param-edit-title", "children"),
     Output("param-edit-name", "value"),
-    Output("param-edit-value", "value"),
+    Output("param-edit-value-display", "children"),
     Output("param-edit-unit", "value"),
     Output("param-edit-description", "value"),
-    Output("param-edit-confidence", "value"),
+    Output("param-edit-confidence-display", "children"),
     Output("param-edit-calculation", "value"),
     Output("dependency-selector-container", "children"),
     Output("param-edit-data", "data"),
@@ -2225,10 +2250,10 @@ def open_param_edit_modal(edit_clicks, is_open):
             True,  # 打开模态窗口
             f"编辑参数: {node_name}.{param.name}",
             param.name,
-            param.value,
+            f"{param.value} {param.unit}",  # 显示值和单位
             param.unit,
             param.description,
-            param.confidence,
+            f"{param.confidence:.1%}",  # 显示百分比格式的置信度
             param.calculation_func or "",
             dependency_checkboxes,
             {"node_id": node_id, "param_index": param_index}
@@ -2278,13 +2303,12 @@ def reset_calculation_code(reset_clicks, checkbox_values, checkbox_ids, edit_dat
     Output("param-edit-preview", "color"),
     Input("param-edit-test", "n_clicks"),
     State("param-edit-calculation", "value"),
-    State("param-edit-value", "value"),
     State({"type": "dependency-checkbox", "param": ALL}, "value"),
     State({"type": "dependency-checkbox", "param": ALL}, "id"),
     State("param-edit-data", "data"),
     prevent_initial_call=True
 )
-def test_calculation(test_clicks, calculation_code, current_value, checkbox_values, checkbox_ids, edit_data):
+def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_ids, edit_data):
     if not test_clicks:
         raise dash.exceptions.PreventUpdate
     
@@ -2302,6 +2326,20 @@ def test_calculation(test_clicks, calculation_code, current_value, checkbox_valu
                         if param_info["display_name"] == param_display_name:
                             selected_deps.append(param_info["param_obj"])
                             break
+        
+        # 获取当前参数对象及其值
+        node_id = edit_data["node_id"]
+        param_index = edit_data["param_index"]
+        
+        if node_id not in graph.nodes:
+            return "错误: 节点不存在", "danger"
+        
+        node = graph.nodes[node_id]
+        if param_index >= len(node.parameters):
+            return "错误: 参数不存在", "danger"
+        
+        current_param = node.parameters[param_index]
+        current_value = current_param.value
         
         # 如果没有计算函数，直接返回当前值
         if not calculation_code or calculation_code.strip() == "":
@@ -2333,10 +2371,8 @@ def test_calculation(test_clicks, calculation_code, current_value, checkbox_valu
     Output("output-result", "children", allow_duplicate=True),
     Input("param-edit-save", "n_clicks"),
     State("param-edit-name", "value"),
-    State("param-edit-value", "value"),
     State("param-edit-unit", "value"),
     State("param-edit-description", "value"),
-    State("param-edit-confidence", "value"),
     State("param-edit-calculation", "value"),
     State({"type": "dependency-checkbox", "param": ALL}, "value"),
     State({"type": "dependency-checkbox", "param": ALL}, "id"),
@@ -2344,8 +2380,8 @@ def test_calculation(test_clicks, calculation_code, current_value, checkbox_valu
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def save_parameter_changes(save_clicks, param_name, param_value, param_unit, param_description, 
-                          param_confidence, calculation_code, checkbox_values, checkbox_ids, 
+def save_parameter_changes(save_clicks, param_name, param_unit, param_description, 
+                          calculation_code, checkbox_values, checkbox_ids, 
                           edit_data, node_data):
     if not save_clicks:
         raise dash.exceptions.PreventUpdate
@@ -2410,33 +2446,9 @@ def save_parameter_changes(save_clicks, param_name, param_value, param_unit, par
         param.unit = param_unit.strip() if param_unit else ""
         param.description = param_description.strip() if param_description else ""
         
-        # 更新参数值
-        try:
-            if param_value is not None and param_value != "":
-                if isinstance(param_value, str) and '.' in param_value:
-                    new_value = float(param_value)
-                elif isinstance(param_value, str):
-                    new_value = int(param_value)
-                else:
-                    new_value = param_value
-            else:
-                new_value = 0
-        except (ValueError, TypeError):
-            new_value = str(param_value) if param_value is not None else ""
-        
-        # 使用数据流机制更新参数值，这会自动触发依赖参数的重新计算
-        update_result = graph.set_parameter_value(param, new_value)
+        # 注意：参数值和置信度现在只显示，不允许编辑
+        # 如果需要修改值，应该在主界面通过参数输入框进行
         cascaded_info = ""
-        if update_result['cascaded_updates']:
-            affected_params = [update['param'].name for update in update_result['cascaded_updates']]
-            cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
-        
-        # 更新置信度
-        try:
-            param.confidence = float(param_confidence) if param_confidence is not None else 1.0
-            param.confidence = max(0.0, min(1.0, param.confidence))  # 限制在0-1之间
-        except (ValueError, TypeError):
-            param.confidence = 1.0
         
         # 更新计算函数
         param.calculation_func = calculation_code.strip() if calculation_code else None
@@ -3895,6 +3907,24 @@ def toggle_dependencies_collapse(n_clicks, is_open):
         else:
             return new_state, ["🔽 ", html.Span("展开")]
     return is_open, ["🔽 ", html.Span("展开")]
+
+# 参数编辑模态窗口中依赖参数模块的折叠回调
+@callback(
+    Output("dependencies-collapse-modal", "is_open"),
+    Output("dependencies-collapse-btn-modal", "children"),
+    Input("dependencies-collapse-btn-modal", "n_clicks"),
+    State("dependencies-collapse-modal", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_dependencies_collapse_modal(n_clicks, is_open):
+    """切换参数编辑模态窗口中依赖参数模块的展开/折叠状态"""
+    if n_clicks:
+        new_state = not is_open
+        if new_state:
+            return new_state, ["🔼 ", html.Span("依赖参数")]
+        else:
+            return new_state, ["🔽 ", html.Span("依赖参数")]
+    return is_open, ["🔽 ", html.Span("依赖参数")]
 
 # 放大图表功能
 @callback(
