@@ -881,18 +881,13 @@ def update_canvas(node_data=None):
                                         className="param-pin",
                                         id=f"pin-{node_id}-{param_idx}"
                                     ),
-                                    # 类型图标
-                                    html.Span(
-                                        {"float": "🔢", "int": "#️⃣", "string": "📝"}.get(param.param_type if hasattr(param, 'param_type') else 'float', "❓"),
-                                        style={
-                                            "fontSize": "12px",
-                                            "marginRight": "4px",
-                                            "opacity": "0.7",
-                                            "flex": "none"
-                                        },
-                                        title=f"类型: {param.param_type if hasattr(param, 'param_type') else '未知'}"
+                                    # 参数名输入框，带有类型提示
+                                    dbc.Tooltip(
+                                        f"类型: {param.param_type if hasattr(param, 'param_type') else '未知'}",
+                                        target={"type": "param-name", "node": node_id, "index": param_idx},
+                                        placement="top",
+                                        trigger="focus"
                                     ),
-                                    # 参数名输入框
                                     dcc.Input(
                                         id={"type": "param-name", "node": node_id, "index": param_idx},
                                         value=param.name,
@@ -904,19 +899,36 @@ def update_canvas(node_data=None):
                             ),
                             html.Td(
                                 html.Div([
-                                    dcc.Input(
-                                        id={"type": "param-value", "node": node_id, "index": param_idx},
-                                        value=str(param.value),
-                                        style={
-                                            "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
-                                            "border": "1px solid transparent", 
-                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
-                                            "borderRadius": "3px", 
-                                            "padding": "1px 3px",
-                                            "transition": "background-color 2s ease-out"
-                                        },
-                                        className="param-input"
+                                    dbc.Tooltip(
+                                        f"类型: {param.param_type if hasattr(param, 'param_type') else '未知'}",
+                                        target={"type": "param-value", "node": node_id, "index": param_idx},
+                                        placement="top",
+                                        trigger="focus"
                                     ),
+                                    html.Div([
+                                        dcc.Input(
+                                            id={"type": "param-value", "node": node_id, "index": param_idx},
+                                            value=str(param.value),
+                                            style={
+                                                "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                                "border": "1px solid transparent", 
+                                                "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
+                                                "borderRadius": "3px", 
+                                                "padding": "1px 3px",
+                                                "transition": "background-color 2s ease-out"
+                                            },
+                                            className="param-input"
+                                        ),
+                                        html.Span(
+                                            param.unit,
+                                            style={
+                                                "marginLeft": "4px",
+                                                "fontSize": "0.85em",
+                                                "color": "#666",
+                                                "whiteSpace": "nowrap"
+                                            }
+                                        ) if param.unit else None
+                                    ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
                                     # Unlink图标 - 只有有依赖计算且unlinked=True时显示
                                     html.Div(
                                         "🔓",
