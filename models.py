@@ -44,6 +44,7 @@ class Parameter:
         self.calculation_func = kwargs.get('calculation_func', None)
         self.dependencies = kwargs.get('dependencies', [])
         self.unlinked = kwargs.get('unlinked', False)
+        self.param_type = kwargs.get('param_type', "float")  # 新增：参数类型，默认为float
         self._graph = kwargs.get('_graph', None)
     
     @property
@@ -179,7 +180,8 @@ class Parameter:
             "confidence": self.confidence,
             "calculation_func": self.calculation_func,
             "dependencies": [dep.name for dep in self.dependencies],
-            "unlinked": self.unlinked
+            "unlinked": self.unlinked,
+            "param_type": self.param_type  # 新增：包含参数类型
         }
     
     @classmethod
@@ -192,7 +194,8 @@ class Parameter:
             description=data["description"],
             confidence=data["confidence"],
             calculation_func=data["calculation_func"],
-            unlinked=data.get("unlinked", False)
+            unlinked=data.get("unlinked", False),
+            param_type=data.get("param_type", "float")  # 新增：读取参数类型，默认为float（兼容旧格式）
         )
         
         # 添加依赖

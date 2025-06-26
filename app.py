@@ -219,8 +219,9 @@ def get_plotting_parameters():
     all_params = []
     for node_id, node in graph.nodes.items():
         for param in node.parameters:
-            # 只允许数值类型的参数用于绘图
-            if isinstance(param.value, (int, float)):
+            # 只允许数值类型的参数用于绘图 (float 和 int)
+            # 要求参数必须有明确的类型信息
+            if hasattr(param, 'param_type') and param.param_type in ['float', 'int'] and isinstance(param.value, (int, float)):
                 all_params.append({
                     'label': f"{node.name}.{param.name}",
                     'value': f"{node_id}|{param.name}",
@@ -416,9 +417,10 @@ def create_example_soc_graph():
     
     # 1. 工艺节点 - 基础参数
     process_node = Node(name="工艺技术", description="半导体工艺技术参数")
-    process_node.add_parameter(Parameter("工艺节点", 7, "nm", description="制程工艺节点大小", confidence=0.95))
-    process_node.add_parameter(Parameter("电压", 0.8, "V", description="工作电压", confidence=0.9))
-    process_node.add_parameter(Parameter("温度", 85, "°C", description="工作温度", confidence=0.8))
+    process_node.add_parameter(Parameter("工艺节点", 7, "nm", description="制程工艺节点大小", confidence=0.95, param_type="int"))
+    process_node.add_parameter(Parameter("电压", 0.8, "V", description="工作电压", confidence=0.9, param_type="float"))
+    process_node.add_parameter(Parameter("温度", 85, "°C", description="工作温度", confidence=0.8, param_type="int"))
+    process_node.add_parameter(Parameter("工艺厂商", "TSMC", "", description="芯片代工厂商", confidence=1.0, param_type="string"))
     graph.add_node(process_node)
     id_mapper.register_node(process_node.id, process_node.name)
     from models import GridPosition
@@ -426,11 +428,11 @@ def create_example_soc_graph():
     
     # 2. CPU核心节点
     cpu_core_node = Node(name="CPU核心", description="处理器核心参数")
-    cpu_core_node.add_parameter(Parameter("基础频率", 2.5, "GHz", description="基础运行频率", confidence=0.9))
-    cpu_core_node.add_parameter(Parameter("核心数量", 8, "个", description="CPU核心数量", confidence=1.0))
+    cpu_core_node.add_parameter(Parameter("基础频率", 2.5, "GHz", description="基础运行频率", confidence=0.9, param_type="float"))
+    cpu_core_node.add_parameter(Parameter("核心数量", 8, "个", description="CPU核心数量", confidence=1.0, param_type="int"))
     
     # 最大频率 - 依赖基础频率和工艺
-    max_freq_param = Parameter("最大频率", 3.2, "GHz", description="最大加速频率", confidence=0.8)
+    max_freq_param = Parameter("最大频率", 3.2, "GHz", description="最大加速频率", confidence=0.8, param_type="float")
     max_freq_param.add_dependency(cpu_core_node.parameters[0])  # 基础频率
     max_freq_param.add_dependency(process_node.parameters[1])   # 电压
     max_freq_param.calculation_func = """
@@ -456,12 +458,12 @@ self.confidence = min(base_confidence, voltage_confidence) * 0.95
     
     # 3. 缓存系统节点
     cache_node = Node(name="缓存系统", description="多级缓存参数")
-    cache_node.add_parameter(Parameter("L1缓存", 32, "KB", description="一级缓存大小", confidence=0.95))
-    cache_node.add_parameter(Parameter("L2缓存", 256, "KB", description="二级缓存大小", confidence=0.9))
-    cache_node.add_parameter(Parameter("L3缓存", 16, "MB", description="三级缓存大小", confidence=0.85))
+    cache_node.add_parameter(Parameter("L1缓存", 32, "KB", description="一级缓存大小", confidence=0.95, param_type="int"))
+    cache_node.add_parameter(Parameter("L2缓存", 256, "KB", description="二级缓存大小", confidence=0.9, param_type="int"))
+    cache_node.add_parameter(Parameter("L3缓存", 16, "MB", description="三级缓存大小", confidence=0.85, param_type="int"))
     
     # 总缓存大小 - 依赖各级缓存
-    total_cache_param = Parameter("总缓存", 24.3, "MB", description="总缓存容量", confidence=0.8)
+    total_cache_param = Parameter("总缓存", 24.3, "MB", description="总缓存容量", confidence=0.8, param_type="float")
     total_cache_param.add_dependency(cache_node.parameters[0])  # L1
     total_cache_param.add_dependency(cache_node.parameters[1])  # L2
     total_cache_param.add_dependency(cache_node.parameters[2])  # L3
@@ -492,12 +494,12 @@ self.confidence = math.pow(math.prod(dep_confidences), 1/len(dep_confidences)) *
     
     # 4. 内存控制器节点
     memory_node = Node(name="内存系统", description="内存控制器和带宽")
-    memory_node.add_parameter(Parameter("内存频率", 3200, "MHz", description="DDR4内存频率", confidence=0.9))
-    memory_node.add_parameter(Parameter("内存通道", 2, "个", description="内存通道数量", confidence=1.0))
-    memory_node.add_parameter(Parameter("总线宽度", 64, "bit", description="单通道总线宽度", confidence=1.0))
+    memory_node.add_parameter(Parameter("内存频率", 3200, "MHz", description="DDR4内存频率", confidence=0.9, param_type="int"))
+    memory_node.add_parameter(Parameter("内存通道", 2, "个", description="内存通道数量", confidence=1.0, param_type="int"))
+    memory_node.add_parameter(Parameter("总线宽度", 64, "bit", description="单通道总线宽度", confidence=1.0, param_type="int"))
     
     # 内存带宽 - 依赖频率、通道数和总线宽度
-    bandwidth_param = Parameter("内存带宽", 51.2, "GB/s", description="理论内存带宽", confidence=0.7)
+    bandwidth_param = Parameter("内存带宽", 51.2, "GB/s", description="理论内存带宽", confidence=0.7, param_type="float")
     bandwidth_param.add_dependency(memory_node.parameters[0])  # 频率
     bandwidth_param.add_dependency(memory_node.parameters[1])  # 通道数
     bandwidth_param.add_dependency(memory_node.parameters[2])  # 总线宽度
@@ -524,7 +526,7 @@ self.confidence = 0.7  # 固定70%置信度
     power_node = Node(name="功耗分析", description="芯片功耗计算")
     
     # CPU功耗 - 依赖频率、电压、核心数
-    cpu_power_param = Parameter("CPU功耗", 65, "W", description="CPU总功耗", confidence=0.75)
+    cpu_power_param = Parameter("CPU功耗", 65, "W", description="CPU总功耗", confidence=0.75, param_type="float")
     cpu_power_param.add_dependency(cpu_core_node.parameters[2])  # 最大频率
     cpu_power_param.add_dependency(process_node.parameters[1])   # 电压
     cpu_power_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
@@ -541,7 +543,7 @@ result = capacitance * voltage * voltage * frequency * core_count
     power_node.add_parameter(cpu_power_param)
     
     # 缓存功耗 - 依赖总缓存大小
-    cache_power_param = Parameter("缓存功耗", 8, "W", description="缓存系统功耗", confidence=0.8)
+    cache_power_param = Parameter("缓存功耗", 8, "W", description="缓存系统功耗", confidence=0.8, param_type="float")
     cache_power_param.add_dependency(cache_node.parameters[3])  # 总缓存
     cache_power_param.calculation_func = """
 # 缓存功耗计算
@@ -553,7 +555,7 @@ result = total_cache_mb * 0.33
     power_node.add_parameter(cache_power_param)
     
     # 内存控制器功耗 - 依赖内存带宽
-    memory_power_param = Parameter("内存控制器功耗", 6, "W", description="内存控制器功耗", confidence=0.8)
+    memory_power_param = Parameter("内存控制器功耗", 6, "W", description="内存控制器功耗", confidence=0.8, param_type="float")
     memory_power_param.add_dependency(memory_node.parameters[3])  # 内存带宽
     memory_power_param.calculation_func = """
 # 内存控制器功耗
@@ -565,7 +567,7 @@ result = bandwidth * 0.12
     power_node.add_parameter(memory_power_param)
     
     # 总功耗 - 依赖各个子系统功耗
-    total_power_param = Parameter("总功耗", 85, "W", description="芯片总功耗(TDP)", confidence=0.7)
+    total_power_param = Parameter("总功耗", 85, "W", description="芯片总功耗(TDP)", confidence=0.7, param_type="float")
     total_power_param.add_dependency(power_node.parameters[0])  # CPU功耗
     total_power_param.add_dependency(power_node.parameters[1])  # 缓存功耗
     total_power_param.add_dependency(power_node.parameters[2])  # 内存控制器功耗
@@ -589,7 +591,7 @@ result = cpu_power + cache_power + memory_power + other_power
     performance_node = Node(name="性能分析", description="系统性能指标")
     
     # 单核性能 - 依赖频率和缓存
-    single_core_param = Parameter("单核性能", 2500, "分", description="单核心性能评分", confidence=0.8)
+    single_core_param = Parameter("单核性能", 2500, "分", description="单核心性能评分", confidence=0.8, param_type="int")
     single_core_param.add_dependency(cpu_core_node.parameters[2])  # 最大频率
     single_core_param.add_dependency(cache_node.parameters[2])     # L3缓存
     single_core_param.calculation_func = """
@@ -607,7 +609,7 @@ result = base_score * freq_factor * (0.7 + 0.3 * cache_factor)
     performance_node.add_parameter(single_core_param)
     
     # 多核性能 - 依赖单核性能、核心数、缓存
-    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75)
+    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75, param_type="int")
     multi_core_param.add_dependency(performance_node.parameters[0])  # 单核性能
     multi_core_param.add_dependency(cpu_core_node.parameters[1])     # 核心数量
     multi_core_param.add_dependency(memory_node.parameters[3])       # 内存带宽
@@ -633,7 +635,7 @@ result = single_score * core_count * scaling_efficiency
     thermal_node = Node(name="热设计", description="散热和温度管理")
     
     # 热阻 - 依赖工艺和功耗
-    thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="芯片热阻", confidence=0.7)
+    thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="芯片热阻", confidence=0.7, param_type="float")
     thermal_resistance_param.add_dependency(process_node.parameters[0])  # 工艺节点
     thermal_resistance_param.add_dependency(power_node.parameters[3])    # 总功耗
     thermal_resistance_param.calculation_func = """
@@ -649,7 +651,7 @@ result = base_thermal_resistance * power_factor
     thermal_node.add_parameter(thermal_resistance_param)
     
     # 结温 - 依赖环境温度、功耗、热阻
-    junction_temp_param = Parameter("结温", 70, "°C", description="芯片结点温度", confidence=0.75)
+    junction_temp_param = Parameter("结温", 70, "°C", description="芯片结点温度", confidence=0.75, param_type="int")
     junction_temp_param.add_dependency(process_node.parameters[2])       # 环境温度
     junction_temp_param.add_dependency(power_node.parameters[3])         # 总功耗
     junction_temp_param.add_dependency(thermal_node.parameters[0])       # 热阻
@@ -672,7 +674,7 @@ result = ambient_temp + total_power * thermal_resistance
     cost_node = Node(name="成本分析", description="芯片成本估算")
     
     # 芯片面积 - 依赖工艺、核心数、缓存
-    die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片裸片面积", confidence=0.6)
+    die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片裸片面积", confidence=0.6, param_type="int")
     die_area_param.add_dependency(process_node.parameters[0])    # 工艺节点
     die_area_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
     die_area_param.add_dependency(cache_node.parameters[3])     # 总缓存
@@ -693,7 +695,7 @@ result = (core_area + cache_area + other_area) * process_factor
     cost_node.add_parameter(die_area_param)
     
     # 制造成本 - 依赖面积和工艺
-    manufacturing_cost_param = Parameter("制造成本", 45, "$", description="芯片制造成本", confidence=0.6)
+    manufacturing_cost_param = Parameter("制造成本", 45, "$", description="芯片制造成本", confidence=0.6, param_type="float")
     manufacturing_cost_param.add_dependency(cost_node.parameters[0])     # 芯片面积
     manufacturing_cost_param.add_dependency(process_node.parameters[0])  # 工艺节点
     manufacturing_cost_param.calculation_func = """
@@ -716,7 +718,7 @@ result = area_cost + 5  # 固定成本
     efficiency_node = Node(name="能效分析", description="性能功耗比分析")
     
     # 性能功耗比 - 依赖多核性能和总功耗
-    perf_watt_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.8)
+    perf_watt_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.8, param_type="float")
     perf_watt_param.add_dependency(performance_node.parameters[1])  # 多核性能
     perf_watt_param.add_dependency(power_node.parameters[3])        # 总功耗
     perf_watt_param.calculation_func = """
@@ -730,7 +732,7 @@ result = multi_core_score / total_power
     efficiency_node.add_parameter(perf_watt_param)
     
     # 性价比 - 依赖多核性能和制造成本
-    value_ratio_param = Parameter("性价比", 400, "分/$", description="每美元性能", confidence=0.7)
+    value_ratio_param = Parameter("性价比", 400, "分/$", description="每美元性能", confidence=0.7, param_type="float")
     value_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
     value_ratio_param.add_dependency(cost_node.parameters[1])         # 制造成本
     value_ratio_param.calculation_func = """
@@ -878,6 +880,17 @@ def update_canvas(node_data=None):
                                         },
                                         className="param-pin",
                                         id=f"pin-{node_id}-{param_idx}"
+                                    ),
+                                    # 类型图标
+                                    html.Span(
+                                        {"float": "🔢", "int": "#️⃣", "string": "📝"}.get(param.param_type if hasattr(param, 'param_type') else 'float', "❓"),
+                                        style={
+                                            "fontSize": "12px",
+                                            "marginRight": "4px",
+                                            "opacity": "0.7",
+                                            "flex": "none"
+                                        },
+                                        title=f"类型: {param.param_type if hasattr(param, 'param_type') else '未知'}"
                                     ),
                                     # 参数名输入框
                                     dcc.Input(
@@ -1438,11 +1451,25 @@ app.layout = dbc.Container([
                 dbc.Col([
                     dbc.Label("参数名称:", style={"fontSize": "0.9rem"}),
                     dbc.Input(id="param-edit-name", placeholder="参数名称", style={"fontSize": "0.85rem"})
-                ], width=8),
+                ], width=6),
+                dbc.Col([
+                    dbc.Label("类型:", style={"fontSize": "0.9rem"}),
+                    dcc.Dropdown(
+                        id="param-edit-type",
+                        options=[
+                            {"label": "🔢 浮点数 (float)", "value": "float"},
+                            {"label": "#️⃣ 整数 (int)", "value": "int"},
+                            {"label": "📝 字符串 (string)", "value": "string"}
+                        ],
+                        value="float",
+                        clearable=False,
+                        style={"fontSize": "0.85rem"}
+                    )
+                ], width=3),
                 dbc.Col([
                     dbc.Label("单位:", style={"fontSize": "0.9rem"}),
                     dbc.Input(id="param-edit-unit", placeholder="单位", style={"fontSize": "0.85rem"})
-                ], width=4),
+                ], width=3),
             ], className="mb-3"),
             
             dbc.Row([
@@ -1840,7 +1867,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return result_message, node_data, update_canvas()
         
         elif operation_type == "add-param":
-            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
+            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数", param_type="float")
             
             # 添加参数到节点
             graph.add_parameter_to_node(node_id, param)
@@ -1849,7 +1876,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         
         elif operation_type == "add-param-header":
             # 标题栏加号按钮：添加参数功能，与下拉菜单中的"添加参数"功能相同
-            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数")
+            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数", param_type="float")
             
             # 添加参数到节点
             graph.add_parameter_to_node(node_id, param)
@@ -2012,17 +2039,40 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
                 print(f"📌 参数名无变化，跳过更新: {new_value}")
                 return node_data, dash.no_update, dash.no_update, dash.no_update
         elif param_type == "param-value":
-            # 更新参数值
+            # 更新参数值 - 要求明确的类型信息
+            if not hasattr(current_param, 'param_type'):
+                print(f"❌ 参数 {current_param.name} 缺少类型信息")
+                return node_data, dash.no_update, f"❌ 参数 '{current_param.name}' 缺少类型信息，无法更新", dash.no_update
+            
+            param_data_type = current_param.param_type
+            
             try:
                 if new_value is not None and new_value != "":
-                    if isinstance(new_value, str) and '.' in new_value:
+                    if param_data_type == "string":
+                        # 字符串类型 - 保持原始字符串值
+                        new_value = str(new_value)
+                    elif param_data_type == "float":
+                        # 浮点数类型 - 转换为浮点数
                         new_value = float(new_value)
-                    elif isinstance(new_value, str):
+                    elif param_data_type == "int":
+                        # 整数类型 - 转换为整数
                         new_value = int(new_value)
+                    else:
+                        print(f"❌ 不支持的参数类型: {param_data_type}")
+                        return node_data, dash.no_update, f"❌ 不支持的参数类型: {param_data_type}", dash.no_update
                 else:
-                    new_value = 0
+                    # 空值处理
+                    if param_data_type == "string":
+                        new_value = ""
+                    else:
+                        new_value = 0
             except (ValueError, TypeError):
-                new_value = str(new_value) if new_value is not None else ""
+                # 类型转换失败的处理
+                if param_data_type == "string":
+                    new_value = str(new_value) if new_value is not None else ""
+                else:
+                    print(f"⚠️ 参数值类型转换失败: {new_value} -> {param_data_type}")
+                    return node_data, dash.no_update, f"❌ 参数值 '{new_value}' 无法转换为 {param_data_type} 类型", dash.no_update
             
             # 检查参数值是否真的有变化
             if new_value == current_param.value:
@@ -2194,6 +2244,7 @@ def handle_unlink_toggle(unlink_clicks, node_data):
     Output("param-edit-modal", "is_open"),
     Output("param-edit-title", "children"),
     Output("param-edit-name", "value"),
+    Output("param-edit-type", "value"),
     Output("param-edit-value-display", "children"),
     Output("param-edit-unit", "value"),
     Output("param-edit-description", "value"),
@@ -2250,6 +2301,7 @@ def open_param_edit_modal(edit_clicks, is_open):
             True,  # 打开模态窗口
             f"编辑参数: {node_name}.{param.name}",
             param.name,
+            param.param_type if hasattr(param, 'param_type') else 'float',  # 参数类型，必须存在
             f"{param.value} {param.unit}",  # 显示值和单位
             param.unit,
             param.description,
@@ -2371,6 +2423,7 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
     Output("output-result", "children", allow_duplicate=True),
     Input("param-edit-save", "n_clicks"),
     State("param-edit-name", "value"),
+    State("param-edit-type", "value"),
     State("param-edit-unit", "value"),
     State("param-edit-description", "value"),
     State("param-edit-calculation", "value"),
@@ -2380,7 +2433,7 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def save_parameter_changes(save_clicks, param_name, param_unit, param_description, 
+def save_parameter_changes(save_clicks, param_name, param_type, param_unit, param_description, 
                           calculation_code, checkbox_values, checkbox_ids, 
                           edit_data, node_data):
     if not save_clicks:
@@ -2443,6 +2496,7 @@ def save_parameter_changes(save_clicks, param_name, param_unit, param_descriptio
         
         # 更新参数基本信息
         param.name = param_name.strip()
+        param.param_type = param_type if param_type else "float"  # 更新参数类型
         param.unit = param_unit.strip() if param_unit else ""
         param.description = param_description.strip() if param_description else ""
         
