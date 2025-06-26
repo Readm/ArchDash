@@ -1267,3 +1267,55 @@ body > div[class*="menu"] {
 .sensitivity-analysis-container .tooltip-inner {
   font-size: 0.7rem !important;
 }
+
+/* 箭头动画样式 */
+@keyframes flow-dash {
+  0% {
+    stroke-dashoffset: 10;
+  }
+  100% {
+    stroke-dashoffset: -10;
+  }
+}
+
+@keyframes pulse-glow {
+  0% {
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  100% {
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+}
+
+@keyframes arrow-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 箭头容器样式优化 */
+#arrows-overlay-dynamic {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: visible;
+}
+
+/* SVG箭头路径默认样式 */
+#arrows-overlay-dynamic svg path {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 箭头hover状态增强 */
+#arrows-overlay-dynamic svg path:hover {
+  filter: drop-shadow(0 0 4px currentColor);
+}

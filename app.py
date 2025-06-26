@@ -2883,11 +2883,21 @@ app.clientside_callback(
                                 var pathData;
                                 
                                 if (useCurve) {
-                                    // 使用三次贝塞尔曲线
-                                    var cp1x = x1 + Math.abs(dx) * 0.3;
+                                    // 修复：正确计算贝塞尔曲线控制点
+                                    // 控制点应该在连线方向上偏移，而不是总是向右偏移
+                                    var offsetX = dx * 0.3; // 保持dx的符号，确保控制点在正确方向
+                                    var cp1x = x1 + offsetX;
                                     var cp1y = y1;
-                                    var cp2x = x2 - Math.abs(dx) * 0.3;
+                                    var cp2x = x2 - offsetX;
                                     var cp2y = y2;
+                                    
+                                    // 对于水平线，添加一点垂直偏移让曲线更明显
+                                    if (Math.abs(dy) < 1) {
+                                        var verticalOffset = Math.min(Math.abs(dx) * 0.1, 20); // 最大20像素的垂直偏移
+                                        cp1y = y1 - verticalOffset;
+                                        cp2y = y2 - verticalOffset;
+                                    }
+                                    
                                     pathData = 'M' + x1 + ',' + y1 + ' C' + cp1x + ',' + cp1y + ' ' + cp2x + ',' + cp2y + ' ' + x2 + ',' + y2;
                                 } else {
                                     // 使用直线
