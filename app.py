@@ -1884,6 +1884,24 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return f"参数已添加到节点 {node_name}", node_data, update_canvas()
         
         elif operation_type == "delete-node":
+            # 检查节点的参数是否被其他参数依赖
+            has_dependents, dependent_info = check_node_has_dependents(node_id)
+            
+            if has_dependents:
+                # 构建详细的错误消息
+                affected_params = dependent_info["affected_node_params"]
+                dependent_params = dependent_info["dependent_params"]
+                
+                error_message = f"❌ 无法删除节点 {node_name}，因为该节点的以下参数被其他参数依赖：\n"
+                
+                # 按被依赖的参数分组显示信息
+                for affected_param in affected_params:
+                    deps_for_param = [dep for dep in dependent_params if dep["depends_on"] == affected_param]
+                    dep_info_list = [f"{dep['node_name']}.{dep['param_name']}" for dep in deps_for_param]
+                    error_message += f"• {affected_param} 被依赖于：{', '.join(dep_info_list)}\n"
+                
+                return error_message, node_data, update_canvas()
+            
             # 从布局管理器移除节点
             layout_manager.remove_node(node_id)
             # 从计算图移除节点
@@ -1893,7 +1911,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             if hasattr(id_mapper, '_node_mapping') and node_id in id_mapper._node_mapping:
                 del id_mapper._node_mapping[node_id]
             
-            result_message = f"节点 {node_name} 已删除"
+            result_message = f"✅ 节点 {node_name} 已删除"
             # 删除节点后检查并自动删除空的最后一列，但保持至少3列
             auto_remove_result = auto_remove_empty_last_column()
             if auto_remove_result:
@@ -2131,6 +2149,7 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
 @callback(
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
     Input({"type": "delete-param", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-up", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-down", "node": ALL, "index": ALL}, "n_clicks"),
@@ -2139,11 +2158,11 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
 )
 def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data):
     if not ctx.triggered_id:
-        return node_data, update_canvas()
+        return node_data, update_canvas(), dash.no_update
     
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, update_canvas()
+        return node_data, update_canvas(), dash.no_update
     
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
@@ -2152,26 +2171,41 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     # 检查点击数值，避免初始化时的误触发
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, update_canvas()
+        return node_data, update_canvas(), dash.no_update
     
     if not node_id or param_index is None:
-        return node_data, update_canvas()
+        return node_data, update_canvas(), dash.no_update
     
     # 获取节点
     node = graph.nodes.get(node_id)
     if not node:
-        return node_data, update_canvas()
+        return node_data, update_canvas(), dash.no_update
         
     if param_index >= len(node.parameters):
-        return node_data, update_canvas()
+        return node_data, update_canvas(), dash.no_update
     
     node_name = id_mapper.get_node_name(node_id)
     param_name = node.parameters[param_index].name
     
     if operation_type == "delete-param":
+        # 检查参数是否被其他参数依赖
+        param_to_delete = node.parameters[param_index]
+        has_dependents, dependent_list = check_parameter_has_dependents(param_to_delete)
+        
+        if has_dependents:
+            # 构建依赖信息的错误消息
+            dependent_info = []
+            for dep in dependent_list:
+                dependent_info.append(f"{dep['node_name']}.{dep['param_name']}")
+            
+            error_message = f"❌ 无法删除参数 {node_name}.{param_name}，因为以下参数依赖于它：\n{', '.join(dependent_info)}"
+            return node_data, update_canvas(), error_message
+        
         # 删除参数
         deleted_param = node.parameters.pop(param_index)
-        # 可以添加一个静默的操作记录（如果需要）
+        success_message = f"✅ 参数 {node_name}.{param_name} 已删除"
+        
+        return node_data, update_canvas(), success_message
         
     elif operation_type == "move-param-up":
         # 上移参数
@@ -2186,7 +2220,7 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
                 node.parameters[param_index + 1], node.parameters[param_index]
     
     # 参数操作完成，只更新数据和画布，不影响任何其他UI组件
-    return node_data, update_canvas()
+    return node_data, update_canvas(), dash.no_update
 
 # 处理unlink图标点击的回调函数
 @callback(
@@ -4332,6 +4366,74 @@ def update_remove_button_status(canvas_children):
     # 检查是否可以删除列
     can_remove, _ = column_manager.can_remove_column()
     return not can_remove
+
+# 添加依赖检查工具函数
+def check_parameter_has_dependents(param_obj):
+    """检查参数是否被其他参数依赖
+    
+    Args:
+        param_obj: 要检查的参数对象
+        
+    Returns:
+        tuple: (has_dependents: bool, dependent_list: list)
+            has_dependents: 是否有其他参数依赖此参数
+            dependent_list: 依赖此参数的参数列表，格式为[{"node_name": str, "param_name": str, "param_obj": Parameter}, ...]
+    """
+    dependent_list = []
+    
+    # 遍历所有节点和参数，查找依赖关系
+    for node_id, node in graph.nodes.items():
+        node_name = id_mapper.get_node_name(node_id)
+        
+        for param in node.parameters:
+            if param_obj in param.dependencies:
+                dependent_list.append({
+                    "node_name": node_name,
+                    "param_name": param.name,
+                    "param_obj": param
+                })
+    
+    return len(dependent_list) > 0, dependent_list
+
+def check_node_has_dependents(node_id):
+    """检查节点的所有参数是否被其他参数依赖
+    
+    Args:
+        node_id: 要检查的节点ID
+        
+    Returns:
+        tuple: (has_dependents: bool, dependent_info: dict)
+            has_dependents: 是否有其他参数依赖此节点的参数
+            dependent_info: 依赖信息字典，格式为 {
+                "dependent_params": [{"node_name": str, "param_name": str, "depends_on": str}, ...],
+                "affected_node_params": [str, ...]  # 本节点中被依赖的参数名列表
+            }
+    """
+    if node_id not in graph.nodes:
+        return False, {"dependent_params": [], "affected_node_params": []}
+    
+    node = graph.nodes[node_id]
+    dependent_params = []
+    affected_node_params = []
+    
+    # 检查该节点的每个参数是否被其他参数依赖
+    for param in node.parameters:
+        has_deps, dep_list = check_parameter_has_dependents(param)
+        if has_deps:
+            affected_node_params.append(param.name)
+            for dep_info in dep_list:
+                dependent_params.append({
+                    "node_name": dep_info["node_name"],
+                    "param_name": dep_info["param_name"],
+                    "depends_on": param.name
+                })
+    
+    dependent_info = {
+        "dependent_params": dependent_params,
+        "affected_node_params": affected_node_params
+    }
+    
+    return len(dependent_params) > 0, dependent_info
 
 if __name__ == "__main__":
     import argparse
