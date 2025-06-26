@@ -32,7 +32,7 @@ class IDMapper:
 
     def get_node_name(self, node_id: str) -> str:
         """获取节点名称"""
-        return self._node_mapping[node_id]["name"]
+        return self._node_mapping.get(node_id, {}).get("name", "")
 
     def get_node_id_from_dash(self, dash_id: Dict) -> Optional[str]:
         """从 Dash ID 获取节点 ID"""
@@ -599,31 +599,27 @@ result = cpu_power + cache_power + memory_power + other_power
 frequency = dependencies[0].value  # 最大频率 GHz
 l3_cache = dependencies[1].value   # L3缓存 MB
 
-# 性能基准：3GHz + 16MB L3 = 2500分
-base_score = 2500
-freq_factor = frequency / 3.0      # 频率因子
-cache_factor = l3_cache / 16.0     # 缓存因子
+# 性能评分 = 基础分 × 频率因子 × 缓存因子
+base_score = 1000
+freq_factor = frequency / 2.5  # 相对于2.5GHz的提升
+cache_factor = (l3_cache + 8) / 24  # 相对于16MB缓存的提升
 
-result = base_score * freq_factor * (0.7 + 0.3 * cache_factor)
+result = int(base_score * freq_factor * cache_factor)
 """
     performance_node.add_parameter(single_core_param)
     
-    # 多核性能 - 依赖单核性能、核心数、缓存
-    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75, param_type="int")
+    # 多核性能 - 依赖单核性能和核心数
+    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75, param_type="float")
     multi_core_param.add_dependency(performance_node.parameters[0])  # 单核性能
     multi_core_param.add_dependency(cpu_core_node.parameters[1])     # 核心数量
-    multi_core_param.add_dependency(memory_node.parameters[3])       # 内存带宽
     multi_core_param.calculation_func = """
 # 多核性能计算
-single_score = dependencies[0].value    # 单核性能
-core_count = dependencies[1].value      # 核心数量
-bandwidth = dependencies[2].value       # 内存带宽
+single_core = dependencies[0].value  # 单核性能
+core_count = dependencies[1].value   # 核心数量
 
-# 多核扩展效率受内存带宽限制
-bandwidth_factor = min(1.0, bandwidth / 30.0)  # 30GB/s为理想带宽
-scaling_efficiency = 0.8 + 0.2 * bandwidth_factor
-
-result = single_score * core_count * scaling_efficiency
+# 多核性能 = 单核性能 × 核心数 × 并行效率
+parallel_efficiency = 0.9  # 90%的并行效率
+result = single_core * core_count * parallel_efficiency
 """
     performance_node.add_parameter(multi_core_param)
     
@@ -631,38 +627,43 @@ result = single_score * core_count * scaling_efficiency
     id_mapper.register_node(performance_node.id, performance_node.name)
     layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
-    # 7. 热设计功耗节点
-    thermal_node = Node(name="热设计", description="散热和温度管理")
+    # 7. 热设计节点
+    thermal_node = Node(name="热设计", description="散热和温度分析")
     
     # 热阻 - 依赖工艺和功耗
-    thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="芯片热阻", confidence=0.7, param_type="float")
+    thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="散热器热阻", confidence=0.85, param_type="float")
     thermal_resistance_param.add_dependency(process_node.parameters[0])  # 工艺节点
     thermal_resistance_param.add_dependency(power_node.parameters[3])    # 总功耗
     thermal_resistance_param.calculation_func = """
 # 热阻计算
-process_nm = dependencies[0].value    # 工艺节点
-total_power = dependencies[1].value   # 总功耗
+process_node = dependencies[0].value  # 工艺节点 nm
+total_power = dependencies[1].value   # 总功耗 W
 
-# 先进工艺热阻更低，功耗越高热阻相对增加
-base_thermal_resistance = 1.2 - (28 - process_nm) * 0.015
-power_factor = 1 + (total_power - 65) * 0.002
-result = base_thermal_resistance * power_factor
+# 热阻基值
+base_resistance = 0.8
+
+# 工艺越小，热密度越大，需要更好的散热（更低的热阻）
+process_factor = (7 / process_node) ** 0.5
+
+# 功耗越大，需要更好的散热
+power_factor = (85 / total_power) ** 0.3
+
+result = base_resistance * process_factor * power_factor
 """
     thermal_node.add_parameter(thermal_resistance_param)
     
-    # 结温 - 依赖环境温度、功耗、热阻
-    junction_temp_param = Parameter("结温", 70, "°C", description="芯片结点温度", confidence=0.75, param_type="int")
-    junction_temp_param.add_dependency(process_node.parameters[2])       # 环境温度
-    junction_temp_param.add_dependency(power_node.parameters[3])         # 总功耗
-    junction_temp_param.add_dependency(thermal_node.parameters[0])       # 热阻
+    # 结温 - 依赖热阻和总功耗
+    junction_temp_param = Parameter("结温", 70, "°C", description="芯片结温", confidence=0.8, param_type="float")
+    junction_temp_param.add_dependency(thermal_node.parameters[0])  # 热阻
+    junction_temp_param.add_dependency(power_node.parameters[3])    # 总功耗
     junction_temp_param.calculation_func = """
 # 结温计算
-ambient_temp = dependencies[0].value      # 环境温度
-total_power = dependencies[1].value       # 总功耗
-thermal_resistance = dependencies[2].value # 热阻
+thermal_resistance = dependencies[0].value  # 热阻 °C/W
+total_power = dependencies[1].value         # 总功耗 W
 
-# 结温 = 环境温度 + 功耗 × 热阻
-result = ambient_temp + total_power * thermal_resistance
+# 结温 = 环境温度 + 热阻 × 功耗
+ambient_temp = 25  # 环境温度25°C
+result = ambient_temp + thermal_resistance * total_power
 """
     thermal_node.add_parameter(junction_temp_param)
     
@@ -671,42 +672,44 @@ result = ambient_temp + total_power * thermal_resistance
     layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
     
     # 8. 成本分析节点
-    cost_node = Node(name="成本分析", description="芯片成本估算")
+    cost_node = Node(name="成本分析", description="芯片成本分析")
     
-    # 芯片面积 - 依赖工艺、核心数、缓存
-    die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片裸片面积", confidence=0.6, param_type="int")
-    die_area_param.add_dependency(process_node.parameters[0])    # 工艺节点
-    die_area_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
-    die_area_param.add_dependency(cache_node.parameters[3])     # 总缓存
+    # 芯片面积 - 依赖工艺和总缓存
+    die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片核心面积", confidence=0.85, param_type="float")
+    die_area_param.add_dependency(process_node.parameters[0])  # 工艺节点
+    die_area_param.add_dependency(cache_node.parameters[3])    # 总缓存
     die_area_param.calculation_func = """
 # 芯片面积计算
-process_nm = dependencies[0].value    # 工艺节点
-core_count = dependencies[1].value    # 核心数量
-total_cache = dependencies[2].value   # 总缓存
+process_node = dependencies[0].value  # 工艺节点 nm
+total_cache = dependencies[1].value   # 总缓存 MB
 
-# 基础面积模型（7nm基准）
-process_factor = (process_nm / 7.0) ** 2  # 面积与工艺平方成反比
-core_area = core_count * 15  # 每核心约15mm²
-cache_area = total_cache * 2.5  # 每MB缓存约2.5mm²
-other_area = 50  # 其他逻辑面积
+# 基础面积
+base_area = 100  # mm²
 
-result = (core_area + cache_area + other_area) * process_factor
+# 工艺缩放
+process_factor = (7 / process_node) ** 2
+
+# 缓存面积（每MB约12mm²@7nm）
+cache_area = total_cache * 12 * process_factor
+
+result = (base_area + cache_area) * 1.2  # 20%余量
 """
     cost_node.add_parameter(die_area_param)
     
-    # 制造成本 - 依赖面积和工艺
-    manufacturing_cost_param = Parameter("制造成本", 45, "$", description="芯片制造成本", confidence=0.6, param_type="float")
-    manufacturing_cost_param.add_dependency(cost_node.parameters[0])     # 芯片面积
-    manufacturing_cost_param.add_dependency(process_node.parameters[0])  # 工艺节点
+    # 制造成本 - 依赖面积
+    manufacturing_cost_param = Parameter("制造成本", 45, "美元", description="芯片制造成本", confidence=0.8, param_type="float")
+    manufacturing_cost_param.add_dependency(cost_node.parameters[0])  # 芯片面积
     manufacturing_cost_param.calculation_func = """
 # 制造成本计算
-die_area = dependencies[0].value      # 芯片面积
-process_nm = dependencies[1].value    # 工艺节点
+die_area = dependencies[0].value  # 芯片面积 mm²
 
-# 先进工艺成本更高，面积越大成本越高
-process_cost_factor = (7.0 / process_nm) ** 1.5  # 先进工艺成本指数增长
-area_cost = die_area * 0.2 * process_cost_factor  # 每mm²基础成本
-result = area_cost + 5  # 固定成本
+# 每平方毫米成本（考虑良率等因素）
+cost_per_mm2 = 0.25  # 美元/mm²
+
+# 考虑封装和测试成本
+packaging_cost = 5  # 美元
+
+result = die_area * cost_per_mm2 + packaging_cost
 """
     cost_node.add_parameter(manufacturing_cost_param)
     
@@ -717,53 +720,46 @@ result = area_cost + 5  # 固定成本
     # 9. 能效分析节点
     efficiency_node = Node(name="能效分析", description="性能功耗比分析")
     
-    # 性能功耗比 - 依赖多核性能和总功耗
-    perf_watt_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.8, param_type="float")
-    perf_watt_param.add_dependency(performance_node.parameters[1])  # 多核性能
-    perf_watt_param.add_dependency(power_node.parameters[3])        # 总功耗
-    perf_watt_param.calculation_func = """
+    # 性能功耗比
+    perf_power_ratio_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.75, param_type="float")
+    perf_power_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
+    perf_power_ratio_param.add_dependency(power_node.parameters[3])        # 总功耗
+    perf_power_ratio_param.calculation_func = """
 # 性能功耗比计算
-multi_core_score = dependencies[0].value  # 多核性能
-total_power = dependencies[1].value        # 总功耗
+performance = dependencies[0].value  # 多核性能分
+total_power = dependencies[1].value  # 总功耗 W
 
-# 每瓦性能 = 总性能 / 总功耗
-result = multi_core_score / total_power
+result = performance / total_power
 """
-    efficiency_node.add_parameter(perf_watt_param)
+    efficiency_node.add_parameter(perf_power_ratio_param)
     
-    # 性价比 - 依赖多核性能和制造成本
-    value_ratio_param = Parameter("性价比", 400, "分/$", description="每美元性能", confidence=0.7, param_type="float")
-    value_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
-    value_ratio_param.add_dependency(cost_node.parameters[1])         # 制造成本
-    value_ratio_param.calculation_func = """
+    # 性价比
+    cost_performance_ratio_param = Parameter("性价比", 400, "分/美元", description="每美元性能", confidence=0.7, param_type="float")
+    cost_performance_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
+    cost_performance_ratio_param.add_dependency(cost_node.parameters[1])         # 制造成本
+    cost_performance_ratio_param.calculation_func = """
 # 性价比计算
-multi_core_score = dependencies[0].value  # 多核性能
-manufacturing_cost = dependencies[1].value # 制造成本
+performance = dependencies[0].value  # 多核性能分
+cost = dependencies[1].value        # 制造成本 美元
 
-# 每美元性能 = 总性能 / 制造成本
-result = multi_core_score / manufacturing_cost
+result = performance / cost
 """
-    efficiency_node.add_parameter(value_ratio_param)
+    efficiency_node.add_parameter(cost_performance_ratio_param)
     
     graph.add_node(efficiency_node)
     id_mapper.register_node(efficiency_node.id, efficiency_node.name)
     layout_manager.place_node(efficiency_node.id, GridPosition(2, 2))
     
-    # 触发所有参数的计算以建立完整的依赖关系
+    # 为所有参数设置计算图引用
     for node in graph.nodes.values():
         for param in node.parameters:
-            if param.calculation_func and param.dependencies:
-                try:
-                    param.calculate()
-                except Exception as e:
-                    print(f"计算参数 {param.name} 时出错: {e}")
+            param.set_graph(graph)
     
+    # 返回创建结果
     return {
         "nodes_created": len(graph.nodes),
         "total_params": sum(len(node.parameters) for node in graph.nodes.values()),
-        "calculated_params": sum(1 for node in graph.nodes.values() 
-                               for param in node.parameters 
-                               if param.calculation_func and param.dependencies)
+        "calculated_params": sum(1 for node in graph.nodes.values() for param in node.parameters if param.calculation_func)
     }
 
 # 画布更新函数 - 使用新的布局管理器

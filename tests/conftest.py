@@ -76,4 +76,28 @@ def pytest_setup_options():
 
 # dash-testing已经提供了内置的无头模式支持
 # 使用 pytest --headless 来启用无头模式
-# 这是dash-testing官方推荐的方式 
+# 这是dash-testing官方推荐的方式
+
+def pytest_configure(config):
+    """
+    Called before tests are collected.
+    """
+    is_ci = os.environ.get('TEST_ENV') == 'CI'
+    if is_ci:
+        # CI环境特定配置
+        os.environ['NO_BROWSER'] = '1'
+        os.environ['DASH_TEST_CHROMEPATH'] = ''  # 使用无头Chrome
+        os.environ['DASH_TESTING_MODE'] = 'True'
+
+@pytest.fixture(scope='session')
+def dash_thread_server():
+    """
+    启动测试服务器的fixture
+    """
+    is_ci = os.environ.get('TEST_ENV') == 'CI'
+    options = {'headless': True} if is_ci else {}
+    
+    with pytest.warns(UserWarning):
+        app = import_app('app')
+    
+    yield app.server 
