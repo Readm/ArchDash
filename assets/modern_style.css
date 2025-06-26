@@ -109,7 +109,6 @@ h1 {
 }
 
 .card:hover {
-  transform: translateY(-5px);
   box-shadow: var(--shadow-hover);
   border-color: var(--accent-primary);
 }
@@ -126,6 +125,7 @@ h1 {
   overflow: visible;
   margin: 4px;
   z-index: 1;
+  font-size: 0.8rem;
 }
 
 .node-container::before {
@@ -142,7 +142,6 @@ h1 {
 }
 
 .node-container:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
   border-color: var(--accent-primary);
 }
@@ -155,7 +154,7 @@ h1 {
 .btn {
   border-radius: 4px;
   font-weight: 400;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   padding: 0.4rem 1rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -192,7 +191,6 @@ h1 {
 .btn-primary:hover {
   background: var(--accent-secondary);
   border-color: var(--accent-secondary);
-  transform: translateY(-1px);
   box-shadow: var(--shadow-hover);
 }
 
@@ -285,7 +283,7 @@ h1 {
   border: 1px solid var(--glass-border);
   border-radius: 2px;
   padding: 0.3rem 0.5rem;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   transition: all 0.3s ease;
   width: 100%;
 }
@@ -330,7 +328,6 @@ h1 {
 }
 
 .param-pin:hover {
-  transform: scale(1.1);
   box-shadow: var(--shadow-hover);
 }
 
@@ -354,7 +351,7 @@ h1 {
   padding: 0.5rem 0.75rem;
   transition: all 0.2s ease;
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   border: none;
   background: none;
 }
@@ -362,7 +359,6 @@ h1 {
 .dropdown-item:hover {
   background: rgba(108, 117, 125, 0.1);
   color: var(--accent-primary);
-  transform: translateX(2px);
 }
 
 /* 下拉菜单触发器 */
@@ -380,13 +376,6 @@ h1 {
   z-index: 99999 !important;
 }
 
-/* 节点下拉菜单特殊样式 */
-.node-container .dropdown-menu {
-  position: fixed !important;
-  z-index: 99999 !important;
-  transform: none !important;
-}
-
 /* 活跃节点z-index */
 .node-container:has(.dropdown-menu.show) {
   z-index: 10000 !important;
@@ -397,24 +386,18 @@ h1 {
   position: relative;
 }
 
-.node-container.dropdown-active .dropdown-menu {
-  z-index: 99999 !important;
-  position: fixed !important;
-}
-
 /* 全局下拉菜单样式 */
 body > .dropdown-menu {
   z-index: 99999 !important;
 }
 
 .dropdown-menu.show {
-  animation: fadeInScale 0.2s ease-out;
   z-index: 99999 !important;
 }
 
 @keyframes fadeInScale {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .dropdown.show {
@@ -541,7 +524,6 @@ body > .dropdown-menu {
 }
 
 .theme-toggle:hover {
-  transform: scale(1.1) rotate(180deg);
   box-shadow: 0 6px 20px rgba(108, 92, 231, 0.5);
 }
 
@@ -572,11 +554,9 @@ body > .dropdown-menu {
 @keyframes fadeIn {
   from { 
     opacity: 0; 
-    transform: translateY(20px); 
   }
   to { 
     opacity: 1; 
-    transform: translateY(0); 
   }
 }
 
@@ -588,11 +568,9 @@ body > .dropdown-menu {
 @keyframes nodeEntrance {
   0% { 
     opacity: 0; 
-    transform: scale(0.3) rotate(180deg); 
   }
   100% { 
     opacity: 1; 
-    transform: scale(1) rotate(0deg); 
   }
 }
 
@@ -614,8 +592,8 @@ body > .dropdown-menu {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
 }
 
 /* 表格现代化 - 扁平化圆角 */
@@ -647,7 +625,6 @@ body > .dropdown-menu {
 
 .table tbody tr:hover {
   background: rgba(108, 92, 231, 0.1);
-  transform: translateX(5px);
   transition: all 0.3s ease;
 }
 
@@ -689,7 +666,6 @@ body > .dropdown-menu {
 
 .node-section:hover {
   background: linear-gradient(135deg, rgba(147, 51, 234, 0.12) 0%, rgba(147, 51, 234, 0.06) 100%);
-  transform: translateY(-2px);
 }
 
 .canvas-section {
@@ -701,7 +677,6 @@ body > .dropdown-menu {
 
 .canvas-section:hover {
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0.06) 100%);
-  transform: translateY(-2px);
 }
 
 /* 区域分隔线 */
@@ -733,7 +708,7 @@ body > .dropdown-menu {
 }
 
 .section-label:hover {
-  transform: translateY(-1px);
+  opacity: 0.8;
 }
 
 .section-label.node-label {
@@ -830,7 +805,60 @@ body > .dropdown-menu {
 .section-hint:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.05);
-  transform: translateX(3px);
+}
+
+/* 添加节点按钮特殊样式 */
+.add-node-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative;
+  overflow: hidden;
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-secondary) !important;
+}
+
+.add-node-btn:hover {
+  background: rgba(40, 167, 69, 0.1) !important;
+  color: #28a745 !important;
+  box-shadow: 0 4px 16px rgba(40, 167, 69, 0.2) !important;
+}
+
+.add-node-btn:active {
+  background: rgba(40, 167, 69, 0.2) !important;
+}
+
+.add-node-btn:focus {
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.25) !important;
+  outline: none !important;
+}
+
+.add-node-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(40, 167, 69, 0.2) 0%, transparent 70%);
+  transition: all 0.4s ease;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.add-node-btn:hover::before {
+  width: 40px;
+  height: 40px;
+}
+
+/* 图标动画 */
+.add-node-btn span {
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+.add-node-btn:hover span {
+  opacity: 0.8;
 }
 
 /* 移动端适配 */
@@ -853,11 +881,22 @@ body > .dropdown-menu {
     font-size: 0.7rem;
     padding: 0.2rem 0.6rem;
   }
+  
+  .add-node-btn {
+    min-width: 28px !important;
+    height: 28px !important;
+  }
+  
+  .add-node-btn span {
+    font-size: 14px !important;
+  }
 }
 
 /* 依赖关系面板样式 - 扁平化圆角 */
 .dependencies-panel {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1 !important;
+  position: relative;
 }
 
 .dependencies-panel .card-header {
@@ -877,7 +916,6 @@ body > .dropdown-menu {
 }
 
 .collapse-btn:hover {
-  transform: scale(1.05);
   background: rgba(255, 255, 255, 0.2);
 }
 
@@ -944,4 +982,340 @@ body > .dropdown-menu {
 
 .dependencies-header:hover::before {
   left: 100%;
+}
+
+/* 断开连接图标样式 */
+.unlink-icon {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  position: relative;
+}
+
+.unlink-icon:hover {
+  opacity: 1 !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* 断开连接图标的状态指示 */
+.unlink-icon[title*="重新连接"] {
+  color: #dc3545;
+  animation: unlinkPulse 2s infinite;
+}
+
+.unlink-icon[title*="已连接"] {
+  color: #28a745;
+}
+
+@keyframes unlinkPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* 相关性分析下拉菜单优先级提升 - 使用绝对定位不影响布局 */
+#x-param-selector .Select-menu-outer,
+#y-param-selector .Select-menu-outer,
+#analysis-param-selector .Select-menu-outer,
+#x-param-selector .css-26l3qy-menu,
+#y-param-selector .css-26l3qy-menu,
+#analysis-param-selector .css-26l3qy-menu,
+#x-param-selector .css-1n7v3ny-option,
+#y-param-selector .css-1n7v3ny-option,
+#analysis-param-selector .css-1n7v3ny-option,
+#x-param-selector div[class*="menu"],
+#y-param-selector div[class*="menu"],
+#analysis-param-selector div[class*="menu"],
+#x-param-selector div[class*="option"],
+#y-param-selector div[class*="option"],
+#analysis-param-selector div[class*="option"] {
+  z-index: 99999 !important;
+}
+
+/* Dash下拉菜单通用样式 */
+.dash-dropdown .Select-menu-outer,
+.dash-dropdown .css-26l3qy-menu {
+  z-index: 99999 !important;
+}
+
+/* 相关性分析Card的z-index提升 */
+.glass-card:has(#x-param-selector, #y-param-selector, #analysis-param-selector) {
+  z-index: 200;
+}
+
+/* 相关性分析区域内的所有下拉组件 */
+.glass-card:has(#x-param-selector) .Select-control,
+.glass-card:has(#y-param-selector) .Select-control,
+.glass-card:has(#analysis-param-selector) .Select-control {
+  z-index: 10000;
+}
+
+/* Bootstrap下拉菜单的z-index处理 */
+.dropdown-menu {
+  z-index: 1000 !important;
+}
+
+/* 依赖关系面板的下拉菜单 */
+.dependencies-panel .dropdown-menu {
+  z-index: 1000 !important;
+}
+
+
+
+/* Dash下拉菜单的z-index处理 */
+.Select-menu-outer {
+  z-index: 1000 !important;
+}
+
+/* React-Select组件的z-index处理 */
+.css-26l3qy-menu {
+  z-index: 1000 !important;
+}
+
+/* 为相关性分析参数选择器提升z-index */
+#x-param-selector,
+#y-param-selector,
+#analysis-param-selector {
+  z-index: 100000 !important;
+}
+
+/* 确保相关性分析下拉菜单容器有足够高的z-index */
+#x-param-selector > div,
+#y-param-selector > div,
+#analysis-param-selector > div {
+  z-index: 100000 !important;
+}
+
+/* 下拉菜单z-index处理 */
+#x-param-selector .Select-menu,
+#y-param-selector .Select-menu,
+#analysis-param-selector .Select-menu,
+#x-param-selector [class*="menu"],
+#y-param-selector [class*="menu"],
+#analysis-param-selector [class*="menu"] {
+  z-index: 999999 !important;
+}
+
+
+
+
+
+/* 下拉菜单选项背景色修复 */
+#x-param-selector .Select-option,
+#y-param-selector .Select-option,
+#analysis-param-selector .Select-option,
+#x-param-selector div[class*="option"],
+#y-param-selector div[class*="option"],
+#analysis-param-selector div[class*="option"] {
+  background: white !important;
+  color: var(--text-primary) !important;
+  padding: 8px 12px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  transition: background-color 0.2s ease !important;
+}
+
+/* 下拉菜单选项悬停效果 */
+#x-param-selector .Select-option:hover,
+#y-param-selector .Select-option:hover,
+#analysis-param-selector .Select-option:hover,
+#x-param-selector div[class*="option"]:hover,
+#y-param-selector div[class*="option"]:hover,
+#analysis-param-selector div[class*="option"]:hover {
+  background: #f8f9fa !important;
+  color: var(--text-primary) !important;
+}
+
+/* 下拉菜单选项选中状态 */
+#x-param-selector .Select-option.is-selected,
+#y-param-selector .Select-option.is-selected,
+#analysis-param-selector .Select-option.is-selected,
+#x-param-selector div[class*="option"].is-selected,
+#y-param-selector div[class*="option"].is-selected,
+#analysis-param-selector div[class*="option"].is-selected {
+  background: var(--accent-primary) !important;
+  color: white !important;
+}
+
+/* React-Select现代类名支持 */
+#x-param-selector .css-1n7v3ny-option,
+#y-param-selector .css-1n7v3ny-option,
+#analysis-param-selector .css-1n7v3ny-option {
+  background: white !important;
+  color: var(--text-primary) !important;
+  padding: 8px 12px !important;
+}
+
+#x-param-selector .css-1n7v3ny-option:hover,
+#y-param-selector .css-1n7v3ny-option:hover,
+#analysis-param-selector .css-1n7v3ny-option:hover {
+  background: #f8f9fa !important;
+}
+
+/* 深色主题下的下拉菜单样式 */
+[data-theme="dark"] #x-param-selector .Select-option,
+[data-theme="dark"] #y-param-selector .Select-option,
+[data-theme="dark"] #analysis-param-selector .Select-option,
+[data-theme="dark"] #x-param-selector div[class*="option"],
+[data-theme="dark"] #y-param-selector div[class*="option"],
+[data-theme="dark"] #analysis-param-selector div[class*="option"],
+[data-theme="dark"] #x-param-selector .css-1n7v3ny-option,
+[data-theme="dark"] #y-param-selector .css-1n7v3ny-option,
+[data-theme="dark"] #analysis-param-selector .css-1n7v3ny-option {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] #x-param-selector .Select-option:hover,
+[data-theme="dark"] #y-param-selector .Select-option:hover,
+[data-theme="dark"] #analysis-param-selector .Select-option:hover,
+[data-theme="dark"] #x-param-selector div[class*="option"]:hover,
+[data-theme="dark"] #y-param-selector div[class*="option"]:hover,
+[data-theme="dark"] #analysis-param-selector div[class*="option"]:hover,
+[data-theme="dark"] #x-param-selector .css-1n7v3ny-option:hover,
+[data-theme="dark"] #y-param-selector .css-1n7v3ny-option:hover,
+[data-theme="dark"] #analysis-param-selector .css-1n7v3ny-option:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 深色主题下的菜单容器 */
+[data-theme="dark"] #x-param-selector [class*="menu"],
+[data-theme="dark"] #y-param-selector [class*="menu"],
+[data-theme="dark"] #analysis-param-selector [class*="menu"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+/* 强力规则：确保所有相关性分析相关的下拉菜单都有最高优先级 */
+[id*="param-selector"] *[class*="menu"] {
+  z-index: 999999 !important;
+}
+
+[id*="param-selector"] *[class*="option"] {
+  z-index: 999999 !important;
+}
+
+/* 强制设置依赖关系面板为最低层级 */
+.dependencies-panel,
+.dependencies-panel *,
+.dependencies-panel .card,
+.dependencies-panel .card-header,
+.dependencies-panel .card-body {
+  z-index: 1 !important;
+}
+
+/* 特别处理：确保下拉菜单Portal渲染到body时也有正确z-index */
+body > div[class*="Select"],
+body > div[class*="menu"] {
+  z-index: 999999 !important;
+}
+
+/* 节点名称和内容字体大小调整 */
+.node-name {
+  font-size: 0.8rem !important;
+  font-weight: bold;
+}
+
+.node-content {
+  font-size: 0.75rem !important;
+}
+
+/* 参数表格字体调整 */
+.node-container table {
+  font-size: 0.75rem !important;
+}
+
+.node-container td,
+.node-container th {
+  font-size: 0.75rem !important;
+}
+
+/* 节点位置信息字体调整 */
+.node-container .text-muted {
+  font-size: 0.6rem !important;
+}
+
+/* 相关性分析卡片字体缩小 */
+.sensitivity-analysis-container label,
+.sensitivity-analysis-container .form-label,
+.sensitivity-analysis-container .dropdown,
+.sensitivity-analysis-container .form-control,
+.sensitivity-analysis-container .btn,
+.sensitivity-analysis-container .input-group-text,
+.sensitivity-analysis-container .form-check-label,
+.sensitivity-analysis-container p,
+.sensitivity-analysis-container span,
+.sensitivity-analysis-container div {
+  font-size: 0.8rem !important;
+}
+
+/* 相关性分析卡片标题保持正常大小 */
+.sensitivity-analysis-container .card-header h5 {
+  font-size: 1rem !important;
+}
+
+/* 相关性分析按钮组字体 */
+.sensitivity-analysis-container .btn-group .btn {
+  font-size: 0.75rem !important;
+}
+
+/* 相关性分析下拉菜单字体 */
+.sensitivity-analysis-container .dropdown-menu,
+.sensitivity-analysis-container .dropdown-menu .dropdown-item {
+  font-size: 0.8rem !important;
+}
+
+/* Tooltip字体保持正常大小 */
+.sensitivity-analysis-container .tooltip-inner {
+  font-size: 0.7rem !important;
+}
+
+/* 箭头动画样式 */
+@keyframes flow-dash {
+  0% {
+    stroke-dashoffset: 10;
+  }
+  100% {
+    stroke-dashoffset: -10;
+  }
+}
+
+@keyframes pulse-glow {
+  0% {
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  100% {
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+}
+
+@keyframes arrow-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 箭头容器样式优化 */
+#arrows-overlay-dynamic {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: visible;
+}
+
+/* SVG箭头路径默认样式 */
+#arrows-overlay-dynamic svg path {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 箭头hover状态增强 */
+#arrows-overlay-dynamic svg path:hover {
+  filter: drop-shadow(0 0 4px currentColor);
 }

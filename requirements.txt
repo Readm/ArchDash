@@ -1,9 +1,10 @@
-dash==3.0.4
+dash>=2.0.0
 dash-bootstrap-components==2.0.3
-pandas>=1.5.0
+pandas>=1.0.0
 plotly>=5.0.0
 pytest>=7.0.0
-pytest-dash>=2.0.0
+pytest-cov>=4.0.0
+pytest-xdist>=3.0.0
 selenium>=4.0.0
 numpy>=1.20.0
 # 后续如用Dash等Web框架需补充 

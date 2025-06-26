@@ -21,7 +21,7 @@ class Parameter:
         confidence: 参数置信度（0-1之间）
         calculation_func: 计算函数（字符串形式）
         dependencies: 依赖参数列表
-        history: 参数历史记录
+        unlinked: 是否断开计算连接（用户手动设置值时为True）
         _graph: 所属的计算图（用于自动更新传播）
     """
     name: str
@@ -30,7 +30,8 @@ class Parameter:
     confidence: float = 1.0
     calculation_func: Optional[str] = None
     dependencies: List['Parameter'] = field(default_factory=list)
-    history: List[Dict[str, Any]] = field(default_factory=list)
+    unlinked: bool = False  # 是否断开计算连接
+
     _value: T = 0.0  # 内部值存储
     _graph: Optional['CalculationGraph'] = field(default=None, repr=False)  # 计算图引用
     
@@ -42,7 +43,8 @@ class Parameter:
         self.confidence = kwargs.get('confidence', 1.0)
         self.calculation_func = kwargs.get('calculation_func', None)
         self.dependencies = kwargs.get('dependencies', [])
-        self.history = kwargs.get('history', [])
+        self.unlinked = kwargs.get('unlinked', False)
+        self.param_type = kwargs.get('param_type', "float")  # 新增：参数类型，默认为float
         self._graph = kwargs.get('_graph', None)
     
     @property
@@ -103,6 +105,10 @@ class Parameter:
         if not self.calculation_func:
             return self.value if self.value is not None else 0.0
         
+        # 如果参数被标记为unlinked，跳过自动计算
+        if self.unlinked:
+            return self.value if self.value is not None else 0.0
+        
         # 检查所有依赖是否都有值
         for dep in self.dependencies:
             if dep.value is None:
@@ -138,14 +144,31 @@ class Parameter:
                 result = self.calculation_func(self)
             
             self.value = result
-            self.history.append({
-                "timestamp": datetime.now().isoformat(),
-                "value": result,
-                "dependencies": [dep.name for dep in self.dependencies]
-            })
             return result
         except Exception as e:
             raise ValueError(f"计算失败: {str(e)}")
+    
+    def relink_and_calculate(self) -> T:
+        """重新连接参数并计算
+        
+        Returns:
+            T: 重新计算后的参数值
+        """
+        self.unlinked = False
+        if self.calculation_func:
+            return self.calculate()
+        return self.value
+    
+    def set_manual_value(self, new_value: T) -> None:
+        """手动设置参数值并标记为unlinked
+        
+        Args:
+            new_value: 新的参数值
+        """
+        if self.calculation_func and self.dependencies:
+            # 只有有计算函数和依赖的参数才能被unlink
+            self.unlinked = True
+        self.value = new_value
     
     def to_dict(self) -> Dict[str, Any]:
         """将参数转换为字典"""
@@ -157,7 +180,8 @@ class Parameter:
             "confidence": self.confidence,
             "calculation_func": self.calculation_func,
             "dependencies": [dep.name for dep in self.dependencies],
-            "history": self.history
+            "unlinked": self.unlinked,
+            "param_type": self.param_type  # 新增：包含参数类型
         }
     
     @classmethod
@@ -169,16 +193,15 @@ class Parameter:
             unit=data["unit"],
             description=data["description"],
             confidence=data["confidence"],
-            calculation_func=data["calculation_func"]
+            calculation_func=data["calculation_func"],
+            unlinked=data.get("unlinked", False),
+            param_type=data.get("param_type", "float")  # 新增：读取参数类型，默认为float（兼容旧格式）
         )
         
         # 添加依赖
         for dep_name in data["dependencies"]:
             if dep_name in param_dict:
                 param.add_dependency(param_dict[dep_name])
-        
-        # 恢复历史记录
-        param.history = data["history"]
         
         return param
 
@@ -215,10 +238,7 @@ class Node:
         """从节点移除参数"""
         self.parameters = [param for param in self.parameters if param.name != name]
     
-    def get_parameter_history(self, name: str) -> List[Dict[str, Any]]:
-        """获取参数历史记录"""
-        param = next((param for param in self.parameters if param.name == name), None)
-        return param.history if param else []
+
     
     def calculate_all(self) -> None:
         """计算所有参数"""
@@ -400,6 +420,11 @@ class CalculationGraph:
         
         return update_result
 
+    def recalculate_all(self):
+        """重新计算所有参数"""
+        for node in self.nodes.values():
+            node.calculate_all()
+
     def get_dependency_chain(self, param):
         """获取参数的完整依赖链信息
         
@@ -564,7 +589,7 @@ class CalculationGraph:
                     description=param_data.get("description", ""),
                     confidence=param_data.get("confidence", 1.0),
                     calculation_func=param_data.get("calculation_func"),
-                    history=param_data.get("history", [])
+                    unlinked=param_data.get("unlinked", False)
                 )
                 
                 # 设置计算图引用

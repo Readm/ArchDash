@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+测试参数断开连接（unlinked）功能
+"""
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from models import *
+
+def test_unlinked_functionality():
+    """测试参数断开连接功能"""
+    print("🔬 测试参数断开连接功能")
+    print("=" * 50)
+    
+    # 创建计算图和节点
+    graph = CalculationGraph()
+    
+    # 创建输入节点
+    input_node = Node("输入参数", "基础输入参数")
+    length = Parameter("长度", 10.0, "m")
+    width = Parameter("宽度", 5.0, "m")
+    input_node.add_parameter(length)
+    input_node.add_parameter(width)
+    graph.add_node(input_node)
+    
+    # 创建计算节点
+    calc_node = Node("计算结果", "基于输入参数的计算")
+    area = Parameter("面积", 0.0, "m²", 
+                    calculation_func="result = dependencies[0].value * dependencies[1].value")
+    area.add_dependency(length)
+    area.add_dependency(width)
+    calc_node.add_parameter(area)
+    graph.add_node(calc_node)
+    
+    # 设置计算图关联
+    for node in graph.nodes.values():
+        for param in node.parameters:
+            param.set_graph(graph)
+    
+    print(f"1. 初始状态:")
+    print(f"   长度 = {length.value} m, unlinked = {length.unlinked}")
+    print(f"   宽度 = {width.value} m, unlinked = {width.unlinked}")
+    print(f"   面积 = {area.value} m², unlinked = {area.unlinked}")
+    
+    # 计算初始面积
+    area.calculate()
+    print(f"   计算后面积 = {area.value} m²")
+    
+    print(f"\n2. 手动修改有依赖的面积参数值:")
+    # 手动设置面积值（应该被标记为unlinked）
+    area.set_manual_value(100.0)
+    print(f"   面积 = {area.value} m², unlinked = {area.unlinked}")
+    
+    # 尝试自动计算（应该被跳过）
+    old_value = area.value
+    area.calculate()
+    print(f"   计算后面积 = {area.value} m² (应该保持不变)")
+    assert area.value == old_value, "Unlinked参数不应该被重新计算"
+    assert area.unlinked == True, "参数应该被标记为unlinked"
+    
+    print(f"\n3. 重新连接参数:")
+    # 重新连接并计算
+    new_value = area.relink_and_calculate()
+    print(f"   重新连接后面积 = {new_value} m², unlinked = {area.unlinked}")
+    assert area.unlinked == False, "参数应该被重新连接"
+    assert area.value == 50.0, "重新计算的值应该正确"
+    
+    print(f"\n4. 测试无依赖参数的手动设置:")
+    # 设置无依赖参数的值（不应该被标记为unlinked）
+    length.set_manual_value(15.0)
+    print(f"   长度 = {length.value} m, unlinked = {length.unlinked}")
+    assert length.unlinked == False, "无依赖参数不应该被标记为unlinked"
+    
+    print(f"\n5. 测试级联更新:")
+    # 修改输入参数，检查面积是否自动更新
+    width.value = 8.0
+    print(f"   宽度修改为 = {width.value} m")
+    print(f"   面积自动更新为 = {area.value} m² (应该是 120.0)")
+    assert area.value == 120.0, "级联计算应该正确"
+    
+    print(f"\n✅ 所有测试通过！")
+
+def test_serialization():
+    """测试序列化和反序列化"""
+    print("\n🔬 测试序列化功能")
+    print("=" * 50)
+    
+    # 创建带有unlinked参数的计算图
+    graph = CalculationGraph()
+    node = Node("测试节点")
+    
+    param1 = Parameter("参数1", 10.0, "unit", calculation_func="result = value * 2")
+    param1.add_dependency(Parameter("依赖", 5.0, "unit"))
+    param1.unlinked = True
+    
+    param2 = Parameter("参数2", 20.0, "unit")
+    
+    node.add_parameter(param1)
+    node.add_parameter(param2)
+    graph.add_node(node)
+    
+    # 序列化
+    data = graph.to_dict()
+    print(f"原始参数1 unlinked状态: {param1.unlinked}")
+    print(f"序列化数据中的unlinked: {data['nodes'][node.id]['parameters'][0]['unlinked']}")
+    
+    # 反序列化
+    new_graph = CalculationGraph.from_dict(data)
+    new_node = list(new_graph.nodes.values())[0]
+    new_param1 = new_node.parameters[0]
+    
+    print(f"反序列化后参数1 unlinked状态: {new_param1.unlinked}")
+    assert new_param1.unlinked == True, "Unlinked状态应该被正确恢复"
+    
+    print("✅ 序列化测试通过！")
+
+if __name__ == "__main__":
+    test_unlinked_functionality()
+    test_serialization()
+    print("\n🎉 所有测试完成！") 
