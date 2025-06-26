@@ -1133,6 +1133,8 @@ app.layout = dbc.Container([
                             dbc.DropdownMenu([
                                 dbc.DropdownMenuItem("➕ 添加列", id="add-column-btn", className="text-success"),
                                 dbc.DropdownMenuItem("➖ 删除列", id="remove-column-btn", className="text-danger"),
+                                dbc.DropdownMenuItem(divider=True),
+                                dbc.DropdownMenuItem("🗑️ 清空图", id="clear-graph-btn", className="text-warning"),
                             ], 
                             label="",
                             color="outline-secondary",
@@ -4434,6 +4436,47 @@ def check_node_has_dependents(node_id):
     }
     
     return len(dependent_params) > 0, dependent_info
+
+# 清空计算图功能
+@callback(
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("output-result", "children", allow_duplicate=True),
+    Input("clear-graph-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def clear_calculation_graph(n_clicks):
+    """清空当前的计算图，重置为空白状态"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 清空全局数据模型
+        global graph, layout_manager, id_mapper, column_manager
+        
+        # 重新创建空的布局管理器
+        layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
+        
+        # 重新创建空的计算图
+        graph = CalculationGraph()
+        graph.set_layout_manager(layout_manager)
+        
+        # 重新创建空的ID映射器
+        id_mapper = IDMapper()
+        
+        # 重新初始化列管理器
+        column_manager = ColumnManager(layout_manager)
+        
+        # 清空最近更新的参数集合
+        global recently_updated_params
+        recently_updated_params.clear()
+        
+        # 更新画布显示
+        updated_canvas = update_canvas()
+        
+        return updated_canvas, "✅ 计算图已清空，可以重新开始构建"
+        
+    except Exception as e:
+        return dash.no_update, f"❌ 清空失败: {str(e)}"
 
 if __name__ == "__main__":
     import argparse
