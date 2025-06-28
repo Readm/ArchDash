@@ -9,42 +9,7 @@ import uuid
 import plotly.graph_objects as go
 import numpy as np
 
-class IDMapper:
-    """管理 Model ID 到 Dash ID 和 HTML ID 的映射"""
-    def __init__(self):
-        self._node_mapping: Dict[str, Dict] = {}
-
-    def register_node(self, node_id: str, name: str) -> None:
-        """注册节点 ID 映射"""
-        self._node_mapping[node_id] = {
-            "name": name,
-            "dash_id": {"type": "node", "index": node_id},
-            "html_id": f"node-{node_id}"
-        }
-
-    def get_dash_id(self, node_id: str) -> Dict:
-        """获取 Dash ID"""
-        return self._node_mapping[node_id]["dash_id"]
-
-    def get_html_id(self, node_id: str) -> str:
-        """获取 HTML ID"""
-        return self._node_mapping[node_id]["html_id"]
-
-    def get_node_name(self, node_id: str) -> str:
-        """获取节点名称"""
-        return self._node_mapping.get(node_id, {}).get("name", "")
-
-    def get_node_id_from_dash(self, dash_id: Dict) -> Optional[str]:
-        """从 Dash ID 获取节点 ID"""
-        try:
-            return dash_id["index"]
-        except (KeyError, TypeError):
-            return None
-    
-    def update_node_name(self, node_id: str, new_name: str) -> None:
-        """更新节点名称"""
-        if node_id in self._node_mapping:
-            self._node_mapping[node_id]["name"] = new_name
+# 删除 IDMapper 类的定义
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
@@ -133,13 +98,10 @@ class ColumnManager:
         return None
 
 # 全局数据模型
-graph = CalculationGraph()
-id_mapper = IDMapper()
 layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 设置为3列
-recently_updated_params = set()  # 新增：存储最近更新的参数ID，用于高亮显示
-
-# 将布局管理器与计算图关联
+graph = CalculationGraph()
 graph.set_layout_manager(layout_manager)
+recently_updated_params = set()  # 新增：存储最近更新的参数ID，用于高亮显示
 
 # 初始化全局列管理器
 column_manager = ColumnManager(layout_manager)
@@ -402,12 +364,11 @@ def auto_remove_empty_last_column():
 
 def create_example_soc_graph():
     """创建多核SoC示例计算图"""
-    global graph, layout_manager, id_mapper, column_manager
+    global graph, layout_manager, column_manager
     
     # 清空现有数据
     graph = CalculationGraph()
     layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)  # 设置为3列布局
-    id_mapper = IDMapper()
     graph.set_layout_manager(layout_manager)
     
     # 重新初始化列管理器
@@ -422,7 +383,6 @@ def create_example_soc_graph():
     process_node.add_parameter(Parameter("温度", 85, "°C", description="工作温度", confidence=0.8, param_type="int"))
     process_node.add_parameter(Parameter("工艺厂商", "TSMC", "", description="芯片代工厂商", confidence=1.0, param_type="string"))
     graph.add_node(process_node)
-    id_mapper.register_node(process_node.id, process_node.name)
     from models import GridPosition
     layout_manager.place_node(process_node.id, GridPosition(0, 0))
     
@@ -453,7 +413,6 @@ self.confidence = min(base_confidence, voltage_confidence) * 0.95
     cpu_core_node.add_parameter(max_freq_param)
     
     graph.add_node(cpu_core_node)
-    id_mapper.register_node(cpu_core_node.id, cpu_core_node.name)
     layout_manager.place_node(cpu_core_node.id, GridPosition(1, 0))
     
     # 3. 缓存系统节点
@@ -489,7 +448,6 @@ self.confidence = math.pow(math.prod(dep_confidences), 1/len(dep_confidences)) *
     cache_node.add_parameter(total_cache_param)
     
     graph.add_node(cache_node)
-    id_mapper.register_node(cache_node.id, cache_node.name)
     layout_manager.place_node(cache_node.id, GridPosition(2, 0))
     
     # 4. 内存控制器节点
@@ -519,7 +477,6 @@ self.confidence = 0.7  # 固定70%置信度
     memory_node.add_parameter(bandwidth_param)
     
     graph.add_node(memory_node)
-    id_mapper.register_node(memory_node.id, memory_node.name)
     layout_manager.place_node(memory_node.id, GridPosition(0, 1))
     
     # 5. 功耗分析节点
@@ -584,7 +541,6 @@ result = cpu_power + cache_power + memory_power + other_power
     power_node.add_parameter(total_power_param)
     
     graph.add_node(power_node)
-    id_mapper.register_node(power_node.id, power_node.name)
     layout_manager.place_node(power_node.id, GridPosition(1, 1))
     
     # 6. 性能分析节点
@@ -624,7 +580,6 @@ result = single_core * core_count * parallel_efficiency
     performance_node.add_parameter(multi_core_param)
     
     graph.add_node(performance_node)
-    id_mapper.register_node(performance_node.id, performance_node.name)
     layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
     # 7. 热设计节点
@@ -668,7 +623,6 @@ result = ambient_temp + thermal_resistance * total_power
     thermal_node.add_parameter(junction_temp_param)
     
     graph.add_node(thermal_node)
-    id_mapper.register_node(thermal_node.id, thermal_node.name)
     layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
     
     # 8. 成本分析节点
@@ -714,7 +668,6 @@ result = die_area * cost_per_mm2 + packaging_cost
     cost_node.add_parameter(manufacturing_cost_param)
     
     graph.add_node(cost_node)
-    id_mapper.register_node(cost_node.id, cost_node.name)
     layout_manager.place_node(cost_node.id, GridPosition(1, 2))
     
     # 9. 能效分析节点
@@ -747,7 +700,6 @@ result = performance / cost
     efficiency_node.add_parameter(cost_performance_ratio_param)
     
     graph.add_node(efficiency_node)
-    id_mapper.register_node(efficiency_node.id, efficiency_node.name)
     layout_manager.place_node(efficiency_node.id, GridPosition(2, 2))
     
     # 为所有参数设置计算图引用
@@ -847,8 +799,8 @@ def update_canvas(node_data=None):
         
         # 按行排序节点
         for node_id, row in sorted(col_nodes, key=lambda x: x[1]):
-            node_name = id_mapper.get_node_name(node_id)
             node = graph.nodes.get(node_id)
+            node_name = node.name if node else ""
             
             if not node:
                 continue
@@ -1041,8 +993,8 @@ def update_canvas(node_data=None):
                     html.Div(id=f"node-content-{node_id}", className="node-content")
                 ],
                 className="p-2 node-container node-entrance fade-in",
-                id=id_mapper.get_html_id(node_id),
-                **{"data-row": row, "data-col": col, "data-dash-id": json.dumps(id_mapper.get_dash_id(node_id))}
+                id=f"node-{node_id}",
+                **{"data-row": row, "data-col": col, "data-dash-id": json.dumps({"type": "node", "index": node_id})}
             )
             col_content.append(node_div)
         
@@ -1827,7 +1779,10 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         if not node_id:
             return "无效操作", node_data, update_canvas()
         
-        node_name = id_mapper.get_node_name(node_id)
+        node = graph.nodes.get(node_id)
+        if not node:
+            return "无效节点", node_data, update_canvas()
+        node_name = node.name
         
         if operation_type == "move-node-up":
             success = layout_manager.move_node_up(node_id)
@@ -1917,9 +1872,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             # 从计算图移除节点
             if node_id in graph.nodes:
                 del graph.nodes[node_id]
-            # 从ID映射器移除
-            if hasattr(id_mapper, '_node_mapping') and node_id in id_mapper._node_mapping:
-                del id_mapper._node_mapping[node_id]
+            # 节点删除清理已完成
             
             result_message = f"✅ 节点 {node_name} 已删除"
             # 删除节点后检查并自动删除空的最后一列，但保持至少3列
@@ -2194,7 +2147,7 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     if param_index >= len(node.parameters):
         return node_data, update_canvas(), dash.no_update
     
-    node_name = id_mapper.get_node_name(node_id)
+    node_name = node.name
     param_name = node.parameters[param_index].name
     
     if operation_type == "delete-param":
@@ -2267,7 +2220,7 @@ def handle_unlink_toggle(unlink_clicks, node_data):
         return node_data, dash.no_update, dash.no_update
     
     param = node.parameters[param_index]
-    node_name = id_mapper.get_node_name(node_id)
+    node_name = node.name
     
     # 检查参数是否可以重新连接
     if not param.calculation_func or not param.dependencies:
@@ -2324,7 +2277,7 @@ def open_param_edit_modal(edit_clicks, is_open):
             raise dash.exceptions.PreventUpdate
         
         param = node.parameters[param_index]
-        node_name = id_mapper.get_node_name(node_id)
+        node_name = node.name
         
         # 获取所有可用的依赖参数
         available_params = get_all_available_parameters(node_id, param.name)
@@ -2698,10 +2651,7 @@ def load_calculation_graph(contents, filename):
         # 从数据重建计算图
         graph = CalculationGraph.from_dict(data, layout_manager)
         
-        # 重新注册所有节点到ID映射器
-        id_mapper = IDMapper()
-        for node_id, node in graph.nodes.items():
-            id_mapper.register_node(node_id, node.name)
+        # 节点ID映射已由CalculationGraph自动管理
         
         # 重新初始化列管理器
         column_manager = ColumnManager(layout_manager)
@@ -3453,7 +3403,7 @@ def get_all_parameter_dependencies():
                 for search_node_id, search_node in graph.nodes.items():
                     if dep_param in search_node.parameters:
                         dep_node_id = search_node_id
-                        dep_node_name = id_mapper.get_node_name(search_node_id)
+                        dep_node_name = search_node.name
                         break
                 
                 # 计算依赖强度（基于参数类型）
@@ -3477,7 +3427,7 @@ def get_all_parameter_dependencies():
             for search_node_id, search_node in graph.nodes.items():
                 for search_param in search_node.parameters:
                     if param in search_param.dependencies:
-                        search_node_name = id_mapper.get_node_name(search_node_id)
+                        search_node_name = search_node.name
                         param_info['dependents'].append({
                             'node_id': search_node_id,
                             'node_name': search_node_name,
@@ -3910,8 +3860,8 @@ def get_arrow_connections_data():
                         'target_node_id': node_id,
                         'source_param_name': dep_param.name,
                         'target_param_name': param.name,
-                        'source_node_name': id_mapper.get_node_name(source_node_id),
-                        'target_node_name': id_mapper.get_node_name(node_id)
+                        'source_node_name': graph.nodes[source_node_id].name,
+                        'target_node_name': graph.nodes[node_id].name
                     }
                     connections.append(connection)
     
@@ -4181,7 +4131,7 @@ def open_node_edit_modal(edit_clicks, is_open):
             raise dash.exceptions.PreventUpdate
         
         node = graph.nodes[node_id]
-        node_name = id_mapper.get_node_name(node_id)
+        node_name = node.name
         
         return (
             True,  # 打开模态窗口
@@ -4240,9 +4190,6 @@ def save_node_changes(save_clicks, node_name, node_description, edit_data):
         # 更新节点信息
         node.name = node_name.strip()
         node.description = node_description or ""
-        
-        # 更新ID映射器中的节点名称
-        id_mapper.update_node_name(node_id, node.name)
         
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{old_name}' 已更新为 '{node.name}'"
@@ -4311,7 +4258,6 @@ def create_new_node(save_clicks, node_name, node_description):
         
         # 添加到计算图
         graph.add_node(node)
-        id_mapper.register_node(node.id, node_name)
         
         # 使用布局管理器放置节点
         position = layout_manager.place_node(node.id)
@@ -4393,7 +4339,7 @@ def check_parameter_has_dependents(param_obj):
     
     # 遍历所有节点和参数，查找依赖关系
     for node_id, node in graph.nodes.items():
-        node_name = id_mapper.get_node_name(node_id)
+        node_name = node.name
         
         for param in node.parameters:
             if param_obj in param.dependencies:
@@ -4459,7 +4405,7 @@ def clear_calculation_graph(n_clicks):
     
     try:
         # 清空全局数据模型
-        global graph, layout_manager, id_mapper, column_manager
+        global graph, layout_manager, column_manager
         
         # 重新创建空的布局管理器
         layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
@@ -4467,9 +4413,6 @@ def clear_calculation_graph(n_clicks):
         # 重新创建空的计算图
         graph = CalculationGraph()
         graph.set_layout_manager(layout_manager)
-        
-        # 重新创建空的ID映射器
-        id_mapper = IDMapper()
         
         # 重新初始化列管理器
         column_manager = ColumnManager(layout_manager)

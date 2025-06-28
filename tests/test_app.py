@@ -1,6 +1,6 @@
 import pytest
 from dash import html
-from app import app, id_mapper, layout_manager
+from app import app, layout_manager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -73,7 +73,6 @@ def test_add_node_with_grid_layout(dash_duo):
     # 清理之前测试的状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     # 重新初始化网格
@@ -82,21 +81,29 @@ def test_add_node_with_grid_layout(dash_duo):
     # 检查标题
     assert dash_duo.find_element("h1").text == "🎨 ArchDash"
 
-    # 输入节点名称
-    input_box = dash_duo.find_element("#node-name")
-    input_box.send_keys("TestNode")
-
-    # 点击添加节点按钮
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
+    # 点击添加节点按钮（现在使用模态窗口）
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    
+    # 等待模态窗口出现
+    time.sleep(0.5)
+    
+    # 在模态窗口中输入节点名称
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("TestNode")
+    
+    # 点击创建按钮
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
 
     # 验证节点添加成功的消息
-    dash_duo.wait_for_contains_text("#output-result", "节点 TestNode 已添加到位置", timeout=5)
+    dash_duo.wait_for_contains_text("#output-result", "节点 'TestNode' 已创建", timeout=5)
     print("✅ 节点添加成功")
 
-    # 获取节点ID和验证
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    # 获取节点ID和验证 - 现在直接从graph获取
+    assert len(graph.nodes) == 1, "应该有一个节点"
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
     
     # 验证节点在DOM中存在
     node_element = dash_duo.find_element(f"#{node_html_id}")
@@ -117,22 +124,25 @@ def test_node_dropdown_menu_operations(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
 
     # 添加测试节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.send_keys("DropdownTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "DropdownTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("DropdownTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "DropdownTestNode", timeout=10)
 
     # 获取节点信息
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     # 找到dropdown菜单按钮 - 现在是带有⋮字符的按钮
     dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
@@ -178,35 +188,38 @@ def test_node_movement_with_layout_manager(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
 
     # 添加列以便测试左右移动
-    add_column_btn = dash_duo.find_element("#add-column-button") 
+    add_column_btn = dash_duo.find_element("#add-column-btn") 
     safe_click(dash_duo.driver, add_column_btn)
     dash_duo.wait_for_contains_text("#output-result", "已添加新列", timeout=5)
 
     # 创建多个测试节点
     test_nodes = ["Node1", "Node2", "Node3"]
     for name in test_nodes:
-        input_box = dash_duo.find_element("#node-name")
-        input_box.clear()
-        input_box.send_keys(name)
+        add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+        add_node_btn.click()
+        time.sleep(0.5)
         
-        add_btn = dash_duo.find_element("#add-node-button")
-        safe_click(dash_duo.driver, add_btn)
-        dash_duo.wait_for_contains_text("#output-result", f"{name} 已添加到位置", timeout=10)
+        modal_input = dash_duo.find_element("#node-add-name")
+        modal_input.clear()
+        modal_input.send_keys(name)
+        
+        create_btn = dash_duo.find_element("#node-add-save")
+        safe_click(dash_duo.driver, create_btn)
+        dash_duo.wait_for_contains_text("#output-result", f"{name}", timeout=10)
 
     # 验证所有节点都创建成功
     assert len(graph.nodes) == 3, "应该有3个节点"
     print("✅ 创建了3个测试节点")
 
     # 获取中间节点进行移动测试
-    node_ids = list(id_mapper._node_mapping.keys())
+    node_ids = list(graph.nodes.keys())
     middle_node_id = node_ids[1]
-    middle_node_html_id = id_mapper.get_html_id(middle_node_id)
+    middle_node_html_id = f"node-{middle_node_id}"
 
     # 获取初始位置
     initial_pos = layout_manager.get_node_position(middle_node_id)
@@ -241,24 +254,26 @@ def test_parameter_operations_with_dropdown(dash_duo):
     # 清理状态
     from app import graph, recently_updated_params
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear() 
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
     recently_updated_params.clear()
 
     # 创建节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()
-    input_box.send_keys("ParamTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "ParamTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("ParamTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "ParamTestNode", timeout=10)
 
-    # 添加参数
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    # 获取节点信息
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     try:
         dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
@@ -353,7 +368,6 @@ def test_multiple_nodes_grid_layout(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
@@ -363,16 +377,20 @@ def test_multiple_nodes_grid_layout(dash_duo):
     created_node_ids = []
 
     for name in node_names:
-        input_box = dash_duo.find_element("#node-name")
-        input_box.clear()
-        input_box.send_keys(name)
+        add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+        add_node_btn.click()
+        time.sleep(0.5)
         
-        add_btn = dash_duo.find_element("#add-node-button")
-        add_btn.click()
-        dash_duo.wait_for_contains_text("#output-result", f"{name} 已添加到位置", timeout=10)
+        modal_input = dash_duo.find_element("#node-add-name")
+        modal_input.clear()
+        modal_input.send_keys(name)
+        
+        create_btn = dash_duo.find_element("#node-add-save")
+        safe_click(dash_duo.driver, create_btn)
+        dash_duo.wait_for_contains_text("#output-result", f"{name}", timeout=10)
         
         # 记录创建的节点ID
-        node_id = list(id_mapper._node_mapping.keys())[-1]
+        node_id = list(graph.nodes.keys())[-1]
         created_node_ids.append(node_id)
 
     # 验证所有节点都在布局管理器中
@@ -380,7 +398,7 @@ def test_multiple_nodes_grid_layout(dash_duo):
     
     # 验证节点在页面上都能找到
     for i, node_id in enumerate(created_node_ids):
-        node_html_id = id_mapper.get_html_id(node_id)
+        node_html_id = f"node-{node_id}"
         node_element = dash_duo.find_element(f"#{node_html_id}")
         assert node_element is not None, f"节点 {node_names[i]} 应该在页面上可见"
         assert node_names[i] in node_element.text, f"节点元素应该包含正确的名称 {node_names[i]}"
@@ -394,49 +412,51 @@ def test_duplicate_node_name_prevention(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
 
     # 添加第一个节点
     first_node_name = "UniqueNode"
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()  # 确保输入框初始为空
-    input_box.send_keys(first_node_name)
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", f"{first_node_name} 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.clear()  # 确保输入框初始为空
+    modal_input.send_keys(first_node_name)
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", f"{first_node_name}", timeout=10)
 
     # 验证第一个节点添加成功
     assert len(graph.nodes) == 1, "应该有1个节点" 
     print("✅ 第一个节点添加成功")
 
     # 使用JavaScript强制清空输入框
-    dash_duo.driver.execute_script("document.getElementById('node-name').value = '';")
+    dash_duo.driver.execute_script("document.getElementById('node-add-name').value = '';")
     
     # 等待DOM更新
-    import time
     time.sleep(0.5)
     
     # 验证输入框已清空
-    input_box = dash_duo.find_element("#node-name") 
-    assert input_box.get_attribute("value") == "", "输入框应该为空"
+    modal_input = dash_duo.find_element("#node-add-name") 
+    assert modal_input.get_attribute("value") == "", "输入框应该为空"
 
     # 使用JavaScript设置输入框值，避免累加问题
-    dash_duo.driver.execute_script(f"document.getElementById('node-name').value = '{first_node_name}';")
+    dash_duo.driver.execute_script(f"document.getElementById('node-add-name').value = '{first_node_name}';")
     
     # 触发input事件让Dash知道值已改变
-    dash_duo.driver.execute_script("document.getElementById('node-name').dispatchEvent(new Event('input', { bubbles: true }));")
+    dash_duo.driver.execute_script("document.getElementById('node-add-name').dispatchEvent(new Event('input', { bubbles: true }));")
     
     time.sleep(0.5)  # 等待值更新
     
     # 验证输入框内容正确
-    assert input_box.get_attribute("value") == first_node_name, f"输入框应该包含 {first_node_name}"
+    assert modal_input.get_attribute("value") == first_node_name, f"输入框应该包含 {first_node_name}"
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
 
     # 验证错误消息
     dash_duo.wait_for_contains_text("#output-result", f"错误：节点名称 '{first_node_name}' 已存在，请使用不同的名称", timeout=5)
@@ -452,17 +472,20 @@ def test_empty_node_name_validation(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
 
     # 尝试添加空名称节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()  # 确保输入框为空
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.clear()  # 确保输入框为空
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
 
     # 验证错误消息
     dash_duo.wait_for_contains_text("#output-result", "请输入节点名称", timeout=5)
@@ -478,14 +501,13 @@ def test_column_management(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
 
     # 测试添加列
     initial_cols = layout_manager.cols
-    add_column_btn = dash_duo.find_element("#add-column-button")
+    add_column_btn = dash_duo.find_element("#add-column-btn")
     
     # 使用安全点击方法
     if safe_click(dash_duo.driver, add_column_btn):
@@ -499,7 +521,7 @@ def test_column_management(dash_duo):
 
     # 测试减少列（应该成功，因为新添加的列是空的）
     current_cols = layout_manager.cols
-    remove_column_btn = dash_duo.find_element("#remove-column-button")
+    remove_column_btn = dash_duo.find_element("#remove-column-btn")
     
     if safe_click(dash_duo.driver, remove_column_btn):
         dash_duo.wait_for_contains_text("#output-result", f"已删除最后一列，当前列数: {current_cols - 1}", timeout=5)
@@ -517,7 +539,6 @@ def test_remove_column_functionality(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
@@ -527,8 +548,8 @@ def test_remove_column_functionality(dash_duo):
 
     # 测试1: 删除空列
     print("📝 测试1: 删除空列")
-    add_column_btn = dash_duo.find_element("#add-column-button")
-    remove_column_btn = dash_duo.find_element("#remove-column-button")
+    add_column_btn = dash_duo.find_element("#add-column-btn")
+    remove_column_btn = dash_duo.find_element("#remove-column-btn")
     
     # 添加一列
     safe_click(dash_duo.driver, add_column_btn)
@@ -557,7 +578,6 @@ def test_remove_column_functionality(dash_duo):
     # 创建节点并直接放置在最后一列
     test_node = Node("TestNodeForRemoval", "测试删除列功能的节点")
     graph.add_node(test_node)
-    id_mapper.register_node(test_node.id, test_node.name)
     
     # 直接放置到最后一列
     last_col = layout_manager.cols - 1
@@ -573,7 +593,7 @@ def test_remove_column_functionality(dash_duo):
     time.sleep(2)
     
     # 重新获取按钮引用
-    remove_column_btn = dash_duo.find_element("#remove-column-button")
+    remove_column_btn = dash_duo.find_element("#remove-column-btn")
     
     # 现在尝试删除最后一列（应该失败）
     current_cols = layout_manager.cols
@@ -604,7 +624,6 @@ def test_remove_column_functionality(dash_duo):
     
     # 清理所有节点和列
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
@@ -614,7 +633,7 @@ def test_remove_column_functionality(dash_duo):
     time.sleep(2)
     
     # 重新获取按钮引用
-    remove_column_btn = dash_duo.find_element("#remove-column-button")
+    remove_column_btn = dash_duo.find_element("#remove-column-btn")
     
     # 确保只有一列
     while layout_manager.cols > 1:
@@ -635,22 +654,25 @@ def test_node_position_display(dash_duo):
     # 清理状态
     from app import graph
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
 
     # 添加测试节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.send_keys("PositionTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "PositionTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("PositionTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "PositionTestNode", timeout=10)
 
     # 验证节点显示包含位置信息
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
     node_element = dash_duo.find_element(f"#{node_html_id}")
     
     # 应该显示位置信息，如 (0,0)
@@ -664,24 +686,26 @@ def test_parameter_cascade_update_in_web_interface(dash_duo):
     # 清理状态
     from app import graph, recently_updated_params
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
     recently_updated_params.clear()
 
     # 创建测试节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()
-    input_box.send_keys("ElectricalNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "ElectricalNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("ElectricalNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "ElectricalNode", timeout=10)
 
     # 获取节点信息
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     # 添加第一个参数（电压）
     try:
@@ -835,24 +859,26 @@ def test_parameter_highlight_functionality(dash_duo):
     # 清理状态
     from app import graph, recently_updated_params
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
     recently_updated_params.clear()
 
     # 创建测试节点和参数
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()
-    input_box.send_keys("HighlightTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "HighlightTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("HighlightTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "HighlightTestNode", timeout=10)
 
-    # 添加参数
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    # 获取节点信息
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     try:
         dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
@@ -937,24 +963,26 @@ def test_parameter_edit_modal_functionality(dash_duo):
     # 清理状态
     from app import graph, recently_updated_params
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
     recently_updated_params.clear()
 
     # 创建测试节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()
-    input_box.send_keys("ModalTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "ModalTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("ModalTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "ModalTestNode", timeout=10)
 
-    # 添加参数
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    # 获取节点信息
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     try:
         dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
@@ -1034,24 +1062,26 @@ def test_canvas_auto_refresh_on_parameter_change(dash_duo):
     # 清理状态
     from app import graph, recently_updated_params
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
     recently_updated_params.clear()
 
     # 创建测试节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()
-    input_box.send_keys("RefreshTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "RefreshTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("RefreshTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "RefreshTestNode", timeout=10)
 
-    # 添加参数
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    # 获取节点信息
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     try:
         dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
@@ -1150,24 +1180,26 @@ def test_recently_updated_params_tracking(dash_duo):
     # 清理状态
     from app import graph, recently_updated_params
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
     recently_updated_params.clear()
 
     # 创建测试节点
-    input_box = dash_duo.find_element("#node-name")
-    input_box.clear()
-    input_box.send_keys("TrackingTestNode")
+    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+    add_node_btn.click()
+    time.sleep(0.5)
     
-    add_btn = dash_duo.find_element("#add-node-button")
-    add_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "TrackingTestNode 已添加到位置", timeout=10)
+    modal_input = dash_duo.find_element("#node-add-name")
+    modal_input.send_keys("TrackingTestNode")
+    
+    create_btn = dash_duo.find_element("#node-add-save")
+    create_btn.click()
+    dash_duo.wait_for_contains_text("#output-result", "TrackingTestNode", timeout=10)
 
-    # 添加多个参数
-    node_id = list(id_mapper._node_mapping.keys())[0]
-    node_html_id = id_mapper.get_html_id(node_id)
+    # 获取节点信息
+    node_id = list(graph.nodes.keys())[0]
+    node_html_id = f"node-{node_id}"
 
     # 添加第一个参数
     try:

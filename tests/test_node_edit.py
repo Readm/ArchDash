@@ -7,9 +7,9 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from app import graph, id_mapper, IDMapper
+from app import graph
 from models import Node, CalculationGraph
 
 def test_node_name_editing():
@@ -18,7 +18,6 @@ def test_node_name_editing():
     
     # 清理状态
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     
     # 创建测试节点
     node1 = Node(name="原始节点1", description="第一个测试节点")
@@ -28,10 +27,6 @@ def test_node_name_editing():
     graph.add_node(node1)
     graph.add_node(node2)
     
-    # 注册节点到ID映射器
-    id_mapper.register_node(node1.id, node1.name)
-    id_mapper.register_node(node2.id, node2.name)
-    
     print(f"✅ 创建节点: {node1.name} (ID: {node1.id})")
     print(f"✅ 创建节点: {node2.name} (ID: {node2.id})")
     
@@ -39,18 +34,16 @@ def test_node_name_editing():
     new_name = "更新后的节点1"
     
     # 验证原始状态
-    assert id_mapper.get_node_name(node1.id) == "原始节点1"
     assert node1.name == "原始节点1"
     
     # 更新节点名称
+    old_name = node1.name
     node1.name = new_name
-    id_mapper.update_node_name(node1.id, new_name)
     
     # 验证更新后的状态
-    assert id_mapper.get_node_name(node1.id) == new_name
     assert node1.name == new_name
     
-    print(f"✅ 节点名称更新成功: '原始节点1' → '{new_name}'")
+    print(f"✅ 节点名称更新成功: '{old_name}' → '{new_name}'")
     
     # 测试重名验证功能
     try:
@@ -81,42 +74,47 @@ def test_node_name_editing():
     
     print("🎉 所有节点编辑功能测试通过！")
 
-def test_id_mapper_functionality():
-    """测试IDMapper的功能"""
-    print("\n🧪 测试IDMapper功能")
+def test_node_id_generation():
+    """测试节点ID生成和HTML/Dash ID的创建"""
+    print("\n🧪 测试节点ID生成功能")
     
-    # 创建新的IDMapper实例
-    test_mapper = IDMapper()
+    # 清理状态
+    graph.nodes.clear()
     
-    # 测试节点注册
-    test_node_id = "test-node-123"
-    test_node_name = "测试节点"
+    # 创建测试节点
+    test_node = Node(name="测试节点", description="测试节点描述")
     
-    test_mapper.register_node(test_node_id, test_node_name)
+    # 添加到计算图，这会自动分配ID
+    graph.add_node(test_node)
     
-    # 验证各种获取方法
-    assert test_mapper.get_node_name(test_node_id) == test_node_name
-    assert test_mapper.get_html_id(test_node_id) == f"node-{test_node_id}"
+    # 验证节点ID已分配
+    assert test_node.id != ""
+    assert test_node.id.isdigit()  # 应该是数字字符串
     
-    dash_id = test_mapper.get_dash_id(test_node_id)
+    # 测试HTML ID和Dash ID的生成
+    html_id = f"node-{test_node.id}"
+    dash_id = {"type": "node", "index": test_node.id}
+    
+    assert html_id == f"node-{test_node.id}"
     assert dash_id["type"] == "node"
-    assert dash_id["index"] == test_node_id
+    assert dash_id["index"] == test_node.id
     
-    # 测试从Dash ID获取节点ID
-    retrieved_id = test_mapper.get_node_id_from_dash(dash_id)
-    assert retrieved_id == test_node_id
+    print(f"✅ 节点ID生成成功: {test_node.id}")
+    print(f"✅ HTML ID生成成功: {html_id}")
+    print(f"✅ Dash ID生成成功: {dash_id}")
     
-    print("✅ IDMapper注册和获取功能正常")
+    # 测试多个节点的ID唯一性
+    node2 = Node(name="第二个节点")
+    graph.add_node(node2)
     
-    # 测试名称更新
-    new_name = "更新后的测试节点"
-    test_mapper.update_node_name(test_node_id, new_name)
+    assert node2.id != test_node.id  # ID应该不同
+    assert node2.id.isdigit()
     
-    assert test_mapper.get_node_name(test_node_id) == new_name
-    print("✅ IDMapper名称更新功能正常")
+    print(f"✅ 第二个节点ID: {node2.id}")
+    print("✅ 节点ID唯一性验证通过")
     
-    print("🎉 IDMapper所有功能测试通过！")
+    print("🎉 节点ID生成功能测试通过！")
 
 if __name__ == "__main__":
-    test_id_mapper_functionality()
+    test_node_id_generation()
     test_node_name_editing() 

@@ -10,7 +10,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app import create_example_soc_graph, app, graph, layout_manager, id_mapper, IDMapper, ColumnManager
+from app import create_example_soc_graph, app, graph, layout_manager, ColumnManager
 from models import CalculationGraph, CanvasLayoutManager, GridPosition, Node, Parameter
 from dash.testing.application_runners import import_app
 from dash.testing.composite import DashComposite
@@ -24,7 +24,6 @@ class TestExampleFeature:
         import app
         app.graph = CalculationGraph()
         app.layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        app.id_mapper = IDMapper()
         app.graph.set_layout_manager(app.layout_manager)
         app.column_manager = ColumnManager(app.layout_manager)
     
@@ -142,9 +141,6 @@ class TestExampleFeature:
         # 验证所有节点都已放置
         placed_nodes = len(app.layout_manager.node_positions)
         assert placed_nodes == 9, f"应该放置9个节点，实际放置了{placed_nodes}个"
-        
-        # 验证ID映射器
-        assert len(app.id_mapper._node_mapping) == 9, "ID映射器应该包含9个节点映射"
     
     def test_example_graph_parameter_values(self):
         """测试参数的初始值和单位"""
@@ -174,7 +170,6 @@ class TestExampleFeature:
         # 保存原始状态
         original_graph = graph
         original_layout = layout_manager
-        original_mapper = id_mapper
         
         try:
             # 测试重复创建
@@ -302,7 +297,6 @@ class TestExampleFeatureIntegration:
         import app
         app.graph = CalculationGraph()
         app.layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        app.id_mapper = IDMapper()
         app.graph.set_layout_manager(app.layout_manager)
         app.column_manager = ColumnManager(app.layout_manager)
     
@@ -315,15 +309,13 @@ class TestExampleFeatureIntegration:
         # 验证图状态
         assert app.graph is not None, "全局图对象应该存在"
         assert app.layout_manager is not None, "布局管理器应该存在"
-        assert app.id_mapper is not None, "ID映射器应该存在"
         
         # 验证图的完整性
         total_nodes = len(app.graph.nodes)
-        total_mapped_nodes = len(app.id_mapper._node_mapping)
         total_placed_nodes = len(app.layout_manager.node_positions)
         
-        assert total_nodes == total_mapped_nodes == total_placed_nodes == 9, \
-            f"节点数量不一致: 图中{total_nodes}, 映射{total_mapped_nodes}, 布局{total_placed_nodes}"
+        assert total_nodes == total_placed_nodes == 9, \
+            f"节点数量不一致: 图中{total_nodes}, 布局{total_placed_nodes}"
 
 
 class TestExampleFeaturePerformance:
@@ -334,7 +326,6 @@ class TestExampleFeaturePerformance:
         import app
         app.graph = CalculationGraph()
         app.layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        app.id_mapper = IDMapper()
         app.graph.set_layout_manager(app.layout_manager)
         app.column_manager = ColumnManager(app.layout_manager)
     
@@ -501,7 +492,6 @@ class TestExampleFeatureErrorStates:
         import app
         app.graph = CalculationGraph()
         app.layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        app.id_mapper = IDMapper()
         app.graph.set_layout_manager(app.layout_manager)
         app.column_manager = ColumnManager(app.layout_manager)
     
@@ -811,7 +801,6 @@ result = 未定义的变量
             # 恢复原始状态
             app.graph = CalculationGraph()
             app.layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-            app.id_mapper = IDMapper()
             app.graph.set_layout_manager(app.layout_manager)
             app.column_manager = ColumnManager(app.layout_manager)
             create_example_soc_graph()
@@ -825,7 +814,6 @@ class TestExampleFeatureDataFlow:
         import app
         app.graph = CalculationGraph()
         app.layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        app.id_mapper = IDMapper()
         app.graph.set_layout_manager(app.layout_manager)
         app.column_manager = ColumnManager(app.layout_manager)
     

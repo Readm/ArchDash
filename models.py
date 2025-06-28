@@ -217,11 +217,11 @@ class Node:
     name: str
     description: str = ""
     parameters: List[Parameter] = field(default_factory=list)
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = ""  # 默认为空字符串，由CalculationGraph分配
     node_type: str = "default"
     
     def __init__(self, name, description="", id=None, **kwargs):
-        self.id = id or str(uuid.uuid4())
+        self.id = id or ""  # 如果没有提供ID，使用空字符串
         self.name = name
         self.description = description
         self.node_type = kwargs.get('node_type', "default")
@@ -269,16 +269,19 @@ class CalculationGraph:
         # 新增：所有参数的全局映射，便于快速查找
         self._all_parameters: Dict[int, Parameter] = {}  # param_id -> parameter_object
         self.layout_manager: Optional['CanvasLayoutManager'] = None
+        self._next_node_id = 1  # 从1开始的整数ID
         
+    def get_next_node_id(self) -> str:
+        node_id = str(self._next_node_id)
+        self._next_node_id += 1
+        return node_id
+
     def add_node(self, node: Node) -> None:
-        if node.id in self.nodes:
-            raise ValueError(f"Node with id {node.id} already exists.")
-        
-        # 检查节点名称是否已存在
-        for existing_node in self.nodes.values():
-            if existing_node.name == node.name:
-                raise ValueError(f"Node with name '{node.name}' already exists.")
-        
+        """添加节点到图中"""
+        # 如果节点没有ID，分配一个新ID
+        if not node.id:
+            node.id = self.get_next_node_id()
+            
         self.nodes[node.id] = node
         
         # 将节点的所有参数添加到全局参数映射，并设置graph引用
