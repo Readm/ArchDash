@@ -270,6 +270,8 @@ class CalculationGraph:
         self._all_parameters: Dict[int, Parameter] = {}  # param_id -> parameter_object
         self.layout_manager: Optional['CanvasLayoutManager'] = None
         self._next_node_id = 1  # 从1开始的整数ID
+        # 新增：用于存储最近手动或级联更新过的参数 pin 标识符集合
+        self.recently_updated_params: set[str] = set()
         
     def get_next_node_id(self) -> str:
         node_id = str(self._next_node_id)
@@ -742,6 +744,17 @@ class CalculationGraph:
         
         return summary
 
+    @property
+    def lm(self) -> Optional['CanvasLayoutManager']:
+        """布局管理器的快捷访问属性(等同于 self.layout_manager)"""
+        return self.layout_manager
+
+    # 向后兼容，若尝试访问未定义属性且 layout_manager 存在，则代理到 layout_manager
+    def __getattr__(self, item):
+        if self.layout_manager and hasattr(self.layout_manager, item):
+            return getattr(self.layout_manager, item)
+        raise AttributeError(f"{self.__class__.__name__} 对象没有属性 {item}")
+
 @dataclass 
 class GridPosition:
     """网格位置类"""
@@ -1116,4 +1129,57 @@ class CanvasLayoutManager:
             result.append("|" + "..." * self.cols + "|")
         
         result.append("+" + "-" * (self.cols * 12 + 1) + "+")
-        return "\n".join(result) 
+        return "\n".join(result)
+
+    def ensure_minimum_columns(self, minimum_cols: int = 3) -> bool:
+        """确保列数不少于 minimum_cols, 不足时自动扩展"""
+        while self.cols < minimum_cols:
+            self.add_column()
+        return self.cols >= minimum_cols
+
+    def can_remove_column(self, minimum_cols: int = 3) -> Tuple[bool, str]:
+        """检查是否可以删除最后一列 (空列且不低于最小列数)"""
+        if self.cols <= minimum_cols:
+            return False, "已达到最小列数限制"
+
+        last_col = self.cols - 1
+        for row in range(self.rows):
+            if self.grid[row][last_col] is not None:
+                return False, "最后一列不为空, 无法删除"
+        return True, "可以删除"
+
+    def can_add_column(self, max_cols: int = 6) -> Tuple[bool, str]:
+        """检查是否可以添加列"""
+        if self.cols >= max_cols:
+            return False, f"已达到最大列数限制({max_cols})"
+        return True, "可以添加"
+
+    def remove_last_column_if_empty(self, minimum_cols: int = 3) -> bool:
+        """如果最后一列为空且列数超过最小值, 删除之"""
+        can_remove, _ = self.can_remove_column(minimum_cols)
+        if not can_remove:
+            return False
+        # 执行删除
+        self.remove_column()
+        return True
+
+    def auto_remove_empty_last_columns(self, minimum_cols: int = 3) -> int:
+        """自动连续删除空的最后几列, 返回删除的列数"""
+        removed = 0
+        while self.remove_last_column_if_empty(minimum_cols):
+            removed += 1
+        return removed
+
+    def auto_expand_for_node_movement(self, node_id: str, direction: str, max_cols: int = 6) -> bool:
+        """在节点向右移动到边界时, 自动添加列"""
+        if direction != "right":
+            return False
+        pos = self.get_node_position(node_id)
+        if not pos:
+            return False
+        if pos.col >= self.cols - 1:
+            can_add, _ = self.can_add_column(max_cols)
+            if can_add:
+                self.add_column()
+                return True
+        return False 

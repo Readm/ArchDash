@@ -13,98 +13,9 @@ import numpy as np
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
-class ColumnManager:
-    """集中管理布局列数的类"""
-    def __init__(self, layout_manager):
-        self.layout_manager = layout_manager
-        self.minimum_cols = 3
-    
-    def ensure_minimum_columns(self):
-        """确保布局至少有最小列数，如果需要会自动扩展"""
-        while self.layout_manager.cols < self.minimum_cols:
-            if not self.layout_manager.add_column():
-                break
-        return self.layout_manager.cols >= self.minimum_cols
-    
-    def can_remove_column(self):
-        """检查是否可以删除最后一列（空列且不低于最小列数）"""
-        if self.layout_manager.cols <= self.minimum_cols:
-            return False, "已达到最小列数限制"
-        
-        # 检查最后一列是否为空
-        last_col = self.layout_manager.cols - 1
-        for row in range(self.layout_manager.rows):
-            if self.layout_manager.grid[row][last_col] is not None:
-                return False, "最后一列不为空，无法删除"
-        
-        return True, "可以删除"
-    
-    def can_add_column(self):
-        """检查是否可以添加列"""
-        max_cols = 6  # 设置最大列数限制
-        if self.layout_manager.cols >= max_cols:
-            return False, f"已达到最大列数限制({max_cols})"
-        return True, "可以添加"
-    
-    def add_column(self):
-        """手动添加一列"""
-        can_add, reason = self.can_add_column()
-        if not can_add:
-            return False, reason
-        
-        if self.layout_manager.add_column():
-            return True, f"已添加新列，当前共{self.layout_manager.cols}列"
-        else:
-            return False, "添加列失败"
-    
-    def remove_column(self):
-        """手动删除最后一列"""
-        can_remove, reason = self.can_remove_column()
-        if not can_remove:
-            return False, reason
-        
-        if self.layout_manager.remove_column():
-            return True, f"已删除空列，当前共{self.layout_manager.cols}列"
-        else:
-            return False, "删除列失败"
-    
-    def auto_remove_empty_last_columns(self):
-        """自动删除空的最后一列，但保持最小列数"""
-        removed_count = 0
-        
-        while self.layout_manager.cols > self.minimum_cols:
-            can_remove, _ = self.can_remove_column()
-            if can_remove:
-                if self.layout_manager.remove_column():
-                    removed_count += 1
-                else:
-                    break
-            else:
-                break
-        
-        if removed_count > 0:
-            return f"自动删除了{removed_count}个空列（保持最少{self.minimum_cols}列）"
-        return None
-    
-    def auto_expand_for_node_movement(self, node_id, direction):
-        """节点移动时自动扩展列数（仅在右移到边界时）"""
-        if direction == "right":
-            position = self.layout_manager.get_node_position(node_id)
-            if position and position.col >= self.layout_manager.cols - 1:
-                # 节点在最右边，尝试添加新列
-                success, message = self.add_column()
-                if success:
-                    return f"自动添加新列以容纳节点移动"
-        return None
-
-# 全局数据模型
-layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)  # 设置为3列
+# 初始化全局计算图并设置其布局管理器
 graph = CalculationGraph()
-graph.set_layout_manager(layout_manager)
-recently_updated_params = set()  # 新增：存储最近更新的参数ID，用于高亮显示
-
-# 初始化全局列管理器
-column_manager = ColumnManager(layout_manager)
+graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))  # 默认3列布局
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -316,63 +227,21 @@ def create_empty_plot():
 
 # 自动删除空的最后一列的辅助函数
 def auto_remove_empty_last_column():
-    """检查并自动删除空的最后一列，但至少保留3列
-    
-    Returns:
-        str: 删除结果的描述，如果没有删除则返回None
-    """
-    removed_count = 0
-    minimum_cols = 3  # 设置最小列数为3
-    
-    # 持续检查并删除空的最后一列，直到最后一列不为空或只剩最小列数
-    while layout_manager.cols > minimum_cols:
-        # 检查最后一列是否为空
-        last_col = layout_manager.cols - 1
-        is_empty = True
-        
-        for row in range(layout_manager.rows):
-            if layout_manager.grid[row][last_col] is not None:
-                is_empty = False
-                break
-        
-        if is_empty:
-            # 删除空的最后一列
-            if layout_manager.remove_column():
-                removed_count += 1
-            else:
-                break
-        else:
-            break
-    
-    if removed_count > 0:
-        if removed_count == 1:
-            return f"自动删除了1个空列（保持最少{minimum_cols}列）"
-        else:
-            return f"自动删除了{removed_count}个空列（保持最少{minimum_cols}列）"
-    
-    return None
-
-def ensure_minimum_columns():
-    """确保布局至少有3列，如果需要会自动扩展"""
-    global column_manager
-    return column_manager.ensure_minimum_columns()
-
-def auto_remove_empty_last_column():
     """检查并自动删除空的最后一列，但至少保留3列"""
-    global column_manager
-    return column_manager.auto_remove_empty_last_columns()
+    return graph.layout_manager.auto_remove_empty_last_columns()
+
+def ensure_minimum_columns(min_cols: int = 3):
+    """确保布局至少有 min_cols 列"""
+    return graph.layout_manager.ensure_minimum_columns(min_cols)
 
 def create_example_soc_graph():
     """创建多核SoC示例计算图"""
-    global graph, layout_manager, column_manager
+    global graph
     
     # 清空现有数据
     graph = CalculationGraph()
-    layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)  # 设置为3列布局
-    graph.set_layout_manager(layout_manager)
-    
-    # 重新初始化列管理器
-    column_manager = ColumnManager(layout_manager)
+    # 为示例图创建新的布局管理器
+    graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=12))  # 设置为3列布局
     
     from models import Node, Parameter
     
@@ -384,7 +253,7 @@ def create_example_soc_graph():
     process_node.add_parameter(Parameter("工艺厂商", "TSMC", "", description="芯片代工厂商", confidence=1.0, param_type="string"))
     graph.add_node(process_node)
     from models import GridPosition
-    layout_manager.place_node(process_node.id, GridPosition(0, 0))
+    graph.layout_manager.place_node(process_node.id, GridPosition(0, 0))
     
     # 2. CPU核心节点
     cpu_core_node = Node(name="CPU核心", description="处理器核心参数")
@@ -413,7 +282,7 @@ self.confidence = min(base_confidence, voltage_confidence) * 0.95
     cpu_core_node.add_parameter(max_freq_param)
     
     graph.add_node(cpu_core_node)
-    layout_manager.place_node(cpu_core_node.id, GridPosition(1, 0))
+    graph.layout_manager.place_node(cpu_core_node.id, GridPosition(1, 0))
     
     # 3. 缓存系统节点
     cache_node = Node(name="缓存系统", description="多级缓存参数")
@@ -448,7 +317,7 @@ self.confidence = math.pow(math.prod(dep_confidences), 1/len(dep_confidences)) *
     cache_node.add_parameter(total_cache_param)
     
     graph.add_node(cache_node)
-    layout_manager.place_node(cache_node.id, GridPosition(2, 0))
+    graph.layout_manager.place_node(cache_node.id, GridPosition(2, 0))
     
     # 4. 内存控制器节点
     memory_node = Node(name="内存系统", description="内存控制器和带宽")
@@ -477,7 +346,7 @@ self.confidence = 0.7  # 固定70%置信度
     memory_node.add_parameter(bandwidth_param)
     
     graph.add_node(memory_node)
-    layout_manager.place_node(memory_node.id, GridPosition(0, 1))
+    graph.layout_manager.place_node(memory_node.id, GridPosition(0, 1))
     
     # 5. 功耗分析节点
     power_node = Node(name="功耗分析", description="芯片功耗计算")
@@ -541,7 +410,7 @@ result = cpu_power + cache_power + memory_power + other_power
     power_node.add_parameter(total_power_param)
     
     graph.add_node(power_node)
-    layout_manager.place_node(power_node.id, GridPosition(1, 1))
+    graph.layout_manager.place_node(power_node.id, GridPosition(1, 1))
     
     # 6. 性能分析节点
     performance_node = Node(name="性能分析", description="系统性能指标")
@@ -580,7 +449,7 @@ result = single_core * core_count * parallel_efficiency
     performance_node.add_parameter(multi_core_param)
     
     graph.add_node(performance_node)
-    layout_manager.place_node(performance_node.id, GridPosition(2, 1))
+    graph.layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
     # 7. 热设计节点
     thermal_node = Node(name="热设计", description="散热和温度分析")
@@ -623,7 +492,7 @@ result = ambient_temp + thermal_resistance * total_power
     thermal_node.add_parameter(junction_temp_param)
     
     graph.add_node(thermal_node)
-    layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
+    graph.layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
     
     # 8. 成本分析节点
     cost_node = Node(name="成本分析", description="芯片成本分析")
@@ -668,7 +537,7 @@ result = die_area * cost_per_mm2 + packaging_cost
     cost_node.add_parameter(manufacturing_cost_param)
     
     graph.add_node(cost_node)
-    layout_manager.place_node(cost_node.id, GridPosition(1, 2))
+    graph.layout_manager.place_node(cost_node.id, GridPosition(1, 2))
     
     # 9. 能效分析节点
     efficiency_node = Node(name="能效分析", description="性能功耗比分析")
@@ -700,7 +569,7 @@ result = performance / cost
     efficiency_node.add_parameter(cost_performance_ratio_param)
     
     graph.add_node(efficiency_node)
-    layout_manager.place_node(efficiency_node.id, GridPosition(2, 2))
+    graph.layout_manager.place_node(efficiency_node.id, GridPosition(2, 2))
     
     # 为所有参数设置计算图引用
     for node in graph.nodes.values():
@@ -726,7 +595,7 @@ def update_canvas(node_data=None):
     print(f"🔍 update_canvas调用: graph.nodes = {graph.nodes}")
     print(f"🔍 graph.nodes是否为空: {not graph.nodes}")
     print(f"🔍 graph.nodes长度: {len(graph.nodes)}")
-    print(f"🔍 当前布局列数: {layout_manager.cols}")
+    print(f"🔍 当前布局列数: {graph.layout_manager.cols}")
     
     if not graph.nodes:
         empty_state_content = html.Div([
@@ -793,9 +662,9 @@ def update_canvas(node_data=None):
     
     # 按列组织内容
     print(f"🏗️ 渲染正常模式 - 有{len(graph.nodes)}个节点")
-    for col in range(layout_manager.cols):
+    for col in range(graph.layout_manager.cols):
         col_content = []
-        col_nodes = layout_manager.get_column_nodes(col)
+        col_nodes = graph.layout_manager.get_column_nodes(col)
         
         # 按行排序节点
         for node_id, row in sorted(col_nodes, key=lambda x: x[1]):
@@ -860,7 +729,7 @@ def update_canvas(node_data=None):
                                             style={
                                                 "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
                                                 "border": "1px solid transparent", 
-                                                "background": "lightgreen" if f"{node_id}-{param_idx}" in recently_updated_params else "transparent",
+                                                "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
                                                 "borderRadius": "3px", 
                                                 "padding": "1px 3px",
                                                 "transition": "background-color 2s ease-out"
@@ -999,7 +868,7 @@ def update_canvas(node_data=None):
             col_content.append(node_div)
         
         # 计算列宽 - 优化布局，确保至少3列时有合理的宽度分布
-        total_cols = max(3, layout_manager.cols)  # 至少按3列计算宽度
+        total_cols = max(3, graph.layout_manager.cols)  # 至少按3列计算宽度
         col_width = max(2, 12 // total_cols)  # 每列至少占2个Bootstrap列宽
         canvas_content.append(dbc.Col(col_content, width=col_width))
     
@@ -1785,7 +1654,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         node_name = node.name
         
         if operation_type == "move-node-up":
-            success = layout_manager.move_node_up(node_id)
+            success = graph.layout_manager.move_node_up(node_id)
             result_message = f"节点 {node_name} 已上移" if success else f"节点 {node_name} 无法上移"
             # 节点移动后检查并自动删除空的最后一列，但保持至少3列
             if success:
@@ -1795,7 +1664,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return result_message, node_data, update_canvas()
         
         elif operation_type == "move-node-down":
-            success = layout_manager.move_node_down(node_id)
+            success = graph.layout_manager.move_node_down(node_id)
             result_message = f"节点 {node_name} 已下移" if success else f"节点 {node_name} 无法下移"
             # 节点移动后检查并自动删除空的最后一列，但保持至少3列
             if success:
@@ -1805,7 +1674,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return result_message, node_data, update_canvas()
         
         elif operation_type == "move-node-left":
-            success = layout_manager.move_node_left(node_id)
+            success = graph.layout_manager.move_node_left(node_id)
             result_message = f"节点 {node_name} 已左移" if success else f"节点 {node_name} 无法左移"
             # 节点移动后检查并自动删除空的最后一列，但保持至少3列
             if success:
@@ -1816,10 +1685,9 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
         
         elif operation_type == "move-node-right":
             # 右移前先检查是否需要自动扩展列
-            global column_manager
-            expand_result = column_manager.auto_expand_for_node_movement(node_id, "right")
+            expand_result = graph.layout_manager.auto_expand_for_node_movement(node_id, "right")
             
-            success = layout_manager.move_node_right(node_id)
+            success = graph.layout_manager.move_node_right(node_id)
             result_message = f"节点 {node_name} 已右移" if success else f"节点 {node_name} 无法右移"
             
             if success and expand_result:
@@ -1868,7 +1736,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                 return error_message, node_data, update_canvas()
             
             # 从布局管理器移除节点
-            layout_manager.remove_node(node_id)
+            graph.layout_manager.remove_node(node_id)
             # 从计算图移除节点
             if node_id in graph.nodes:
                 del graph.nodes[node_id]
@@ -2067,18 +1935,18 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
                 current_param.set_manual_value(new_value)
                 update_message = f"🔓 参数 {current_param.name} 已手动设置为 {new_value}（已断开自动计算）"
                 should_update_canvas = True
-                recently_updated_params.add(f"{node_id}-{param_index}")
+                graph.recently_updated_params.add(f"{node_id}-{param_index}")
             else:
                 # 无计算依赖的参数，正常更新
                 # 清空之前的高亮标记
-                recently_updated_params.clear()
+                graph.recently_updated_params.clear()
                 
                 # 使用新的数据流更新机制
                 update_result = graph.set_parameter_value(current_param, new_value)
                 should_update_canvas = True
                 
                 # 标记主参数为已更新
-                recently_updated_params.add(f"{node_id}-{param_index}")
+                graph.recently_updated_params.add(f"{node_id}-{param_index}")
                 
                 # 标记所有被级联更新的参数
                 for update_info in update_result.get('cascaded_updates', []):
@@ -2087,7 +1955,7 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
                     for check_node_id, check_node in graph.nodes.items():
                         for check_idx, check_param in enumerate(check_node.parameters):
                             if check_param is updated_param:
-                                recently_updated_params.add(f"{check_node_id}-{check_idx}")
+                                graph.recently_updated_params.add(f"{check_node_id}-{check_idx}")
                                 break
                 
                 # 构建更新消息
@@ -2120,6 +1988,7 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
     prevent_initial_call=True
 )
 def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data):
+    ctx = dash.callback_context  # 获取回调上下文
     if not ctx.triggered_id:
         return node_data, update_canvas(), dash.no_update
     
@@ -2541,8 +2410,8 @@ def save_parameter_changes(save_clicks, param_name, param_type, param_unit, para
 )
 def clear_parameter_highlights(n_intervals):
     """定时清除参数高亮"""
-    if recently_updated_params:
-        recently_updated_params.clear()
+    if graph.recently_updated_params:
+        graph.recently_updated_params.clear()
         return update_canvas(), True  # 清除高亮并禁用计时器
     return dash.no_update, dash.no_update
 
@@ -2643,18 +2512,13 @@ def load_calculation_graph(contents, filename):
             return dash.no_update, "❌ 无效的计算图文件格式"
         
         # 清空现有数据
-        global graph, layout_manager, id_mapper, column_manager
+        global graph
         
-        # 重新创建布局管理器
-        layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
+        # 创建新的布局管理器并重新构建计算图
+        new_layout = CanvasLayoutManager(initial_cols=3, initial_rows=10)
+        graph = CalculationGraph.from_dict(data, new_layout)
         
-        # 从数据重建计算图
-        graph = CalculationGraph.from_dict(data, layout_manager)
-        
-        # 节点ID映射已由CalculationGraph自动管理
-        
-        # 重新初始化列管理器
-        column_manager = ColumnManager(layout_manager)
+        # 重新初始化列管理器 - 已集成于 CalculationGraph，无需额外操作
         
         # 更新画布显示
         updated_canvas = update_canvas()
@@ -3371,7 +3235,7 @@ def get_all_parameter_dependencies():
     
     # 遍历所有节点和参数
     for node_id, node in graph.nodes.items():
-        node_name = id_mapper.get_node_name(node_id)
+        node_name = node.name
         
         for param_idx, param in enumerate(node.parameters):
 
@@ -4251,7 +4115,9 @@ def create_new_node(save_clicks, node_name, node_description):
         
         # 创建新节点
         from models import Node
+        node_id = graph.get_next_node_id()
         node = Node(
+            id=node_id,
             name=node_name,
             description=node_description or f"节点 {node_name}"
         )
@@ -4260,7 +4126,7 @@ def create_new_node(save_clicks, node_name, node_description):
         graph.add_node(node)
         
         # 使用布局管理器放置节点
-        position = layout_manager.place_node(node.id)
+        position = graph.layout_manager.place_node(node.id)
         
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{node_name}' 已创建并添加到位置 ({position.row}, {position.col})"
@@ -4281,32 +4147,39 @@ def create_new_node(save_clicks, node_name, node_description):
 )
 def handle_column_management(add_clicks, remove_clicks, canvas_children):
     """处理手动添加/删除列操作"""
-    global column_manager
-    
     ctx = dash.callback_context
     if not ctx.triggered:
         raise dash.exceptions.PreventUpdate
-    
+
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
-    
-    # 检查删除按钮是否应该被禁用
-    can_remove, _ = column_manager.can_remove_column()
-    should_disable_remove = not can_remove
-    
+
+    # 判断当前是否可以删除列
+    can_remove, remove_msg = graph.layout_manager.can_remove_column()
+
+    # 添加列
     if button_id == "add-column-btn" and add_clicks:
-        success, message = column_manager.add_column()
-        status = "✅" if success else "❌"
-        # 重新检查删除按钮状态
-        can_remove_after, _ = column_manager.can_remove_column()
-        return update_canvas(), f"{status} {message}", not can_remove_after
-    
-    elif button_id == "remove-column-btn" and remove_clicks:
-        success, message = column_manager.remove_column()
-        status = "✅" if success else "❌"
-        # 重新检查删除按钮状态
-        can_remove_after, _ = column_manager.can_remove_column()
-        return update_canvas(), f"{status} {message}", not can_remove_after
-    
+        can_add, add_msg = graph.layout_manager.can_add_column()
+        if not can_add:
+            return dash.no_update, f"❌ {add_msg}", not can_remove
+
+        graph.layout_manager.add_column()
+        return update_canvas(), f"✅ 已添加新列 (当前 {graph.layout_manager.cols} 列)", False
+
+    # 删除列
+    if button_id == "remove-column-btn" and remove_clicks:
+        if not can_remove:
+            return dash.no_update, f"❌ {remove_msg}", True
+
+        success = graph.layout_manager.remove_column()
+        if success:
+            msg = f"✅ 已删除最后一列 (当前 {graph.layout_manager.cols} 列)"
+        else:
+            msg = "❌ 无法删除最后一列，可能不为空"
+
+        # 再次检查是否还能继续删除
+        can_remove_after, _ = graph.layout_manager.can_remove_column()
+        return update_canvas(), msg, not can_remove_after
+
     raise dash.exceptions.PreventUpdate
 
 # 初始化删除按钮状态
@@ -4317,10 +4190,8 @@ def handle_column_management(add_clicks, remove_clicks, canvas_children):
 )
 def update_remove_button_status(canvas_children):
     """更新删除列按钮的禁用状态"""
-    global column_manager
-    
     # 检查是否可以删除列
-    can_remove, _ = column_manager.can_remove_column()
+    can_remove, _ = graph.layout_manager.can_remove_column()
     return not can_remove
 
 # 添加依赖检查工具函数
@@ -4405,21 +4276,14 @@ def clear_calculation_graph(n_clicks):
     
     try:
         # 清空全局数据模型
-        global graph, layout_manager, column_manager
+        global graph
         
-        # 重新创建空的布局管理器
-        layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        
-        # 重新创建空的计算图
+        # 重新创建空的计算图和布局管理器
         graph = CalculationGraph()
-        graph.set_layout_manager(layout_manager)
-        
-        # 重新初始化列管理器
-        column_manager = ColumnManager(layout_manager)
+        graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))
         
         # 清空最近更新的参数集合
-        global recently_updated_params
-        recently_updated_params.clear()
+        graph.recently_updated_params.clear()
         
         # 更新画布显示
         updated_canvas = update_canvas()
