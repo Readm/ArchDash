@@ -2,20 +2,25 @@ import dash
 from dash import html, dcc, callback, Output, Input, State, ctx, MATCH, ALL
 import dash_bootstrap_components as dbc
 from models import CalculationGraph, Node, Parameter, CanvasLayoutManager, GridPosition
+from ai.session_graph import get_graph, set_graph, GraphProxy
 from typing import Dict, Optional, List, Any
 import json
 from datetime import datetime
 import uuid
 import plotly.graph_objects as go
 import numpy as np
+import os
 
 # 删除 IDMapper 类的定义
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
-# 初始化全局计算图并设置其布局管理器
-graph = CalculationGraph()
-graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))  # 默认3列布局
+# Flask session 需要 SECRET_KEY 才能正常工作
+# 可以从环境变量读取，若不存在则生成随机值（仅开发环境适用）
+app.server.secret_key = os.environ.get("SECRET_KEY", str(uuid.uuid4()))
+
+# 使用会话级 CalculationGraph 代理
+graph: CalculationGraph = GraphProxy()
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -236,13 +241,16 @@ def ensure_minimum_columns(min_cols: int = 3):
 
 def create_example_soc_graph():
     """创建多核SoC示例计算图"""
-    global graph
-    
-    # 清空现有数据
-    graph = CalculationGraph()
-    # 为示例图创建新的布局管理器
-    graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=12))  # 设置为3列布局
-    
+    from ai.session_graph import set_graph, get_graph
+
+    # 新建独立 CalculationGraph 并初始化布局
+    new_graph = CalculationGraph()
+    new_graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=12))  # 设置为3列布局
+
+    # 写入当前 session
+    set_graph(new_graph)
+    graph = get_graph()
+
     from models import Node, Parameter
     
     # 1. 工艺节点 - 基础参数
@@ -2512,19 +2520,23 @@ def load_calculation_graph(contents, filename):
             return dash.no_update, "❌ 无效的计算图文件格式"
         
         # 清空现有数据
-        global graph
+        # global graph  # 已废弃
         
         # 创建新的布局管理器并重新构建计算图
         new_layout = CanvasLayoutManager(initial_cols=3, initial_rows=10)
-        graph = CalculationGraph.from_dict(data, new_layout)
+        new_graph = CalculationGraph.from_dict(data, new_layout)
+
+        # 写入当前 session
+        set_graph(new_graph)
+        graph = get_graph()
         
         # 重新初始化列管理器 - 已集成于 CalculationGraph，无需额外操作
         
         # 更新画布显示
         updated_canvas = update_canvas()
         
-        loaded_nodes = len(graph.nodes)
-        total_params = sum(len(node.parameters) for node in graph.nodes.values())
+        loaded_nodes = len(new_graph.nodes)
+        total_params = sum(len(node.parameters) for node in new_graph.nodes.values())
         
         return updated_canvas, f"✅ 成功加载计算图 '{filename}'：{loaded_nodes}个节点，{total_params}个参数"
         
@@ -4276,11 +4288,13 @@ def clear_calculation_graph(n_clicks):
     
     try:
         # 清空全局数据模型
-        global graph
+        # global graph  # 已废弃
         
         # 重新创建空的计算图和布局管理器
-        graph = CalculationGraph()
-        graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))
+        new_graph = CalculationGraph()
+        new_graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))
+        set_graph(new_graph)
+        graph = get_graph()
         
         # 清空最近更新的参数集合
         graph.recently_updated_params.clear()
