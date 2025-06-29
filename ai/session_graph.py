@@ -7,7 +7,7 @@ import threading
 import uuid
 from typing import Dict
 
-from flask import session, has_request_context, request
+from flask import has_request_context, request
 from urllib.parse import urlparse, parse_qs
 
 from models import CalculationGraph, CanvasLayoutManager
@@ -15,7 +15,7 @@ from models import CalculationGraph, CanvasLayoutManager
 # 线程安全锁
 _lock = threading.Lock()
 
-# session_id -> CalculationGraph
+# sid -> CalculationGraph
 SESSION_GRAPHS: Dict[str, CalculationGraph] = {}
 
 # 默认全局计算图，用于缺少请求上下文（如启动时渲染布局等）
@@ -29,8 +29,7 @@ def _get_session_id() -> str:
     优先级：
     1. URL 查询参数 `_sid`（页面加载请求）。
     2. Referer 头中的 `_sid`（Dash 回调 POST 请求会携带 Referer）。
-    3. Cookie session（兼容旧链接或跨标签共享模式）。
-    4. 新生成随机 sid。
+    3. 全新生成随机 sid。
 
     注意：当 sid 来自 URL 或 Referer 时 **不再写入 session['sid']**，
     以避免不同浏览器标签相互覆盖 cookie 引发的数据串扰。
@@ -52,15 +51,11 @@ def _get_session_id() -> str:
             except Exception:
                 sid = None
 
-    # 3. Cookie session（仍保留，兼容旧逻辑）
-    if not sid:
-        sid = session.get("sid")
-
-    # 4. 全新生成
+    # 3. 全新生成
     if not sid:
         sid = str(uuid.uuid4())
 
-    # ⚠️ 不再写入 session['sid']，避免跨标签覆盖
+    # ⚠️ 无需写入 cookie
     return sid
 
 
