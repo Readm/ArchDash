@@ -105,22 +105,18 @@ class Parameter:
         if not self.calculation_func:
             return self.value if self.value is not None else 0.0
         
-        # 如果参数被标记为unlinked，跳过自动计算
         if self.unlinked:
             return self.value if self.value is not None else 0.0
         
-        # 检查所有依赖是否都有值
         for dep in self.dependencies:
             if dep.value is None:
                 raise ValueError(f"依赖参数 {dep.name} 的值缺失")
         
-        # 设置较为宽松的计算环境，允许常用模块和函数
         import math
         import builtins
         
-        # 创建安全但功能完整的全局环境
         safe_globals = {
-            '__builtins__': builtins.__dict__.copy(),  # 允许所有内置函数
+            '__builtins__': builtins.__dict__.copy(),
             'math': math,
             'datetime': datetime,
         }
@@ -133,14 +129,12 @@ class Parameter:
         }
         
         try:
-            # 如果计算函数是字符串，则使用exec执行
             if isinstance(self.calculation_func, str):
                 exec(self.calculation_func, safe_globals, local_env)
                 result = local_env.get('result', None)
                 if result is None:
                     raise ValueError("计算函数未设置result变量作为输出")
             else:
-                # 如果计算函数是函数对象，则直接调用
                 result = self.calculation_func(self)
             
             self.value = result
@@ -266,13 +260,10 @@ class CalculationGraph:
         self.dependencies = {}
         self.dependency_graph: Dict[str, List[str]] = {}
         self.reverse_dependency_graph: Dict[str, List[str]] = {}
-        # 新增：反向依赖图，记录哪些参数依赖于当前参数
-        self._dependents_map: Dict[int, List[int]] = {}  # param_id -> [dependent_param_ids]
-        # 新增：所有参数的全局映射，便于快速查找
-        self._all_parameters: Dict[int, Parameter] = {}  # param_id -> parameter_object
+        self._dependents_map: Dict[int, List[int]] = {}
+        self._all_parameters: Dict[int, Parameter] = {}
         self.layout_manager: Optional['CanvasLayoutManager'] = None
-        self._next_node_id = 1  # 从1开始的整数ID，每个实例独立
-        # 新增：用于存储最近手动或级联更新过的参数 pin 标识符集合
+        self._next_node_id = 1
         self.recently_updated_params: set[str] = set()
         
     def get_next_node_id(self) -> str:
@@ -337,23 +328,18 @@ class CalculationGraph:
         """更新单个参数的依赖关系"""
         param_id = id(param)
         
-        # 确保参数在全局映射中
         if param_id not in self._all_parameters:
             self._all_parameters[param_id] = param
             self._dependents_map[param_id] = []
-            # 设置graph引用
             param.set_graph(self)
         
-        # 重新构建依赖图
         self._rebuild_dependency_graph()
 
     def _rebuild_dependency_graph(self):
         """重新构建反向依赖图"""
-        # 清空现有的反向依赖图
         for param_id in self._dependents_map:
             self._dependents_map[param_id] = []
         
-        # 遍历所有参数，构建反向依赖关系
         for param_id, param in self._all_parameters.items():
             for dependency in param.dependencies:
                 dep_id = id(dependency)
@@ -377,21 +363,17 @@ class CalculationGraph:
         param_id = id(changed_param)
         updated_params = []
         
-        # 避免循环更新
         if param_id in visited:
             return updated_params
         
         visited.add(param_id)
         
-        # 获取所有依赖于当前参数的参数
         dependent_param_ids = self._dependents_map.get(param_id, [])
         
-        # 按拓扑顺序更新依赖参数
         for dependent_id in dependent_param_ids:
             if dependent_id in self._all_parameters:
                 dependent_param = self._all_parameters[dependent_id]
                 
-                # 只有当参数有计算函数时才进行重新计算
                 if dependent_param.calculation_func:
                     try:
                         old_value = dependent_param.value
@@ -403,13 +385,11 @@ class CalculationGraph:
                             'new_value': new_value
                         })
                         
-                        # 如果值确实发生了变化，继续传播更新
                         if old_value != new_value:
                             cascaded_updates = self.propagate_updates(dependent_param, visited.copy())
                             updated_params.extend(cascaded_updates)
                             
                     except Exception as e:
-                        # 记录计算错误，但不中断整个更新流程
                         print(f"警告：参数 {dependent_param.name} 计算失败: {e}")
         
         return updated_params

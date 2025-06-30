@@ -577,3 +577,138 @@ app_layout = dbc.Container([
         ])
     ], id="enlarged-plot-modal", size="xl", is_open=False),
 ], fluid=True)
+
+app_index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>🎨 ArchDash </title>
+        {%favicon%}
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        {%css%}
+        <style>
+            /* 保留必要的覆盖样式 */
+            .node-name {
+                font-weight: bold;
+                margin-bottom: 4px;
+                color: var(--text-primary);
+            }
+            .node-content {
+                font-size: 0.9em;
+                color: var(--text-secondary);
+            }
+            .param-menu-btn {
+                border: none !important;
+                background: transparent !important;
+                padding: 2px 6px !important;
+                font-size: 12px !important;
+                color: var(--text-secondary) !important;
+                transition: all 0.2s ease !important;
+            }
+            .param-menu-btn:hover {
+                background: var(--glass-bg) !important;
+                color: var(--text-primary) !important;
+                border-radius: 3px !important;
+            }
+            
+            /* 节点标题栏加号按钮样式 */
+            .add-param-btn:hover {
+                background: rgba(0, 123, 255, 0.1) !important;
+                color: #007bff !important;
+                transform: scale(1.05);
+            }
+            
+            /* 节点菜单按钮悬停样式优化 */
+            .node-menu-btn:hover {
+                background: rgba(108, 117, 125, 0.1) !important;
+                color: #495057 !important;
+            }
+            
+            /* SVG箭头样式 - 美化版 */
+            #arrows-overlay {
+                pointer-events: none;
+                z-index: 10;
+            }
+            
+            #arrows-overlay svg {
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            /* 流动虚线动画 - 修正方向 */
+            @keyframes flow-dash {
+                0% {
+                    stroke-dashoffset: 20;
+                }
+                100% {
+                    stroke-dashoffset: 0;
+                }
+            }
+            
+            /* 脉冲动画 */
+            @keyframes pulse-glow {
+                0% {
+                    opacity: 0.8;
+                }
+                100% {
+                    opacity: 1;
+                }
+            }
+            
+            /* 箭头出现动画 */
+            @keyframes arrow-appear {
+                0% {
+                    opacity: 0;
+                    stroke-dasharray: 1000;
+                    stroke-dashoffset: 1000;
+                }
+                60% {
+                    opacity: 0.8;
+                }
+                100% {
+                    opacity: 1;
+                    stroke-dasharray: none;
+                    stroke-dashoffset: 0;
+                }
+            }
+            
+            /* 美化pin点的悬停效果 */
+            .param-pin {
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            .param-pin:hover {
+                transform: scale(1.2);
+                background-color: #007bff !important;
+            }
+            
+            .param-pin.active {
+                animation: pin-pulse 1.5s ease-in-out infinite;
+                background-color: #e74c3c !important;
+            }
+            
+            @keyframes pin-pulse {
+                0%, 100% {
+                    transform: scale(1);
+                }
+                50% {
+                    transform: scale(1.15);
+                }
+            }
+            
+            /* 深色模式下的箭头效果 */
+            [data-theme="dark"] #arrows-overlay svg {
+                opacity: 0.9;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
