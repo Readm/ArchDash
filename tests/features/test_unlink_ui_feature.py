@@ -16,7 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-from app import app, id_mapper, layout_manager
+from app import app, layout_manager
 from models import CalculationGraph, Node, Parameter
 
 
@@ -54,7 +54,6 @@ def setup_test_nodes_with_dependencies():
     
     # 清理现有状态
     graph.nodes.clear()
-    id_mapper._node_mapping.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
     layout_manager._init_grid()
@@ -66,7 +65,6 @@ def setup_test_nodes_with_dependencies():
     input_node.add_parameter(length)
     input_node.add_parameter(width)
     graph.add_node(input_node)
-    id_mapper.register_node(input_node.id, input_node.name)
     layout_manager.place_node(input_node.id)
     
     # 创建计算节点
@@ -77,7 +75,6 @@ def setup_test_nodes_with_dependencies():
     area.add_dependency(width)
     calc_node.add_parameter(area)
     graph.add_node(calc_node)
-    id_mapper.register_node(calc_node.id, calc_node.name)
     layout_manager.place_node(calc_node.id)
     
     # 设置计算图关联
@@ -105,6 +102,8 @@ def test_unlink_icon_display_logic(dash_duo):
     test_data = setup_test_nodes_with_dependencies()
     area = test_data['area']
     length = test_data['length']
+    calc_node = test_data['calc_node']
+    input_node = test_data['input_node']
     
     # 等待页面加载
     dash_duo.wait_for_element("#canvas-container", timeout=10)
@@ -113,19 +112,17 @@ def test_unlink_icon_display_logic(dash_duo):
     print("🔬 测试unlink图标显示逻辑")
     
     # 1. 测试初始状态：有依赖但未unlink，不应显示🔓图标
-    area_node_id = list(id_mapper._node_mapping.keys())[1]  # 计算节点
     area_unlink_icons = dash_duo.driver.find_elements(
         By.CSS_SELECTOR, 
-        f"div[data-dash-id*='{area_node_id}'] .unlink-icon"
+        f"div[data-dash-id*='{calc_node.id}'] .unlink-icon"
     )
     assert len(area_unlink_icons) == 0, "初始状态下不应显示unlink图标"
     print("✅ 初始状态：有依赖但未unlink，不显示🔓图标")
     
     # 2. 测试无依赖参数：永远不应显示unlink图标
-    length_node_id = list(id_mapper._node_mapping.keys())[0]  # 输入节点
     length_unlink_icons = dash_duo.driver.find_elements(
         By.CSS_SELECTOR, 
-        f"div[data-dash-id*='{length_node_id}'] .unlink-icon"
+        f"div[data-dash-id*='{input_node.id}'] .unlink-icon"
     )
     assert len(length_unlink_icons) == 0, "无依赖参数不应显示unlink图标"
     print("✅ 无依赖参数：不显示🔓图标")
@@ -317,8 +314,8 @@ def test_unlink_ui_integration(dash_duo):
     print("🔬 测试unlink功能完整UI集成")
     
     # 获取节点信息
-    area_node_id = list(id_mapper._node_mapping.keys())[1]  # 计算节点
-    length_node_id = list(id_mapper._node_mapping.keys())[0]  # 输入节点
+    area_node_id = test_data['calc_node'].id
+    length_node_id = test_data['input_node'].id
     
     # 1. 验证初始状态：无unlink图标
     unlink_icons = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".unlink-icon")

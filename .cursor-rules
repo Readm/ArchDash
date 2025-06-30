@@ -1,2 +1,63 @@
 # Cursor 规则
-每次修改完代码都要执行测试。pytest test_models.py
+
+## 测试执行规则
+
+1. 代码修改后的测试执行：
+   - 修改核心模型后：`python tests/run_tests.py --type core`
+   - 修改功能模块后：`python tests/run_tests.py --type features`
+   - 修改示例代码后：`python tests/run_tests.py --type examples`
+   - 修改多个模块后：`python tests/run_tests.py`
+
+2. 测试文件组织规则：
+   - 核心功能测试放在 `tests/core/` 目录
+   - 功能特性测试放在 `tests/features/` 目录
+   - 示例功能测试放在 `tests/examples/` 目录
+   - 集成测试放在 `tests/integration/` 目录
+
+3. 测试文件命名规则：
+   - 测试文件必须以 `test_` 开头
+   - 测试类必须以 `Test` 开头
+   - 测试方法必须以 `test_` 开头
+   - 使用描述性名称，清晰表明测试目的
+
+4. 测试代码规范：
+   - 每个测试文件专注于一个功能模块
+   - 必须包含测试文档字符串
+   - 使用明确的断言消息
+   - 避免测试间的依赖
+
+5. CI/CD环境规则：
+   - CI环境中使用 `TEST_ENV=CI python tests/run_tests.py`
+   - 确保所有测试支持headless模式
+
+## 文档维护规则
+
+1. 更新测试文档：
+   - 新功能必须更新 `ai/testing/TEST_ORGANIZATION.md`
+   - 重要变更必须更新 `ai/testing/TEST_COVERAGE_SUMMARY.md`
+   - UI测试变更需更新 `ai/testing/headless_testing_guide.md`
+
+2. 测试覆盖率要求：
+   - 核心功能测试覆盖率 >= 90%
+   - 功能特性测试覆盖率 >= 80%
+   - 示例功能测试覆盖率 >= 70%
+
+## 开发流程规则
+
+1. 新功能开发：
+   - 先编写测试用例
+   - 实现功能代码
+   - 验证测试通过
+   - 更新相关文档
+
+2. Bug修复：
+   - 先编写失败测试
+   - 修复问题代码
+   - 验证测试通过
+   - 添加回归测试
+
+3. 重构代码：
+   - 确保现有测试完整
+   - 进行代码重构
+   - 验证所有测试通过
+   - 必要时更新测试

@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, callback, Output, Input, State, ctx, MATCH, ALL
+from dash import html, dcc, Output, Input, State, ctx, MATCH, ALL, callback
 import dash_bootstrap_components as dbc
 from models import CalculationGraph, Node, Parameter, CanvasLayoutManager, GridPosition
 from session_graph import get_graph, set_graph, GraphProxy
@@ -21,6 +21,10 @@ app.server.secret_key = os.environ.get("SECRET_KEY", str(uuid.uuid4()))
 
 # 使用会话级 CalculationGraph 代理
 graph: CalculationGraph = GraphProxy()
+
+# 创建布局管理器
+layout_manager = CanvasLayoutManager(initial_cols=4, initial_rows=12)
+graph.set_layout_manager(layout_manager)
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -242,16 +246,19 @@ def ensure_minimum_columns(min_cols: int = 3):
 def create_example_soc_graph():
     """创建多核SoC示例计算图"""
     from session_graph import set_graph, get_graph
-
+    
     # 新建独立 CalculationGraph 并初始化布局
-    new_graph = CalculationGraph()
-    new_graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=12))  # 设置为3列布局
-
-    # 写入当前 session
+    new_graph = CalculationGraph()  # 每个实例有自己的ID计数器
+    layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)  # 设置为3列布局
+    # 确保布局管理器是干净的
+    layout_manager.reset()
+    new_graph.set_layout_manager(layout_manager)
+    
+    # 更新当前会话的图
     set_graph(new_graph)
     graph = get_graph()
 
-    from models import Node, Parameter
+    from models import Node, Parameter, GridPosition
     
     # 1. 工艺节点 - 基础参数
     process_node = Node(name="工艺技术", description="半导体工艺技术参数")
@@ -259,8 +266,7 @@ def create_example_soc_graph():
     process_node.add_parameter(Parameter("电压", 0.8, "V", description="工作电压", confidence=0.9, param_type="float"))
     process_node.add_parameter(Parameter("温度", 85, "°C", description="工作温度", confidence=0.8, param_type="int"))
     process_node.add_parameter(Parameter("工艺厂商", "TSMC", "", description="芯片代工厂商", confidence=1.0, param_type="string"))
-    graph.add_node(process_node)
-    from models import GridPosition
+    graph.add_node(process_node, auto_place=False)
     graph.layout_manager.place_node(process_node.id, GridPosition(0, 0))
     
     # 2. CPU核心节点
@@ -289,7 +295,7 @@ self.confidence = min(base_confidence, voltage_confidence) * 0.95
 """
     cpu_core_node.add_parameter(max_freq_param)
     
-    graph.add_node(cpu_core_node)
+    graph.add_node(cpu_core_node, auto_place=False)
     graph.layout_manager.place_node(cpu_core_node.id, GridPosition(1, 0))
     
     # 3. 缓存系统节点
@@ -324,7 +330,7 @@ self.confidence = math.pow(math.prod(dep_confidences), 1/len(dep_confidences)) *
 """
     cache_node.add_parameter(total_cache_param)
     
-    graph.add_node(cache_node)
+    graph.add_node(cache_node, auto_place=False)
     graph.layout_manager.place_node(cache_node.id, GridPosition(2, 0))
     
     # 4. 内存控制器节点
@@ -353,7 +359,7 @@ self.confidence = 0.7  # 固定70%置信度
 """
     memory_node.add_parameter(bandwidth_param)
     
-    graph.add_node(memory_node)
+    graph.add_node(memory_node, auto_place=False)
     graph.layout_manager.place_node(memory_node.id, GridPosition(0, 1))
     
     # 5. 功耗分析节点
@@ -417,7 +423,7 @@ result = cpu_power + cache_power + memory_power + other_power
 """
     power_node.add_parameter(total_power_param)
     
-    graph.add_node(power_node)
+    graph.add_node(power_node, auto_place=False)
     graph.layout_manager.place_node(power_node.id, GridPosition(1, 1))
     
     # 6. 性能分析节点
@@ -456,7 +462,7 @@ result = single_core * core_count * parallel_efficiency
 """
     performance_node.add_parameter(multi_core_param)
     
-    graph.add_node(performance_node)
+    graph.add_node(performance_node, auto_place=False)
     graph.layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
     # 7. 热设计节点
@@ -584,11 +590,12 @@ result = performance / cost
         for param in node.parameters:
             param.set_graph(graph)
     
-    # 返回创建结果
+    # 返回创建结果和图对象
     return {
         "nodes_created": len(graph.nodes),
         "total_params": sum(len(node.parameters) for node in graph.nodes.values()),
-        "calculated_params": sum(1 for node in graph.nodes.values() for param in node.parameters if param.calculation_func)
+        "calculated_params": sum(1 for node in graph.nodes.values() for param in node.parameters if param.calculation_func),
+        "graph": graph
     }
 
 # 画布更新函数 - 使用新的布局管理器
@@ -2459,14 +2466,14 @@ def save_calculation_graph(n_clicks):
 
 
 # 加载示例计算图
-@callback(
+@app.callback(
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
     Input("load-example-graph-button", "n_clicks"),
     prevent_initial_call=True
 )
-def load_example_soc_graph(n_clicks):
-    """加载多核SoC示例计算图"""
+def load_example_soc_graph_callback(n_clicks):
+    """加载多核SoC示例计算图的回调函数"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     
@@ -2490,7 +2497,7 @@ def load_example_soc_graph(n_clicks):
         return dash.no_update, f"❌ 加载示例失败: {str(e)}"
 
 # 加载计算图
-@callback(
+@app.callback(
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
     Input("upload-graph", "contents"),

@@ -5,6 +5,8 @@ Example功能基础测试
 测试示例计算图的核心功能是否正常工作
 """
 
+from dash import callback
+
 def test_example_basic():
     """基础测试：验证Example功能的核心特性"""
     print("🧪 开始测试Example功能...")

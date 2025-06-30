@@ -168,6 +168,8 @@ class Parameter:
         if self.calculation_func and self.dependencies:
             # 只有有计算函数和依赖的参数才能被unlink
             self.unlinked = True
+            import warnings
+            warnings.warn(f"参数 {self.name} 已断开自动计算连接")
         self.value = new_value
     
     def to_dict(self) -> Dict[str, Any]:
@@ -269,7 +271,7 @@ class CalculationGraph:
         # 新增：所有参数的全局映射，便于快速查找
         self._all_parameters: Dict[int, Parameter] = {}  # param_id -> parameter_object
         self.layout_manager: Optional['CanvasLayoutManager'] = None
-        self._next_node_id = 1  # 从1开始的整数ID
+        self._next_node_id = 1  # 从1开始的整数ID，每个实例独立
         # 新增：用于存储最近手动或级联更新过的参数 pin 标识符集合
         self.recently_updated_params: set[str] = set()
         
@@ -278,23 +280,41 @@ class CalculationGraph:
         self._next_node_id += 1
         return node_id
 
-    def add_node(self, node: Node) -> None:
-        """添加节点到图中"""
-        # 如果节点没有ID，分配一个新ID
+    def add_node(self, node: Node, auto_place: bool = True) -> None:
+        """添加节点到计算图
+        
+        Args:
+            node: 要添加的节点
+            auto_place: 是否自动放置节点到布局中，默认为True
+            
+        Raises:
+            ValueError: 如果节点ID或名称已存在
+        """
+        # 检查节点ID是否已存在
+        if node.id and node.id in self.nodes:
+            raise ValueError(f"Node with id {node.id} already exists.")
+        
+        # 检查节点名称是否已存在
+        for existing_node in self.nodes.values():
+            if existing_node.name == node.name:
+                raise ValueError(f"Node with name '{node.name}' already exists.")
+        
+        # 如果节点没有ID，生成一个新的
         if not node.id:
             node.id = self.get_next_node_id()
-            
+        
+        # 添加节点到图中
         self.nodes[node.id] = node
         
-        # 将节点的所有参数添加到全局参数映射，并设置graph引用
+        # 为节点的所有参数设置计算图引用
         for param in node.parameters:
-            param_id = id(param)  # 使用内存地址作为唯一ID
-            self._all_parameters[param_id] = param
-            self._dependents_map[param_id] = []
-            # 为参数设置计算图引用，启用自动数据流更新
             param.set_graph(self)
         
-        # 构建反向依赖图
+        # 如果有布局管理器且auto_place为True，放置节点
+        if self.layout_manager and auto_place:
+            self.layout_manager.place_node(node.id)
+        
+        # 重建依赖图
         self._rebuild_dependency_graph()
 
     def add_parameter_to_node(self, node_id: str, param: 'Parameter'):
@@ -778,16 +798,15 @@ class CanvasLayoutManager:
             initial_cols: 初始列数
             initial_rows: 初始行数（每列最大节点数）
         """
-        self.grid: List[List[Optional[str]]] = []
         self.cols = initial_cols
         self.rows = initial_rows
-        self._init_grid()
-        
-        # 节点位置映射：node_id -> GridPosition
-        self.node_positions: Dict[str, GridPosition] = {}
-        
-        # 反向映射：position -> node_id
-        self.position_nodes: Dict[Tuple[int, int], str] = {}
+        self.reset()
+    
+    def reset(self):
+        """重置布局管理器状态"""
+        self.grid = [[None] * self.cols for _ in range(self.rows)]
+        self.node_positions = {}
+        self.position_nodes = {}
     
     def to_dict(self) -> Dict[str, Any]:
         """将布局管理器转换为字典"""

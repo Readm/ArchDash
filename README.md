@@ -37,8 +37,17 @@ pip install -r requirements.txt
 
 ## 运行测试
 
+我们采用分层的测试组织结构，详细说明请参考 [测试组织指南](ai/testing/TEST_ORGANIZATION.md)。
+
 ```bash
-pytest test_models.py -v
+# 运行所有测试
+python tests/run_tests.py
+
+# 运行特定类别的测试
+python tests/run_tests.py --type core      # 核心功能测试
+python tests/run_tests.py --type features  # 功能特性测试
+python tests/run_tests.py --type examples  # 示例功能测试
+python tests/run_tests.py --type integration  # 集成测试
 ```
 
 ## 项目结构
@@ -92,8 +101,22 @@ pytest test_models.py -v
 
 ## 测试说明
 
-- 运行Dash Web应用测试需要安装Chrome浏览器和ChromeDriver，并确保ChromeDriver在PATH中。
-- 安装ChromeDriver后，请确保其可执行文件在系统PATH中，或直接放到项目根目录并赋予执行权限。
+测试已经按照功能模块进行了重组，分为以下几个主要类别：
+
+- `tests/core/`: 核心功能测试（数据模型、文件操作等）
+- `tests/features/`: 功能特性测试（unlink功能、布局管理等）
+- `tests/examples/`: 示例功能测试（示例计算图等）
+- `tests/integration/`: 集成测试（完整应用功能）
+
+运行Dash Web应用测试需要以下准备：
+- 安装Chrome浏览器和ChromeDriver
+- 确保ChromeDriver在PATH中或项目根目录
+- 在CI环境中会自动使用headless模式
+
+更多测试相关信息，请参考：
+- [测试组织指南](ai/testing/TEST_ORGANIZATION.md)
+- [测试覆盖率报告](ai/testing/TEST_COVERAGE_SUMMARY.md)
+- [Headless测试指南](ai/testing/headless_testing_guide.md)
 
 ## 贡献指南
 
