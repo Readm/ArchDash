@@ -2,7 +2,7 @@ import dash
 from dash import html, dcc, callback, Output, Input, State, ctx, MATCH, ALL
 import dash_bootstrap_components as dbc
 from models import CalculationGraph, Node, Parameter, CanvasLayoutManager, GridPosition
-from ai.session_graph import get_graph, set_graph, GraphProxy
+from session_graph import get_graph, set_graph, GraphProxy
 from typing import Dict, Optional, List, Any
 import json
 from datetime import datetime
@@ -241,7 +241,7 @@ def ensure_minimum_columns(min_cols: int = 3):
 
 def create_example_soc_graph():
     """创建多核SoC示例计算图"""
-    from ai.session_graph import set_graph, get_graph
+    from session_graph import set_graph, get_graph
 
     # 新建独立 CalculationGraph 并初始化布局
     new_graph = CalculationGraph()
