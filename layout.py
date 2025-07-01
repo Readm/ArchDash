@@ -1,5 +1,6 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+import dash_ace
 
 app_layout = dbc.Container([
     html.H1([
@@ -467,11 +468,16 @@ app_layout = dbc.Container([
                             dbc.Button("测试", id="param-edit-test", size="sm", color="info", className="ms-1", style={"fontSize": "0.8rem"}),
                         ], className="float-end")
                     ]),
-                    dbc.Textarea(
-                        id="param-edit-calculation", 
-                        placeholder="# 计算函数\n# 在这里编写计算逻辑\nresult = value",
-                        rows=8,
-                        style={"fontFamily": "monospace", "fontSize": "11px"}
+                    dash_ace.DashAceEditor(
+                        id="param-edit-calculation",
+                        value="# 计算函数\n# 在这里编写计算逻辑\nresult = value",
+                        theme='monokai',
+                        mode='python',
+                        tabSize=4,
+                        enableBasicAutocompletion=True,
+                        enableLiveAutocompletion=True,
+                        height='250px',
+                        style={"width": "100%", "fontFamily": "monospace", "fontSize": "12px"}
                     ),
                     html.Small("使用 dependencies[i].value 访问依赖参数值，将结果赋值给 result 变量", className="text-muted", style={"fontSize": "0.8rem"})
                 ])
