@@ -104,6 +104,17 @@ class Parameter:
             if dep.value is None:
                 raise ValueError(f"依赖参数 {dep.name} 的值缺失")
 
+        # 如果 calculation_func 是一个可调用对象（例如函数）
+        if callable(self.calculation_func):
+            try:
+                # 直接调用该函数，并将参数自身作为参数传递
+                result = self.calculation_func(self)
+                self._value = result
+                return result
+            except Exception as e:
+                print(f"计算错误: 在执行参数 '{self.name}' 的计算函数时发生错误: {e}")
+                return self._value
+
         import math
         import builtins
         
@@ -125,12 +136,12 @@ class Parameter:
             result = local_env.get('result')
             if result is None:
                 # 如果计算函数没有产生 'result'，也视为一种计算失败
-                print(f"计算警告: 参数 '{self.name}' 的计算函数未设置 'result' 变量。")
-                return self._value # 返回旧值
+                raise ValueError("计算函数未设置result变量作为输出")
+            self._value = result
             return result
         except Exception as e:
             print(f"计算错误: 在执行参数 '{self.name}' 的计算时发生错误: {e}")
-            return self._value # 计算失败时返回当前值，而不是抛出异常
+            raise ValueError(f"计算失败: {e}") from e
     
     def relink_and_calculate(self) -> T:
         """重新连接参数，计算并更新其值，然后返回新值。"""

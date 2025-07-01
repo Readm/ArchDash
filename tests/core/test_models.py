@@ -481,22 +481,25 @@ def test_propagate_updates_with_calculation_errors():
     graph.add_node(node)
     
     # 初始值
-    error_param.value = error_param.calculate()
-    dependent_param.value = dependent_param.calculate()
-    initial_error_val = error_param.value
-    initial_dependent_val = dependent_param.value
+    with pytest.raises(ValueError, match="计算失败: float division by zero"):
+        error_param.calculate()
     
-    # 测试更新传播时的错误处理
-    # base_param 的值改变会触发 error_param 的重新计算，但会失败
-    update_result = graph.set_parameter_value(base_param, 20.0)
-
-    # 验证错误被内部处理，而不是抛出异常
-    # 验证 error_param 的值没有变（因为计算失败）
-    assert error_param.value == initial_error_val
-    # 验证 dependent_param 的值也没有变（因为上游失败）
-    assert dependent_param.value == initial_dependent_val
-    # 验证级联更新列表为空
-    assert len(update_result['cascaded_updates']) == 0
+    # 验证错误参数的值未改变
+    assert error_param.value == 0.0
+    
+    # 验证依赖参数的值也未改变
+    assert dependent_param.value == 0.0
+    
+    # 修复错误并重新计算
+    base_param.value = 20.0
+    error_param.calculation_func = "result = dependencies[0].value * 2"  # 修复函数
+    
+    # 重新计算并验证
+    error_param.value = error_param.calculate()
+    assert error_param.value == 40.0
+    
+    dependent_param.value = dependent_param.calculate()
+    assert dependent_param.value == 80.0
 
 def test_dependency_chain_analysis():
     """测试依赖链分析功能"""

@@ -112,7 +112,7 @@ class TestExampleFeature:
     def test_example_graph_calculations(self):
         """测试参数计算功能"""
         import app
-        result = create_example_soc_graph()
+        result = create_example_soc_graph(app.graph)
         
         # 验证计算函数存在
         calc_params = []
@@ -135,7 +135,7 @@ class TestExampleFeature:
     
     def test_example_graph_layout(self):
         """测试布局管理"""
-        result = create_example_soc_graph()
+        result = create_example_soc_graph(get_graph())
         graph = get_graph()
         layout_manager = graph.layout_manager
         
@@ -149,7 +149,7 @@ class TestExampleFeature:
     
     def test_example_graph_parameter_values(self):
         """测试参数的初始值和单位"""
-        result = create_example_soc_graph()
+        result = create_example_soc_graph(get_graph())
         graph = get_graph()
         
         # 获取工艺技术节点
@@ -178,8 +178,8 @@ class TestExampleFeature:
         
         try:
             # 测试重复创建
-            result1 = create_example_soc_graph()
-            result2 = create_example_soc_graph()
+            result1 = create_example_soc_graph(get_graph())
+            result2 = create_example_soc_graph(get_graph())
             
             # 两次创建的结果应该一致
             assert result1["nodes_created"] == result2["nodes_created"]
@@ -240,14 +240,12 @@ class TestExampleFeature:
                 for n in graph.nodes.values():
                     if n.name == node_name:
                         node = n
-                break
                 assert node is not None, f"应该找到节点 {node_name}"
                 
                 param = None
                 for p in node.parameters:
                     if p.name == param_name:
                         param = p
-                        break
                 assert param is not None, f"应该找到参数 {param_name}"
                 
                 # 计算新值

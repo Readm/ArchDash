@@ -1,19 +1,25 @@
 from models import CalculationGraph, Node, Parameter, CanvasLayoutManager, GridPosition
 
-def create_example_soc_graph():
+def create_example_soc_graph(graph=None):
     """创建多核SoC示例计算图"""
     from session_graph import set_graph, get_graph
     
-    # 新建独立 CalculationGraph 并初始化布局
-    new_graph = CalculationGraph()  # 每个实例有自己的ID计数器
-    layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)  # 设置为3列布局
-    # 确保布局管理器是干净的
-    layout_manager.reset()
-    new_graph.set_layout_manager(layout_manager)
-    
-    # 更新当前会话的图
-    set_graph(new_graph)
-    graph = get_graph()
+    if graph is None:
+        # 新建独立 CalculationGraph 并初始化布局
+        graph = CalculationGraph()  # 每个实例有自己的ID计数器
+        layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)  # 设置为3列布局
+        # 确保布局管理器是干净的
+        layout_manager.reset()
+        graph.set_layout_manager(layout_manager)
+        
+        # 更新当前会话的图
+        set_graph(graph)
+    else:
+        # 如果传入了图，就使用它
+        if graph.layout_manager is None:
+            layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=12)
+            graph.set_layout_manager(layout_manager)
+        graph.layout_manager.reset()
 
     from models import Node, Parameter, GridPosition
     

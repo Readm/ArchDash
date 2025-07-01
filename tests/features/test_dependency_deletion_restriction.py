@@ -60,21 +60,21 @@ def test_parameter_deletion_restriction():
     
     # 测试1: 尝试删除有依赖的电压参数（应该被阻止）
     print("\n📝 测试1: 删除有依赖的电压参数")
-    result = check_parameter_has_dependents(voltage_param)
+    result = check_parameter_has_dependents(voltage_param, graph)
     has_dependents = result[0] if isinstance(result, tuple) else result
     print(f"电压参数是否有依赖者: {has_dependents}")
     assert has_dependents == True, "电压参数应该有依赖者（功率参数依赖它）"
     
     # 测试2: 尝试删除有依赖的功率参数（应该被阻止）
     print("\n📝 测试2: 删除有依赖的功率参数")
-    result = check_parameter_has_dependents(power_param)
+    result = check_parameter_has_dependents(power_param, graph)
     has_dependents = result[0] if isinstance(result, tuple) else result
     print(f"功率参数是否有依赖者: {has_dependents}")
     assert has_dependents == True, "功率参数应该有依赖者（效率参数依赖它）"
     
     # 测试3: 删除末端的效率参数（应该被允许）
     print("\n📝 测试3: 删除末端的效率参数")
-    result = check_parameter_has_dependents(efficiency_param)
+    result = check_parameter_has_dependents(efficiency_param, graph)
     has_dependents = result[0] if isinstance(result, tuple) else result
     print(f"效率参数是否有依赖者: {has_dependents}")
     assert has_dependents == False, "效率参数应该没有依赖者（可以安全删除）"
@@ -139,7 +139,7 @@ def test_node_deletion_restriction():
     
     for node_id, node_name, expected_has_dependents, description in test_cases:
         print(f"\n📝 测试删除{node_name}")
-        result = check_node_has_dependents(node_id)
+        result = check_node_has_dependents(node_id, graph)
         has_dependents = result[0] if isinstance(result, tuple) else result
         print(f"{node_name}是否有依赖者: {has_dependents}")
         assert has_dependents == expected_has_dependents, description
@@ -206,20 +206,20 @@ def test_complex_dependency_network():
     test_results = []
     
     # 基础参数：有两个依赖者
-    result = check_parameter_has_dependents(base_param)
+    result = check_parameter_has_dependents(base_param, graph)
     has_dep = result[0] if isinstance(result, tuple) else result
     test_results.append(("基础参数", has_dep, True))
     
     # 分支参数：各有一个依赖者
-    result1 = check_parameter_has_dependents(branch1_param)
+    result1 = check_parameter_has_dependents(branch1_param, graph)
     has_dep1 = result1[0] if isinstance(result1, tuple) else result1
-    result2 = check_parameter_has_dependents(branch2_param)
+    result2 = check_parameter_has_dependents(branch2_param, graph)
     has_dep2 = result2[0] if isinstance(result2, tuple) else result2
     test_results.append(("分支1参数", has_dep1, True))
     test_results.append(("分支2参数", has_dep2, True))
     
     # 汇聚参数：没有依赖者
-    result_merge = check_parameter_has_dependents(merge_param)
+    result_merge = check_parameter_has_dependents(merge_param, graph)
     has_dep_merge = result_merge[0] if isinstance(result_merge, tuple) else result_merge
     test_results.append(("汇聚参数", has_dep_merge, False))
     

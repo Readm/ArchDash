@@ -172,12 +172,13 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
                 # 设置X参数值（相关性分析中的手动设置）
                 x_param.value = float(x_val)
                 
-                # 如果Y参数有计算函数，触发重新计算
+                # 如果Y参数有计算函数，触发重新计算并获取新值
+                y_val = y_param.value # 默认值
                 if y_param.calculation_func:
-                    y_param.calculate()
+                    y_val = y_param.calculate()
                 
                 x_values.append(float(x_val))
-                y_values.append(float(y_param.value))
+                y_values.append(float(y_val))
                 
             except Exception as e:
                 print(f"计算错误 (X={x_val}): {e}")
@@ -214,18 +215,12 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
 def create_empty_plot():
     """创建空的绘图"""
     fig = go.Figure()
-    fig.add_annotation(
-        text="请选择参数并点击'生成图表'开始分析",
-        xref="paper", yref="paper",
-        x=0.5, y=0.5,
-        showarrow=False,
-        font=dict(size=14, color="gray")
-    )
     fig.update_layout(
+        title_text="请选择参数以生成图表",
         template="plotly_white",
         showlegend=True,
-        xaxis=dict(showgrid=False, showticklabels=False, title=""),
-        yaxis=dict(showgrid=False, showticklabels=False, title=""),
+        xaxis=dict(showgrid=False, title=""),
+        yaxis=dict(showgrid=False, title=""),
         legend=dict(
             orientation="v",
             yanchor="top",
@@ -3161,11 +3156,12 @@ def update_remove_button_status(canvas_children):
     return not can_remove
 
 # 添加依赖检查工具函数
-def check_parameter_has_dependents(param_obj):
+def check_parameter_has_dependents(param_obj, graph_instance):
     """检查参数是否被其他参数依赖
     
     Args:
         param_obj: 要检查的参数对象
+        graph_instance: 要在其中检查的 CalculationGraph 实例
         
     Returns:
         tuple: (has_dependents: bool, dependent_list: list)
@@ -3175,7 +3171,7 @@ def check_parameter_has_dependents(param_obj):
     dependent_list = []
     
     # 遍历所有节点和参数，查找依赖关系
-    for node_id, node in graph.nodes.items():
+    for node_id, node in graph_instance.nodes.items():
         node_name = node.name
         
         for param in node.parameters:
@@ -3188,11 +3184,12 @@ def check_parameter_has_dependents(param_obj):
     
     return len(dependent_list) > 0, dependent_list
 
-def check_node_has_dependents(node_id):
+def check_node_has_dependents(node_id, graph_instance):
     """检查节点的所有参数是否被其他参数依赖
     
     Args:
         node_id: 要检查的节点ID
+        graph_instance: 要在其中检查的 CalculationGraph 实例
         
     Returns:
         tuple: (has_dependents: bool, dependent_info: dict)
@@ -3202,16 +3199,16 @@ def check_node_has_dependents(node_id):
                 "affected_node_params": [str, ...]  # 本节点中被依赖的参数名列表
             }
     """
-    if node_id not in graph.nodes:
+    if node_id not in graph_instance.nodes:
         return False, {"dependent_params": [], "affected_node_params": []}
     
-    node = graph.nodes[node_id]
+    node = graph_instance.nodes[node_id]
     dependent_params = []
     affected_node_params = []
     
     # 检查该节点的每个参数是否被其他参数依赖
     for param in node.parameters:
-        has_deps, dep_list = check_parameter_has_dependents(param)
+        has_deps, dep_list = check_parameter_has_dependents(param, graph_instance)
         if has_deps:
             affected_node_params.append(param.name)
             for dep_info in dep_list:
