@@ -9,6 +9,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 import time
 
+# 为此文件中的所有测试设置3秒的全局超时
+pytestmark = pytest.mark.timeout(3)
+
 def safe_click(driver, element, max_attempts=3):
     """安全点击元素，处理ElementClickInterceptedException"""
     for attempt in range(max_attempts):

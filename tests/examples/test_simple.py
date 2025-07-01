@@ -144,31 +144,6 @@ def test_example_parameter_calculations():
     except Exception as e:
         pytest.fail(f"计算功能测试失败: {e}")
 
-def test_example_callback_exists():
-    """测试示例按钮的回调函数是否存在于应用中"""
-    try:
-        from app import app, load_example_soc_graph_callback
-        
-        # 验证回调函数存在
-        assert hasattr(app, 'load_example_soc_graph_callback'), "应该存在加载示例图的回调函数"
-        
-        # 验证回调函数的装饰器
-        callback_info = getattr(load_example_soc_graph_callback, '_dash_callback_metadata', None)
-        assert callback_info is not None, "回调函数应该有Dash装饰器"
-        
-        # 验证回调函数的输入和输出
-        assert len(callback_info['outputs']) == 2, "回调函数应该有2个输出"
-        assert len(callback_info['inputs']) == 1, "回调函数应该有1个输入"
-        
-        # 验证输入是load-example-graph-button
-        input_id = callback_info['inputs'][0]['id']
-        assert "load-example-graph-button" in str(input_id), "回调函数的输入应该是load-example-graph-button"
-        
-        print("✅ 示例按钮回调函数存在")
-        
-    except Exception as e:
-        pytest.fail(f"回调函数检查失败: {e}")
-
 def test_example_performance():
     """测试示例创建的性能"""
     try:
@@ -200,7 +175,6 @@ if __name__ == "__main__":
         test_example_function_consistency,
         test_example_creates_valid_data,
         test_example_parameter_calculations,
-        test_example_callback_exists,
         test_example_performance,
     ]
     

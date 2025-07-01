@@ -394,8 +394,8 @@ def test_parameter_update_propagation():
     graph.add_node(node2)
     
     # 验证初始计算
-    power.calculate()
-    energy.calculate()
+    power.value = power.calculate()
+    energy.value = energy.calculate()
     assert power.value == 24.0  # 12V × 2A = 24W
     assert energy.value == 24.0  # 24W × 1h = 24Wh
     
@@ -480,16 +480,23 @@ def test_propagate_updates_with_calculation_errors():
     node.add_parameter(dependent_param)
     graph.add_node(node)
     
+    # 初始值
+    error_param.value = error_param.calculate()
+    dependent_param.value = dependent_param.calculate()
+    initial_error_val = error_param.value
+    initial_dependent_val = dependent_param.value
+    
     # 测试更新传播时的错误处理
+    # base_param 的值改变会触发 error_param 的重新计算，但会失败
     update_result = graph.set_parameter_value(base_param, 20.0)
-    
-    # 验证基础参数被正确更新
-    assert base_param.value == 20.0
-    
-    # 验证错误不会中断整个更新流程
-    assert 'cascaded_updates' in update_result
-    
-    print("✅ 计算错误处理正常工作")
+
+    # 验证错误被内部处理，而不是抛出异常
+    # 验证 error_param 的值没有变（因为计算失败）
+    assert error_param.value == initial_error_val
+    # 验证 dependent_param 的值也没有变（因为上游失败）
+    assert dependent_param.value == initial_dependent_val
+    # 验证级联更新列表为空
+    assert len(update_result['cascaded_updates']) == 0
 
 def test_dependency_chain_analysis():
     """测试依赖链分析功能"""
@@ -515,19 +522,19 @@ def test_dependency_chain_analysis():
     # 测试依赖链分析
     chain_info = graph.get_dependency_chain(param_a)
     
-    # 验证返回结果结构
-    assert 'root_param' in chain_info
-    assert 'dependents' in chain_info
-    assert chain_info['root_param'] is param_a
-    
-    # 验证依赖链的深度和层次
-    dependents = chain_info['dependents']
-    assert len(dependents) > 0
-    
-    # 查找直接和间接依赖
-    direct_dependents = [dep['param'] for dep in dependents if dep['depth'] == 0]
-    assert param_b in direct_dependents
-    
+    # 验证返回结构
+    assert 'upstream' in chain_info
+    assert 'downstream' in chain_info
+
+    # 验证下游依赖
+    downstream_names = [p.name for p in chain_info['downstream']]
+    assert 'param_b' in downstream_names
+    assert 'param_c' in downstream_names
+    assert len(downstream_names) == 2
+
+    # 验证上游依赖（此例中应为空）
+    assert len(chain_info['upstream']) == 0
+
     print("✅ 依赖链分析功能正常工作")
 
  

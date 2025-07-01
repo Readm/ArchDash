@@ -6,6 +6,11 @@
 
 import sys
 import os
+import pytest
+
+# 为此文件中的所有测试设置3秒的全局超时
+pytestmark = pytest.mark.timeout(3)
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from models import *
@@ -76,7 +81,9 @@ def test_unlinked_functionality():
     
     print(f"\n5. 测试级联更新:")
     # 修改输入参数，检查面积是否自动更新
-    width.value = 8.0
+    print(f"   宽度修改前，面积为: {area.value}")
+    print(f"   将宽度修改为 8.0...")
+    graph.set_parameter_value(width, 8.0) # 通过图来设置值，以触发传播
     print(f"   宽度修改为 = {width.value} m")
     print(f"   面积自动更新为 = {area.value} m² (应该是 120.0)")
     assert area.value == 120.0, "级联计算应该正确"

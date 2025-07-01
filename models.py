@@ -34,6 +34,7 @@ class Parameter:
 
     _value: T = 0.0  # 内部值存储
     _graph: Optional['CalculationGraph'] = field(default=None, repr=False)  # 计算图引用
+    _internal_id: uuid.UUID = field(default_factory=uuid.uuid4, repr=False)  # 内部唯一ID
     
     def __init__(self, name: str, value: T = 0.0, unit: str = "", **kwargs):
         self.name = name
@@ -46,6 +47,7 @@ class Parameter:
         self.unlinked = kwargs.get('unlinked', False)
         self.param_type = kwargs.get('param_type', "float")  # 新增：参数类型，默认为float
         self._graph = kwargs.get('_graph', None)
+        self._internal_id = uuid.uuid4()
     
     @property
     def value(self) -> T:
@@ -54,21 +56,11 @@ class Parameter:
     
     @value.setter 
     def value(self, new_value: T):
-        """设置参数值并触发数据流更新"""
-        old_value = self._value
-        self._value = new_value
-        
-        # 如果值确实发生了变化并且有关联的计算图，触发更新传播
-        if old_value != new_value and self._graph is not None:
-            try:
-                update_result = self._graph.propagate_updates(self)
-                if update_result:
-                    print(f"🔄 数据流更新: {self.name} 值从 {old_value} 变为 {new_value}")
-                    for update_info in update_result:
-                        param = update_info['param']
-                        print(f"   └── {param.name}: {update_info['old_value']} → {update_info['new_value']}")
-            except Exception as e:
-                print(f"⚠️ 更新传播失败: {e}")
+        """设置参数值"""
+        # Setter只负责更新值，不再触发传播
+        # 传播将由CalculationGraph统一管理
+        if self._value != new_value:
+            self._value = new_value
     
     def set_graph(self, graph: 'CalculationGraph'):
         """设置参数所属的计算图"""
@@ -85,33 +77,33 @@ class Parameter:
         return False
     
     def add_dependency(self, param: 'Parameter') -> None:
-        """添加依赖参数"""
+        """添加依赖参数，并立即在图上注册此关系"""
         if not isinstance(param, Parameter):
             raise TypeError("依赖参数必须是Parameter类型")
         if param is self:
             raise ValueError("参数不能依赖自身")
         if param not in self.dependencies:
             self.dependencies.append(param)
+            # 立即在图上更新依赖关系
+            if self._graph:
+                self._graph.register_dependency(dependent=self, dependency=param)
     
     def calculate(self) -> T:
-        """计算参数值，支持多行代码，结果通过result变量返回
+        """计算参数值并返回结果，但不直接修改内部状态。
         
         Returns:
-            T: 计算后的参数值（float、int或str类型）
+            T: 计算后的参数值
         
         Raises:
-            ValueError: 如果依赖参数的值缺失或计算失败
+            ValueError: 如果计算失败
         """
-        if not self.calculation_func:
-            return self.value if self.value is not None else 0.0
-        
-        if self.unlinked:
-            return self.value if self.value is not None else 0.0
-        
+        if not self.calculation_func or self.unlinked:
+            return self._value
+
         for dep in self.dependencies:
             if dep.value is None:
                 raise ValueError(f"依赖参数 {dep.name} 的值缺失")
-        
+
         import math
         import builtins
         
@@ -123,34 +115,30 @@ class Parameter:
         
         local_env = {
             'dependencies': self.dependencies,
-            'value': self.value,
+            'value': self._value,
             'datetime': datetime,
             'self': self
         }
         
         try:
-            if isinstance(self.calculation_func, str):
-                exec(self.calculation_func, safe_globals, local_env)
-                result = local_env.get('result', None)
-                if result is None:
-                    raise ValueError("计算函数未设置result变量作为输出")
-            else:
-                result = self.calculation_func(self)
-            
-            self.value = result
+            exec(self.calculation_func, safe_globals, local_env)
+            result = local_env.get('result')
+            if result is None:
+                # 如果计算函数没有产生 'result'，也视为一种计算失败
+                print(f"计算警告: 参数 '{self.name}' 的计算函数未设置 'result' 变量。")
+                return self._value # 返回旧值
             return result
         except Exception as e:
-            raise ValueError(f"计算失败: {str(e)}")
+            print(f"计算错误: 在执行参数 '{self.name}' 的计算时发生错误: {e}")
+            return self._value # 计算失败时返回当前值，而不是抛出异常
     
     def relink_and_calculate(self) -> T:
-        """重新连接参数并计算
-        
-        Returns:
-            T: 重新计算后的参数值
-        """
+        """重新连接参数，计算并更新其值，然后返回新值。"""
         self.unlinked = False
         if self.calculation_func:
-            return self.calculate()
+            new_value = self.calculate()
+            self.value = new_value  # Setter会触发下游更新
+            return new_value
         return self.value
     
     def set_manual_value(self, new_value: T) -> None:
@@ -201,6 +189,14 @@ class Parameter:
         
         return param
 
+    def __hash__(self):
+        return hash(self._internal_id)
+
+    def __eq__(self, other):
+        if not isinstance(other, Parameter):
+            return NotImplemented
+        return self._internal_id == other._internal_id
+
 @dataclass
 class Node:
     """节点类，用于管理一组相关参数
@@ -222,9 +218,21 @@ class Node:
         self.description = description
         self.node_type = kwargs.get('node_type', "default")
         self.parameters = []  # 确保每个Node实例都有parameters属性
+        
+        # 为节点分配一个唯一的内部ID，用于哈希和相等性比较
+        self._internal_id = uuid.uuid4()
+
         for key, value in kwargs.items():
             if key != 'node_type':
                 setattr(self, key, value)
+    
+    def __hash__(self):
+        return hash(self._internal_id)
+
+    def __eq__(self, other):
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self._internal_id == other._internal_id
     
     def add_parameter(self, parameter: Parameter) -> None:
         """添加参数到节点"""
@@ -234,7 +242,12 @@ class Node:
         """从节点移除参数"""
         self.parameters = [param for param in self.parameters if param.name != name]
     
-
+    def get_parameter(self, name: str) -> Optional[Parameter]:
+        """通过名称获取参数对象"""
+        for param in self.parameters:
+            if param.name == name:
+                return param
+        return None
     
     def calculate_all(self) -> None:
         """计算所有参数"""
@@ -267,62 +280,48 @@ class CalculationGraph:
         self.recently_updated_params: set[str] = set()
         
     def get_next_node_id(self) -> str:
-        node_id = str(self._next_node_id)
+        """生成下一个唯一的节点ID"""
+        node_id = self._next_node_id
         self._next_node_id += 1
-        return node_id
+        return str(node_id)
 
     def add_node(self, node: Node, auto_place: bool = True) -> None:
-        """添加节点到计算图
-        
-        Args:
-            node: 要添加的节点
-            auto_place: 是否自动放置节点到布局中，默认为True
-            
-        Raises:
-            ValueError: 如果节点ID或名称已存在
-        """
-        # 检查节点ID是否已存在
+        """向计算图中添加一个节点"""
+        # 检查节点ID和名称是否已存在
         if node.id and node.id in self.nodes:
             raise ValueError(f"Node with id {node.id} already exists.")
-        
-        # 检查节点名称是否已存在
         for existing_node in self.nodes.values():
             if existing_node.name == node.name:
                 raise ValueError(f"Node with name '{node.name}' already exists.")
-        
-        # 如果节点没有ID，生成一个新的
+
         if not node.id:
             node.id = self.get_next_node_id()
         
-        # 添加节点到图中
         self.nodes[node.id] = node
         
-        # 为节点的所有参数设置计算图引用
+        # 为节点中的所有参数设置图引用
         for param in node.parameters:
             param.set_graph(self)
         
-        # 如果有布局管理器且auto_place为True，放置节点
-        if self.layout_manager and auto_place:
+        if auto_place and self.layout_manager:
             self.layout_manager.place_node(node.id)
         
-        # 重建依赖图
+        # 节点加入后，强制重建依赖图以确保所有关系都被注册
         self._rebuild_dependency_graph()
 
     def add_parameter_to_node(self, node_id: str, param: 'Parameter'):
-        """向现有节点添加参数"""
-        if node_id in self.nodes:
-            node = self.nodes[node_id]
-            node.add_parameter(param)
-            
-            # 添加到全局参数映射
-            param_id = id(param)
-            self._all_parameters[param_id] = param
-            self._dependents_map[param_id] = []
-            # 设置graph引用
-            param.set_graph(self)
-            
-            # 重新构建依赖图
-            self._rebuild_dependency_graph()
+        """向指定节点添加参数，并建立图的引用"""
+        node = self.nodes.get(node_id)
+        if not node:
+            raise ValueError(f"ID为 {node_id} 的节点不存在")
+        
+        # 建立参数与图的双向引用
+        param.set_graph(self)
+        
+        node.add_parameter(param)
+        
+        # 参数加入后其依赖关系会被自动注册
+        self._rebuild_dependency_graph()
 
     def update_parameter_dependencies(self, param):
         """更新单个参数的依赖关系"""
@@ -333,78 +332,85 @@ class CalculationGraph:
             self._dependents_map[param_id] = []
             param.set_graph(self)
         
+        # 重建依赖图以反映变化
         self._rebuild_dependency_graph()
 
-    def _rebuild_dependency_graph(self):
-        """重新构建反向依赖图"""
-        for param_id in self._dependents_map:
-            self._dependents_map[param_id] = []
-        
-        for param_id, param in self._all_parameters.items():
-            for dependency in param.dependencies:
-                dep_id = id(dependency)
-                if dep_id in self._dependents_map:
-                    if param_id not in self._dependents_map[dep_id]:
-                        self._dependents_map[dep_id].append(param_id)
+    def register_dependency(self, dependent: 'Parameter', dependency: 'Parameter'):
+        """直接注册一个依赖关系"""
+        if dependency not in self._dependents_map:
+            self._dependents_map[dependency] = []
+        if dependent not in self._dependents_map[dependency]:
+            self._dependents_map[dependency].append(dependent)
 
-    def propagate_updates(self, changed_param, visited=None):
-        """传播更新：当参数值改变时，更新所有依赖它的参数
+    def _rebuild_dependency_graph(self):
+        """完全重建图的依赖关系映射"""
+        self._dependents_map.clear()
         
-        Args:
-            changed_param: 值发生改变的参数
-            visited: 已访问的参数集合，用于避免循环更新
+        all_params = [p for node in self.nodes.values() for p in node.parameters]
         
-        Returns:
-            list: 所有被更新的参数列表
-        """
-        if visited is None:
-            visited = set()
+        for param in all_params:
+            # 确保每个参数都在依赖图中有一个条目
+            if param not in self._dependents_map:
+                self._dependents_map[param] = []
+            
+            # 遍历其依赖项，并将自己添加到依赖项的"依赖者"列表中
+            for dep in param.dependencies:
+                if dep not in self._dependents_map:
+                    self._dependents_map[dep] = []
+                if param not in self._dependents_map[dep]:
+                    self._dependents_map[dep].append(param)
+
+    def propagate_updates(self, changed_param: 'Parameter') -> List[Dict[str, Any]]:
+        """从一个改变的参数开始，递归地更新所有依赖它的下游参数"""
         
-        param_id = id(changed_param)
-        updated_params = []
+        # visited 集合应在每次顶级调用时初始化
+        visited: set['Parameter'] = set()
         
-        if param_id in visited:
-            return updated_params
-        
-        visited.add(param_id)
-        
-        dependent_param_ids = self._dependents_map.get(param_id, [])
-        
-        for dependent_id in dependent_param_ids:
-            if dependent_id in self._all_parameters:
-                dependent_param = self._all_parameters[dependent_id]
-                
-                if dependent_param.calculation_func:
+        def _propagate(param: 'Parameter'):
+            if param in visited:
+                return []
+            visited.add(param)
+            
+            updated_params_info = []
+            dependents = self._dependents_map.get(param, [])
+
+            for dependent_param in dependents:
+                if not dependent_param.unlinked:
+                    old_value = dependent_param.value
                     try:
-                        old_value = dependent_param.value
                         new_value = dependent_param.calculate()
                         
-                        updated_params.append({
-                            'param': dependent_param,
-                            'old_value': old_value,
-                            'new_value': new_value
-                        })
-                        
                         if old_value != new_value:
-                            cascaded_updates = self.propagate_updates(dependent_param, visited.copy())
-                            updated_params.extend(cascaded_updates)
+                            # 直接更新内部值以避免循环
+                            dependent_param._value = new_value 
                             
+                            updated_params_info.append({
+                                'param': dependent_param,
+                                'old_value': old_value,
+                                'new_value': new_value
+                            })
+                            # 显式递归
+                            updated_params_info.extend(_propagate(dependent_param))
                     except Exception as e:
-                        print(f"警告：参数 {dependent_param.name} 计算失败: {e}")
-        
-        return updated_params
+                        print(f"在更新传播期间，参数 {dependent_param.name} 计算失败: {e}")
+
+            return updated_params_info
+
+        # 从最初改变的参数开始传播
+        return _propagate(changed_param)
 
     def set_parameter_value(self, param, new_value):
-        """设置参数值并触发更新传播
-        
-        Args:
-            param: 要更新的参数对象
-            new_value: 新的参数值
-        
-        Returns:
-            dict: 更新结果，包含被影响的所有参数
-        """
+        """通过图来设置参数值，并返回所有更新的摘要"""
         old_value = param.value
+        
+        if old_value == new_value:
+            return {
+                'primary_change': None,
+                'cascaded_updates': [],
+                'total_updated_params': 0
+            }
+
+        # 更新主参数的值
         param.value = new_value
         
         # 记录主参数的变化
@@ -418,7 +424,7 @@ class CalculationGraph:
             'total_updated_params': 1
         }
         
-        # 传播更新
+        # 从这里统一启动传播
         cascaded_updates = self.propagate_updates(param)
         update_result['cascaded_updates'] = cascaded_updates
         update_result['total_updated_params'] += len(cascaded_updates)
@@ -431,40 +437,36 @@ class CalculationGraph:
             node.calculate_all()
 
     def get_dependency_chain(self, param):
-        """获取参数的完整依赖链信息
+        """获取一个参数的所有上游和下游依赖"""
         
-        Args:
-            param: 参数对象
-            
-        Returns:
-            dict: 包含依赖链信息的字典
-        """
-        param_id = id(param)
+        # 确保依赖图是最新的
+        self._rebuild_dependency_graph()
+
+        # 获取上游依赖（它依赖的）
+        upstream = []
+        visited_up = set()
         
-        def get_dependents_recursive(param_id, depth=0, max_depth=10):
-            if depth > max_depth:  # 防止过深递归
-                return []
-                
-            dependents = []
-            dependent_ids = self._dependents_map.get(param_id, [])
-            
-            for dep_id in dependent_ids:
-                if dep_id in self._all_parameters:
-                    dependent = self._all_parameters[dep_id]
-                    dependents.append({
-                        'param': dependent,
-                        'depth': depth,
-                        'children': get_dependents_recursive(dep_id, depth + 1, max_depth)
-                    })
-            
-            return dependents
+        # 获取下游依赖（依赖它的）
+        downstream = []
+        visited_down = set()
         
-        return {
-            'root_param': param,
-            'dependents': get_dependents_recursive(param_id)
-        }
+        def get_dependents_recursive(p, depth=0, max_depth=10):
+            if p in visited_down or depth >= max_depth:
+                return
+            visited_down.add(p)
+            
+            # 使用重建后的 _dependents_map
+            dependents = self._dependents_map.get(p, [])
+            for dep_param in dependents:
+                downstream.append(dep_param)
+                get_dependents_recursive(dep_param, depth + 1)
+        
+        get_dependents_recursive(param)
+        
+        return {"upstream": upstream, "downstream": downstream}
 
     def get_node(self, node_id: str) -> Optional[Node]:
+        """通过ID获取节点"""
         return self.nodes.get(node_id)
 
     def add_dependency(self, source: Node, target: Node) -> None:
@@ -1154,23 +1156,27 @@ class CanvasLayoutManager:
         return True, "可以添加"
 
     def remove_last_column_if_empty(self, minimum_cols: int = 3) -> bool:
-        """如果最后一列为空且列数超过最小值, 删除之"""
-        can_remove, _ = self.can_remove_column(minimum_cols)
-        if not can_remove:
+        """如果最后一列为空，则删除它，并返回True，否则返回False"""
+        if self.cols <= minimum_cols:
             return False
-        # 执行删除
-        self.remove_column()
-        return True
+            
+        last_col_index = self.cols - 1
+        nodes_in_last_col = self.get_column_nodes(last_col_index)
+        
+        if not nodes_in_last_col:
+            self.cols -= 1
+            return True
+        return False
 
     def auto_remove_empty_last_columns(self, minimum_cols: int = 3) -> int:
-        """自动连续删除空的最后几列, 返回删除的列数"""
-        removed = 0
+        """从后向前检查并删除所有连续的空列，返回删除的列数"""
+        removed_count = 0
         while self.remove_last_column_if_empty(minimum_cols):
-            removed += 1
-        return removed
+            removed_count += 1
+        return removed_count
 
     def auto_expand_for_node_movement(self, node_id: str, direction: str, max_cols: int = 6) -> bool:
-        """在节点向右移动到边界时, 自动添加列"""
+        """当节点向右移动时，如果需要，自动扩展列"""
         if direction != "right":
             return False
         pos = self.get_node_position(node_id)

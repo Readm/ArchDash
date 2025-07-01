@@ -1,0 +1,345 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-7.4.3, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+sensitiveurl: .*
+metadata: {'Python': '3.10.12', 'Platform': 'Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.35', 'Packages': {'pytest': '7.4.3', 'pluggy': '1.6.0'}, 'Plugins': {'variables': '3.1.0', 'html': '4.1.1', 'selenium': '4.1.0', 'xdist': '3.7.0', 'metadata': '3.1.1', 'base-url': '2.1.0', 'dash': '3.1.1', 'cov': '4.1.0'}, 'Base URL': '', 'Driver': None, 'Capabilities': {}}
+rootdir: /home/readm/ArchDash
+plugins: variables-3.1.0, html-4.1.1, selenium-4.1.0, xdist-3.7.0, metadata-3.1.1, base-url-2.1.0, dash-1.1.0, dash-3.1.1, cov-4.1.0
+collecting ... collected 85 items
+
+tests/core/test_file_ops.py::test_save_and_load_graph FAILED             [  1%]
+tests/core/test_file_ops.py::test_error_handling PASSED                  [  2%]
+tests/core/test_models.py::test_parameter_validation PASSED              [  3%]
+tests/core/test_models.py::test_parameter_dependencies PASSED            [  4%]
+tests/core/test_models.py::test_parameter_calculation PASSED             [  5%]
+tests/core/test_models.py::test_calculation_function_safety PASSED       [  7%]
+tests/core/test_models.py::test_calculation_function_scope PASSED        [  8%]
+tests/core/test_models.py::test_node_operations PASSED                   [  9%]
+tests/core/test_models.py::test_calculation_graph PASSED                 [ 10%]
+tests/core/test_models.py::test_missing_dependency PASSED                [ 11%]
+tests/core/test_models.py::test_serialization PASSED                     [ 12%]
+tests/core/test_models.py::test_duplicate_node_name_prevention PASSED    [ 14%]
+tests/core/test_models.py::test_node_id_duplicate_prevention PASSED      [ 15%]
+tests/core/test_models.py::test_parameter_update_propagation FAILED      [ 16%]
+tests/core/test_models.py::test_circular_dependency_detection PASSED     [ 17%]
+tests/core/test_models.py::test_propagate_updates_with_calculation_errors PASSED [ 18%]
+tests/core/test_models.py::test_dependency_chain_analysis FAILED         [ 20%]
+tests/examples/test_advanced.py::TestExampleFeature::test_create_example_soc_graph_basic PASSED [ 21%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_nodes_structure PASSED [ 22%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_parameters_count PASSED [ 23%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_dependencies PASSED [ 24%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_calculations PASSED [ 25%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_layout PASSED [ 27%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_parameter_values PASSED [ 28%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_error_handling PASSED [ 29%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_data_flow PASSED [ 30%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_graph_parameter_types PASSED [ 31%]
+tests/examples/test_advanced.py::TestExampleFeature::test_example_button_callback_exists FAILED [ 32%]
+tests/examples/test_advanced.py::TestExampleFeatureIntegration::test_example_creates_valid_graph_state PASSED [ 34%]
+tests/examples/test_basic.py::test_example_basic PASSED                  [ 35%]
+tests/examples/test_basic.py::test_example_callback PASSED               [ 36%]
+tests/examples/test_simple.py::test_example_function_import PASSED       [ 37%]
+tests/examples/test_simple.py::test_example_function_execution PASSED    [ 38%]
+tests/examples/test_simple.py::test_example_function_consistency PASSED  [ 40%]
+tests/examples/test_simple.py::test_example_creates_valid_data PASSED    [ 41%]
+tests/examples/test_simple.py::test_example_parameter_calculations PASSED [ 42%]
+tests/examples/test_simple.py::test_example_callback_exists FAILED       [ 43%]
+tests/examples/test_simple.py::test_example_performance PASSED           [ 44%]
+tests/features/test_dependency_deletion_restriction.py::test_parameter_deletion_restriction PASSED [ 45%]
+tests/features/test_dependency_deletion_restriction.py::test_node_deletion_restriction PASSED [ 47%]
+tests/features/test_dependency_deletion_restriction.py::test_complex_dependency_network PASSED [ 48%]
+tests/features/test_enhanced_unlink_feature.py::test_enhanced_unlink_display_logic PASSED [ 49%]
+tests/features/test_enhanced_unlink_feature.py::test_manual_value_auto_unlink PASSED [ 50%]
+tests/features/test_enhanced_unlink_feature.py::test_unlink_icon_click_reconnect PASSED [ 51%]
+tests/features/test_enhanced_unlink_feature.py::test_sensitivity_analysis_auto_unlink_simulation PASSED [ 52%]
+tests/features/test_enhanced_unlink_feature.py::test_edge_cases_and_error_handling PASSED [ 54%]
+tests/features/test_enhanced_unlink_feature.py::test_unlink_with_complex_dependencies PASSED [ 55%]
+tests/features/test_layout.py::test_layout_manager_basic_operations PASSED [ 56%]
+tests/features/test_layout.py::test_layout_manager_node_movements PASSED [ 57%]
+tests/features/test_layout.py::test_layout_manager_column_operations PASSED [ 58%]
+tests/features/test_layout.py::test_layout_manager_add_remove_columns PASSED [ 60%]
+tests/features/test_layout.py::test_layout_manager_remove_column_edge_cases PASSED [ 61%]
+tests/features/test_layout.py::test_layout_serialization PASSED          [ 62%]
+tests/features/test_node_edit.py::test_node_name_editing PASSED          [ 63%]
+tests/features/test_node_edit.py::test_node_id_generation PASSED         [ 64%]
+tests/features/test_simple_id_functionality.py::test_node_id_generation PASSED [ 65%]
+tests/features/test_simple_id_functionality.py::test_html_dash_id_generation PASSED [ 67%]
+tests/features/test_simple_id_functionality.py::test_node_retrieval PASSED [ 68%]
+tests/features/test_simple_id_functionality.py::test_id_persistence PASSED [ 69%]
+tests/features/test_simple_id_functionality.py::test_calculation_graph_id_management PASSED [ 70%]
+tests/features/test_unlink.py::test_unlinked_functionality FAILED        [ 71%]
+tests/features/test_unlink.py::test_serialization PASSED                 [ 72%]
+tests/features/test_unlink_ui_feature.py::test_unlink_icon_display_logic ERROR [ 74%]
+tests/features/test_unlink_ui_feature.py::test_unlink_icon_click_reconnect ERROR [ 75%]
+tests/features/test_unlink_ui_feature.py::test_sensitivity_analysis_auto_unlink ERROR [ 76%]
+tests/features/test_unlink_ui_feature.py::test_unlink_ui_integration ERROR [ 77%]
+tests/integration/test_app.py::test_add_node_with_grid_layout ERROR      [ 78%]
+tests/integration/test_app.py::test_node_dropdown_menu_operations ERROR  [ 80%]
+tests/integration/test_app.py::test_node_movement_with_layout_manager ERROR [ 81%]
+tests/integration/test_app.py::test_parameter_operations_with_dropdown ERROR [ 82%]
+tests/integration/test_app.py::test_multiple_nodes_grid_layout ERROR     [ 83%]
+tests/integration/test_app.py::test_duplicate_node_name_prevention ERROR [ 84%]
+tests/integration/test_app.py::test_empty_node_name_validation ERROR     [ 85%]
+tests/integration/test_app.py::test_column_management ERROR              [ 87%]
+tests/integration/test_app.py::test_remove_column_functionality ERROR    [ 88%]
+tests/integration/test_app.py::test_node_position_display ERROR          [ 89%]
+tests/integration/test_app.py::test_parameter_cascade_update_in_web_interface ERROR [ 90%]
+tests/integration/test_app.py::test_parameter_highlight_functionality ERROR [ 91%]
+tests/integration/test_app.py::test_parameter_edit_modal_functionality ERROR [ 92%]
+tests/integration/test_app.py::test_canvas_auto_refresh_on_parameter_change ERROR [ 94%]
+tests/integration/test_app.py::test_recently_updated_params_tracking ERROR [ 95%]
+tests/integration/test_headless_demo.py::test_headless_basic_operations ERROR [ 96%]
+tests/integration/test_headless_demo.py::test_headless_layout_operations ERROR [ 97%]
+tests/integration/test_headless_demo.py::test_headless_parameter_operations ERROR [ 98%]
+tests/integration/test_session_graph_isolation.py::test_graph_isolation_by_sid PASSED [100%]
+
+==================================== ERRORS ====================================
+_______________ ERROR at setup of test_unlink_icon_display_logic _______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+______________ ERROR at setup of test_unlink_icon_click_reconnect ______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+___________ ERROR at setup of test_sensitivity_analysis_auto_unlink ____________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_________________ ERROR at setup of test_unlink_ui_integration _________________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_______________ ERROR at setup of test_add_node_with_grid_layout _______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_____________ ERROR at setup of test_node_dropdown_menu_operations _____________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+___________ ERROR at setup of test_node_movement_with_layout_manager ___________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+__________ ERROR at setup of test_parameter_operations_with_dropdown ___________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+______________ ERROR at setup of test_multiple_nodes_grid_layout _______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+____________ ERROR at setup of test_duplicate_node_name_prevention _____________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+______________ ERROR at setup of test_empty_node_name_validation _______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+___________________ ERROR at setup of test_column_management ___________________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+______________ ERROR at setup of test_remove_column_functionality ______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_________________ ERROR at setup of test_node_position_display _________________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_______ ERROR at setup of test_parameter_cascade_update_in_web_interface _______
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+___________ ERROR at setup of test_parameter_highlight_functionality ___________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+__________ ERROR at setup of test_parameter_edit_modal_functionality ___________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+________ ERROR at setup of test_canvas_auto_refresh_on_parameter_change ________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+___________ ERROR at setup of test_recently_updated_params_tracking ____________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_______________ ERROR at setup of test_headless_basic_operations _______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+______________ ERROR at setup of test_headless_layout_operations _______________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+_____________ ERROR at setup of test_headless_parameter_operations _____________
+tests/conftest.py:185: in dash_thread_server
+    with pytest.warns(UserWarning):
+E   Failed: DID NOT WARN. No warnings of type (<class 'UserWarning'>,) were emitted.
+E   The list of emitted warnings is: [].
+=================================== FAILURES ===================================
+___________________________ test_save_and_load_graph ___________________________
+tests/core/test_file_ops.py:42: in test_save_and_load_graph
+    layout_manager.place_node(node1.id, GridPosition(0, 0))
+models.py:878: in place_node
+    raise ValueError(f"位置 ({position.row}, {position.col}) 已被节点 {self.grid[position.row][position.col]} 占用")
+E   ValueError: 位置 (0, 0) 已被节点 1 占用
+----------------------------- Captured stdout call -----------------------------
+🧪 开始测试计算图文件操作...
+📝 创建测试计算图...
+______________________ test_parameter_update_propagation _______________________
+tests/core/test_models.py:417: in test_parameter_update_propagation
+    assert len(update_result['cascaded_updates']) >= 1  # 至少power被更新
+E   assert 0 >= 1
+E    +  where 0 = len([])
+________________________ test_dependency_chain_analysis ________________________
+tests/core/test_models.py:525: in test_dependency_chain_analysis
+    assert len(dependents) > 0
+E   assert 0 > 0
+E    +  where 0 = len([])
+____________ TestExampleFeature.test_example_button_callback_exists ____________
+tests/examples/test_advanced.py:292: in test_example_button_callback_exists
+    assert callback_info is not None, "回调函数应该有Dash装饰器"
+E   AssertionError: 回调函数应该有Dash装饰器
+E   assert None is not None
+_________________________ test_example_callback_exists _________________________
+tests/examples/test_simple.py:153: in test_example_callback_exists
+    assert hasattr(app, 'load_example_soc_graph_callback'), "应该存在加载示例图的回调函数"
+E   AssertionError: 应该存在加载示例图的回调函数
+E   assert False
+E    +  where False = hasattr(<dash.dash.Dash object at 0x7fb8383057e0>, 'load_example_soc_graph_callback')
+
+During handling of the above exception, another exception occurred:
+tests/examples/test_simple.py:170: in test_example_callback_exists
+    pytest.fail(f"回调函数检查失败: {e}")
+E   Failed: 回调函数检查失败: 应该存在加载示例图的回调函数
+E   assert False
+E    +  where False = hasattr(<dash.dash.Dash object at 0x7fb8383057e0>, 'load_example_soc_graph_callback')
+_________________________ test_unlinked_functionality __________________________
+tests/features/test_unlink.py:82: in test_unlinked_functionality
+    assert area.value == 120.0, "级联计算应该正确"
+E   AssertionError: 级联计算应该正确
+E   assert 50.0 == 120.0
+E    +  where 50.0 = Parameter(name='面积', unit='m²', description='', confidence=1.0, calculation_func='result = dependencies[0].value * dependencies[1].value', dependencies=[Parameter(name='长度', unit='m', description='', confidence=1.0, calculation_func=None, dependencies=[], unlinked=False, _value=15.0), Parameter(name='宽度', unit='m', description='', confidence=1.0, calculation_func=None, dependencies=[], unlinked=False, _value=8.0)], unlinked=False, _value=50.0).value
+----------------------------- Captured stdout call -----------------------------
+🔬 测试参数断开连接功能
+==================================================
+1. 初始状态:
+   长度 = 10.0 m, unlinked = False
+   宽度 = 5.0 m, unlinked = False
+   面积 = 0.0 m², unlinked = False
+   计算后面积 = 50.0 m²
+
+2. 手动修改有依赖的面积参数值:
+   面积 = 100.0 m², unlinked = True
+   计算后面积 = 100.0 m² (应该保持不变)
+
+3. 重新连接参数:
+   重新连接后面积 = 50.0 m², unlinked = False
+
+4. 测试无依赖参数的手动设置:
+   长度 = 15.0 m, unlinked = False
+
+5. 测试级联更新:
+   宽度修改为 = 8.0 m
+   面积自动更新为 = 50.0 m² (应该是 120.0)
+=============================== warnings summary ===============================
+tests/examples/test_basic.py::test_example_basic
+  /home/readm/.local/lib/python3.10/site-packages/_pytest/python.py:198: PytestReturnNotNoneWarning:
+  
+  Expected None, but tests/examples/test_basic.py::test_example_basic returned False, which will be an error in a future version of pytest.  Did you mean to use `assert` instead of `return`?
+
+tests/examples/test_basic.py::test_example_callback
+  /home/readm/.local/lib/python3.10/site-packages/_pytest/python.py:198: PytestReturnNotNoneWarning:
+  
+  Expected None, but tests/examples/test_basic.py::test_example_callback returned True, which will be an error in a future version of pytest.  Did you mean to use `assert` instead of `return`?
+
+tests/features/test_enhanced_unlink_feature.py::test_enhanced_unlink_display_logic
+tests/features/test_unlink.py::test_unlinked_functionality
+  /home/readm/ArchDash/models.py:166: UserWarning:
+  
+  参数 面积 已断开自动计算连接
+
+tests/features/test_enhanced_unlink_feature.py::test_manual_value_auto_unlink
+  /home/readm/ArchDash/models.py:166: UserWarning:
+  
+  参数 计算参数 已断开自动计算连接
+
+tests/features/test_enhanced_unlink_feature.py::test_unlink_icon_click_reconnect
+  /home/readm/ArchDash/models.py:166: UserWarning:
+  
+  参数 乘积 已断开自动计算连接
+
+tests/features/test_enhanced_unlink_feature.py::test_sensitivity_analysis_auto_unlink_simulation
+  /home/readm/ArchDash/models.py:166: UserWarning:
+  
+  参数 X参数 已断开自动计算连接
+
+tests/features/test_enhanced_unlink_feature.py::test_edge_cases_and_error_handling
+  /home/readm/ArchDash/models.py:166: UserWarning:
+  
+  参数 完整参数 已断开自动计算连接
+
+tests/features/test_enhanced_unlink_feature.py::test_unlink_with_complex_dependencies
+  /home/readm/ArchDash/models.py:166: UserWarning:
+  
+  参数 C 已断开自动计算连接
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/core/test_file_ops.py::test_save_and_load_graph - ValueError: 位...
+FAILED tests/core/test_models.py::test_parameter_update_propagation - assert ...
+FAILED tests/core/test_models.py::test_dependency_chain_analysis - assert 0 > 0
+FAILED tests/examples/test_advanced.py::TestExampleFeature::test_example_button_callback_exists
+FAILED tests/examples/test_simple.py::test_example_callback_exists - Failed: ...
+FAILED tests/features/test_unlink.py::test_unlinked_functionality - Assertion...
+ERROR tests/features/test_unlink_ui_feature.py::test_unlink_icon_display_logic
+ERROR tests/features/test_unlink_ui_feature.py::test_unlink_icon_click_reconnect
+ERROR tests/features/test_unlink_ui_feature.py::test_sensitivity_analysis_auto_unlink
+ERROR tests/features/test_unlink_ui_feature.py::test_unlink_ui_integration - ...
+ERROR tests/integration/test_app.py::test_add_node_with_grid_layout - Failed:...
+ERROR tests/integration/test_app.py::test_node_dropdown_menu_operations - Fai...
+ERROR tests/integration/test_app.py::test_node_movement_with_layout_manager
+ERROR tests/integration/test_app.py::test_parameter_operations_with_dropdown
+ERROR tests/integration/test_app.py::test_multiple_nodes_grid_layout - Failed...
+ERROR tests/integration/test_app.py::test_duplicate_node_name_prevention - Fa...
+ERROR tests/integration/test_app.py::test_empty_node_name_validation - Failed...
+ERROR tests/integration/test_app.py::test_column_management - Failed: DID NOT...
+ERROR tests/integration/test_app.py::test_remove_column_functionality - Faile...
+ERROR tests/integration/test_app.py::test_node_position_display - Failed: DID...
+ERROR tests/integration/test_app.py::test_parameter_cascade_update_in_web_interface
+ERROR tests/integration/test_app.py::test_parameter_highlight_functionality
+ERROR tests/integration/test_app.py::test_parameter_edit_modal_functionality
+ERROR tests/integration/test_app.py::test_canvas_auto_refresh_on_parameter_change
+ERROR tests/integration/test_app.py::test_recently_updated_params_tracking - ...
+ERROR tests/integration/test_headless_demo.py::test_headless_basic_operations
+ERROR tests/integration/test_headless_demo.py::test_headless_layout_operations
+ERROR tests/integration/test_headless_demo.py::test_headless_parameter_operations
+============= 6 failed, 57 passed, 9 warnings, 22 errors in 0.45s ==============

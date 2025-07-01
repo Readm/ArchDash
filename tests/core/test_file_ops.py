@@ -16,6 +16,7 @@ def test_save_and_load_graph():
     print("📝 创建测试计算图...")
     graph = CalculationGraph()
     layout_manager = CanvasLayoutManager(initial_cols=3, initial_rows=5)
+    layout_manager.reset()
     graph.set_layout_manager(layout_manager)
     
     # 创建节点1
@@ -27,7 +28,7 @@ def test_save_and_load_graph():
     
     node1.add_parameter(param1)
     node1.add_parameter(param2)
-    graph.add_node(node1)
+    graph.add_node(node1, auto_place=False)
     
     # 创建节点2
     node2 = Node("测试节点2", "这是第二个测试节点")
@@ -36,7 +37,7 @@ def test_save_and_load_graph():
     param3.add_dependency(param2)
     
     node2.add_parameter(param3)
-    graph.add_node(node2)
+    graph.add_node(node2, auto_place=False)
     
     # 设置布局位置
     layout_manager.place_node(node1.id, GridPosition(0, 0))

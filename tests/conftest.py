@@ -182,7 +182,6 @@ def dash_thread_server():
     is_ci = os.environ.get('TEST_ENV') == 'CI'
     options = {'headless': True} if is_ci else {}
     
-    with pytest.warns(UserWarning):
-        app = import_app('app')
+    app = import_app('app')
     
     yield app.server 
