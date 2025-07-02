@@ -201,6 +201,7 @@ app_layout = dbc.Container([
                                         type="number", 
                                         value=0,
                                         size="sm",
+                                        debounce=True,
                                         className="form-control"
                                     )
                                 ], width=4),
@@ -211,6 +212,7 @@ app_layout = dbc.Container([
                                         type="number", 
                                         value=100,
                                         size="sm",
+                                        debounce=True,
                                         className="form-control"
                                     )
                                 ], width=4),
@@ -222,6 +224,7 @@ app_layout = dbc.Container([
                                         value=1,
                                         size="sm",
                                         min=0.1,
+                                        debounce=True,
                                         className="form-control"
                                     )
                                 ], width=4),
@@ -237,6 +240,7 @@ app_layout = dbc.Container([
                                                 id="series-name-input",
                                                 placeholder="自定义系列名称",
                                                 size="sm",
+                                                debounce=True,
                                                 style={"fontSize": "0.8rem"}
                                             )
                                         ], size="sm"),
@@ -380,7 +384,7 @@ app_layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Label("参数名称:", style={"fontSize": "0.9rem"}),
-                    dbc.Input(id="param-edit-name", placeholder="参数名称", style={"fontSize": "0.85rem"})
+                    dbc.Input(id="param-edit-name", placeholder="参数名称", debounce=True, style={"fontSize": "0.85rem"})
                 ], width=6),
                 dbc.Col([
                     dbc.Label("类型:", style={"fontSize": "0.9rem"}),
@@ -398,7 +402,7 @@ app_layout = dbc.Container([
                 ], width=3),
                 dbc.Col([
                     dbc.Label("单位:", style={"fontSize": "0.9rem"}),
-                    dbc.Input(id="param-edit-unit", placeholder="单位", style={"fontSize": "0.85rem"})
+                    dbc.Input(id="param-edit-unit", placeholder="单位", debounce=True, style={"fontSize": "0.85rem"})
                 ], width=3),
             ], className="mb-3"),
             
@@ -430,7 +434,7 @@ app_layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Label("描述:", style={"fontSize": "0.9rem"}),
-                    dbc.Textarea(id="param-edit-description", placeholder="参数描述", rows=2, style={"fontSize": "0.85rem"})
+                    dbc.Textarea(id="param-edit-description", placeholder="参数描述", rows=2, debounce=True, style={"fontSize": "0.85rem"})
                 ])
             ], className="mb-3"),
             
@@ -509,14 +513,14 @@ app_layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Label("节点名称:"),
-                    dbc.Input(id="node-edit-name", placeholder="节点名称")
+                    dbc.Input(id="node-edit-name", placeholder="节点名称", debounce=True)
                 ], width=12),
             ], className="mb-3"),
             
             dbc.Row([
                 dbc.Col([
                     dbc.Label("节点描述:"),
-                    dbc.Textarea(id="node-edit-description", placeholder="节点描述", rows=3)
+                    dbc.Textarea(id="node-edit-description", placeholder="节点描述", rows=3, debounce=True)
                 ])
             ], className="mb-3"),
         ]),
@@ -538,14 +542,14 @@ app_layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Label("节点名称:"),
-                    dbc.Input(id="node-add-name", placeholder="输入节点名称")
+                    dbc.Input(id="node-add-name", placeholder="输入节点名称", debounce=True)
                 ], width=12),
             ], className="mb-3"),
             
             dbc.Row([
                 dbc.Col([
                     dbc.Label("节点描述:"),
-                    dbc.Textarea(id="node-add-description", placeholder="节点描述（可选）", rows=3)
+                    dbc.Textarea(id="node-add-description", placeholder="节点描述（可选）", rows=3, debounce=True)
                 ])
             ], className="mb-3"),
         ]),

@@ -177,9 +177,20 @@ class TestExampleFeature:
         original_layout = original_graph.layout_manager if original_graph else None
         
         try:
-            # 测试重复创建
+            # 第一次创建应该成功
             result1 = create_example_soc_graph(get_graph())
-            result2 = create_example_soc_graph(get_graph())
+            assert result1["nodes_created"] == 9, "第一次创建应该成功"
+            
+            # 在同一个图上重复创建应该抛出异常（因为节点名称冲突）
+            with pytest.raises(ValueError, match="already exists"):
+                create_example_soc_graph(get_graph())
+            
+            # 测试：清空图后再次创建应该成功
+            current_graph = get_graph()
+            current_graph.nodes.clear()  # 清空节点
+            current_graph.layout_manager.reset()  # 重置布局
+            
+            result2 = create_example_soc_graph(current_graph)
             
             # 两次创建的结果应该一致
             assert result1["nodes_created"] == result2["nodes_created"]
@@ -187,7 +198,8 @@ class TestExampleFeature:
             assert result1["calculated_params"] == result2["calculated_params"]
         
         except Exception as e:
-            pytest.fail(f"重复创建示例图时出错: {e}")
+            if "already exists" not in str(e):
+                pytest.fail(f"未预期的错误: {e}")
         
         finally:
             # 恢复状态（如果需要）

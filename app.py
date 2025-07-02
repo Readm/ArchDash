@@ -365,6 +365,7 @@ def update_canvas(node_data=None):
                                     dcc.Input(
                                         id={"type": "param-name", "node": node_id, "index": param_idx},
                                         value=param.name,
+                                        debounce=True,  # 只在失去焦点或按回车时触发callback
                                         style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "1px 3px"},
                                         className="param-input"
                                     )
@@ -380,19 +381,20 @@ def update_canvas(node_data=None):
                                         trigger="focus"
                                     ),
                                     html.Div([
-                                        dcc.Input(
-                                            id={"type": "param-value", "node": node_id, "index": param_idx},
-                                            value=str(param.value),
-                                            style={
-                                                "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
-                                                "border": "1px solid transparent", 
-                                                "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
-                                                "borderRadius": "3px", 
-                                                "padding": "1px 3px",
-                                                "transition": "background-color 2s ease-out"
-                                            },
-                                            className="param-input"
-                                        ),
+                                                                            dcc.Input(
+                                        id={"type": "param-value", "node": node_id, "index": param_idx},
+                                        value=str(param.value),
+                                        debounce=True,  # 只在失去焦点或按回车时触发callback
+                                        style={
+                                            "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                            "border": "1px solid transparent", 
+                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
+                                            "borderRadius": "3px", 
+                                            "padding": "1px 3px",
+                                            "transition": "background-color 2s ease-out"
+                                        },
+                                        className="param-input"
+                                    ),
                                         html.Span(
                                             param.unit,
                                             style={
@@ -711,22 +713,18 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
 
 # 移除旧的show_context_menu回调，现在使用直接的dropdown menu
 
-# 添加参数更新回调 - 修改为失去焦点或按Enter时更新
+# 添加参数更新回调 - 使用debounce确保只在输入完成后更新
 @callback(
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
     Output("clear-highlight-timer", "disabled", allow_duplicate=True),
-    Input({"type": "param-name", "node": ALL, "index": ALL}, "n_blur"),
-    Input({"type": "param-name", "node": ALL, "index": ALL}, "n_submit"),
-    Input({"type": "param-value", "node": ALL, "index": ALL}, "n_blur"),
-    Input({"type": "param-value", "node": ALL, "index": ALL}, "n_submit"),
-    State({"type": "param-name", "node": ALL, "index": ALL}, "value"),
-    State({"type": "param-value", "node": ALL, "index": ALL}, "value"),
+    Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
+    Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
     State("node-data", "data"),
     prevent_initial_call=True
 )
-def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, param_names, param_values, node_data):
+def update_parameter(param_names, param_values, node_data):
     if not ctx.triggered_id:
         return node_data, dash.no_update, dash.no_update, dash.no_update
     
@@ -736,80 +734,8 @@ def update_parameter(name_n_blur, name_n_submit, value_n_blur, value_n_submit, p
         param_index = triggered_id["index"]
         param_type = triggered_id["type"]
         
-        # 检查触发类型，只处理有效的触发
-        trigger_prop = ctx.triggered[0]["prop_id"].split(".")[-1]
-        if trigger_prop not in ["n_blur", "n_submit"]:
-            return node_data, dash.no_update, dash.no_update, dash.no_update
-        
-        # 检查触发值是否有效（避免初始化误触发）
-        trigger_value = ctx.triggered[0]["value"]
-        if not trigger_value or trigger_value == 0:
-            return node_data, dash.no_update, dash.no_update, dash.no_update
-        
-        # 🔧 重要修复：使用ctx.triggered获取准确的新值
-        new_value = None
-        
-        # 方法1：直接从ctx.triggered获取当前触发值（最可靠）
-        try:
-            # ctx.triggered[0]["value"] 包含实际触发的新值
-            new_value = ctx.triggered[0]["value"]
-            
-            # 对于n_blur和n_submit事件，我们需要从states中获取实际的输入值
-            if new_value in [1, True]:  # 这些是事件计数，不是实际值
-                # 构建精确的状态键来获取输入值
-                state_key = f'{{"index":{param_index},"node":"{node_id}","type":"{param_type}"}}.value'
-                
-                # 从ctx.states中查找匹配的状态
-                for state_id, state_value in ctx.states.items():
-                    if state_key == state_id or (isinstance(state_id, str) and state_key in state_id):
-                        new_value = state_value
-                        break
-                
-                # 如果还是没找到，尝试不同的键格式
-                if new_value in [1, True]:
-                    alt_key = f'{{"type":"{param_type}","node":"{node_id}","index":{param_index}}}.value'
-                    for state_id, state_value in ctx.states.items():
-                        if alt_key == state_id or (isinstance(state_id, str) and alt_key in state_id):
-                            new_value = state_value
-                            break
-        except Exception as e:
-            print(f"🔧 方法1失败: {e}")
-            new_value = None
-        
-        # 方法2：如果方法1失败，使用有序索引匹配（回退方案）
-        if new_value is None or new_value in [1, True]:
-            try:
-                # 创建与callback参数顺序一致的参数ID列表
-                ordered_param_ids = []
-                for n_id in sorted(graph.nodes.keys()):
-                    node = graph.nodes[n_id]
-                    for p_idx in range(len(node.parameters)):
-                        ordered_param_ids.append({"type": param_type, "node": n_id, "index": p_idx})
-                
-                # 找到目标参数在有序列表中的位置
-                target_param_id = {"type": param_type, "node": node_id, "index": param_index}
-                target_index = ordered_param_ids.index(target_param_id)
-                
-                # 获取对应的值
-                if param_type == "param-name" and target_index < len(param_names):
-                    new_value = param_names[target_index]
-                elif param_type == "param-value" and target_index < len(param_values):
-                    new_value = param_values[target_index]
-                    
-            except (ValueError, IndexError) as e:
-                print(f"🔧 方法2失败: {e}")
-                new_value = None
-        
-        # 方法3：最后的回退方案 - 保持当前值不变
-        if new_value is None or new_value in [1, True]:
-            node = graph.nodes.get(node_id)
-            if node and param_index < len(node.parameters):
-                current_param = node.parameters[param_index]
-                if param_type == "param-name":
-                    new_value = current_param.name
-                elif param_type == "param-value":
-                    new_value = current_param.value
-                print(f"🔧 使用回退方案，保持当前值: {new_value}")
+        # 直接从ctx.triggered获取新值（debounce确保只在输入完成后触发）
+        new_value = ctx.triggered[0]["value"]
         
         # 🔍 调试信息：记录获取到的值
         print(f"🔍 调试：参数更新 - 节点:{node_id}, 索引:{param_index}, 类型:{param_type}, 获取值:{new_value}")
