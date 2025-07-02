@@ -864,6 +864,7 @@ def update_parameter(param_names, param_values, node_data):
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
+    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
     Input({"type": "delete-param", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-up", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-down", "node": ALL, "index": ALL}, "n_clicks"),
@@ -873,11 +874,11 @@ def update_parameter(param_names, param_values, node_data):
 def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data):
     ctx = dash.callback_context  # 获取回调上下文
     if not ctx.triggered_id:
-        return node_data, update_canvas(), dash.no_update
+        return node_data, update_canvas(), dash.no_update, dash.no_update
     
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, update_canvas(), dash.no_update
+        return node_data, update_canvas(), dash.no_update, dash.no_update
     
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
@@ -886,18 +887,18 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     # 检查点击数值，避免初始化时的误触发
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, update_canvas(), dash.no_update
+        return node_data, update_canvas(), dash.no_update, dash.no_update
     
     if not node_id or param_index is None:
-        return node_data, update_canvas(), dash.no_update
+        return node_data, update_canvas(), dash.no_update, dash.no_update
     
     # 获取节点
     node = graph.nodes.get(node_id)
     if not node:
-        return node_data, update_canvas(), dash.no_update
+        return node_data, update_canvas(), dash.no_update, dash.no_update
         
     if param_index >= len(node.parameters):
-        return node_data, update_canvas(), dash.no_update
+        return node_data, update_canvas(), dash.no_update, dash.no_update
     
     node_name = node.name
     param_name = node.parameters[param_index].name
@@ -914,13 +915,13 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
                 dependent_info.append(f"{dep['node_name']}.{dep['param_name']}")
             
             error_message = f"❌ 无法删除参数 {node_name}.{param_name}，因为以下参数依赖于它：\n{', '.join(dependent_info)}"
-            return node_data, update_canvas(), error_message
+            return node_data, update_canvas(), error_message, dash.no_update
         
         # 删除参数
         deleted_param = node.parameters.pop(param_index)
         success_message = f"✅ 参数 {node_name}.{param_name} 已删除"
         
-        return node_data, update_canvas(), success_message
+        return node_data, update_canvas(), success_message, dash.no_update
         
     elif operation_type == "move-param-up":
         # 上移参数
@@ -935,13 +936,14 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
                 node.parameters[param_index + 1], node.parameters[param_index]
     
     # 参数操作完成，只更新数据和画布，不影响任何其他UI组件
-    return node_data, update_canvas(), dash.no_update
+    return node_data, update_canvas(), dash.no_update, dash.no_update
 
 # 处理unlink图标点击的回调函数
 @callback(
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
+    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
     Input({"type": "unlink-icon", "node": ALL, "index": ALL}, "n_clicks"),
     State("node-data", "data"),
     prevent_initial_call=True
@@ -949,11 +951,11 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
 def handle_unlink_toggle(unlink_clicks, node_data):
     """处理unlink图标点击，重新连接参数并计算"""
     if not ctx.triggered_id:
-        return node_data, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update, dash.no_update
     
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update, dash.no_update
     
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
@@ -961,15 +963,15 @@ def handle_unlink_toggle(unlink_clicks, node_data):
     # 检查点击数值，避免初始化时的误触发
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update, dash.no_update
     
     if not node_id or param_index is None:
-        return node_data, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update, dash.no_update
     
     # 获取节点和参数
     node = graph.nodes.get(node_id)
     if not node or param_index >= len(node.parameters):
-        return node_data, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update, dash.no_update
     
     param = node.parameters[param_index]
     node_name = node.name
@@ -983,10 +985,10 @@ def handle_unlink_toggle(unlink_clicks, node_data):
         new_value = param.relink_and_calculate()
         result_message = f"🔗 参数 {node_name}.{param.name} 已重新连接，新值: {new_value}"
         
-        return node_data, update_canvas(), result_message
+        return node_data, update_canvas(), result_message, dash.no_update
         
     except Exception as e:
-        return node_data, dash.no_update, f"❌ 重新连接失败: {str(e)}"
+        return node_data, dash.no_update, f"❌ 重新连接失败: {str(e)}", dash.no_update
 
 # 打开参数编辑模态窗口
 @callback(
@@ -1279,10 +1281,10 @@ def save_parameter_changes(save_clicks, param_name, param_type, param_unit, para
         # 更新画布显示
         updated_canvas = update_canvas()
         
-        return False, updated_canvas, success_msg
+        return False, updated_canvas, success_msg, dash.no_update
         
     except Exception as e:
-        return True, dash.no_update, f"保存失败: {str(e)}"
+        return True, dash.no_update, f"保存失败: {str(e)}", dash.no_update
 
 # 添加定时清理高亮的回调
 @callback(

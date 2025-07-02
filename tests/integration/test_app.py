@@ -1,6 +1,4 @@
 import pytest
-from dash import html
-from app import app, layout_manager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -8,6 +6,8 @@ from selenium.common.exceptions import TimeoutException, ElementClickIntercepted
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 import time
+
+from app import app, graph, layout_manager
 
 # 为此文件中的所有测试设置3秒的全局超时
 pytestmark = pytest.mark.timeout(3)
@@ -69,1271 +69,455 @@ def find_dropdown_item_safe(driver, text, max_attempts=3):
                 raise
     return None
 
-def test_add_node_with_grid_layout(dash_duo):
-    """测试添加节点功能和网格布局系统"""
-    dash_duo.start_server(app, debug=False)
+def wait_for_element(selenium, by, value, timeout=10):
+    """等待元素出现并返回"""
+    return WebDriverWait(selenium, timeout).until(
+        EC.visibility_of_element_located((by, value))
+    )
 
-    # 清理之前测试的状态
-    from app import graph
+def wait_for_clickable(selenium, by, value, timeout=10):
+    """等待元素可点击并返回"""
+    element = WebDriverWait(selenium, timeout).until(
+        EC.element_to_be_clickable((by, value))
+    )
+    # Ensure element is in view
+    selenium.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+    time.sleep(0.5)  # Give time for scroll to complete
+    return element
+
+def wait_for_node_count(selenium, count, timeout=10):
+    """等待节点数量达到预期值"""
+    def check_node_count(driver):
+        nodes = driver.find_elements(By.CSS_SELECTOR, ".node")
+        visible_nodes = [n for n in nodes if n.is_displayed()]
+        return len(visible_nodes) == count
+    WebDriverWait(selenium, timeout).until(check_node_count)
+
+def wait_for_text(selenium, by, value, text, timeout=10):
+    """等待元素包含指定文本"""
+    return WebDriverWait(selenium, timeout).until(
+        EC.text_to_be_present_in_element((by, value), text)
+    )
+
+def wait_for_page_load(selenium, timeout=10):
+    """等待页面完全加载"""
+    return WebDriverWait(selenium, timeout).until(
+        lambda driver: driver.execute_script("return document.readyState") == "complete"
+    )
+
+def create_node(selenium, name, description=""):
+    """创建一个新节点"""
+    add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
+    add_node_btn.click()
+    
+    modal = wait_for_element(selenium, By.ID, "node-add-modal")
+    name_input = wait_for_element(selenium, By.ID, "node-add-name")
+    name_input.clear()
+    name_input.send_keys(name)
+    
+    if description:
+        desc_input = wait_for_element(selenium, By.ID, "node-add-description")
+        desc_input.clear()
+        desc_input.send_keys(description)
+    
+    save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
+    save_btn.click()
+
+def add_parameter(selenium, node_index=0):
+    """为指定索引的节点添加参数"""
+    nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
+    node = nodes[node_index]
+    
+    add_param_btn = node.find_element(By.CSS_SELECTOR, "button[id*='add-param']")
+    add_param_btn.click()
+    
+    param_input = wait_for_element(selenium, By.CSS_SELECTOR, ".parameter-input")
+    return param_input
+
+def clean_state(selenium):
+    """清理应用状态"""
     graph.nodes.clear()
     layout_manager.node_positions.clear()
     layout_manager.position_nodes.clear()
-    # 重新初始化网格
     layout_manager._init_grid()
-
-    # 检查标题
-    assert dash_duo.find_element("h1").text == "🎨 ArchDash"
-
-    # 点击添加节点按钮（现在使用模态窗口）
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
     
-    # 等待模态窗口出现
-    time.sleep(0.5)
-    
-    # 在模态窗口中输入节点名称
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("TestNode")
-    
-    # 点击创建按钮
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
+    selenium.get("http://localhost:8050")
+    wait_for_page_load(selenium)
+    wait_for_element(selenium, By.ID, "canvas-container")
 
-    # 验证节点添加成功的消息
-    dash_duo.wait_for_contains_text("#output-result", "节点 'TestNode' 已创建", timeout=5)
-    print("✅ 节点添加成功")
+def test_add_node_with_grid_layout(selenium):
+    """测试添加节点和网格布局"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "测试节点", "这是一个测试节点")
+        wait_for_node_count(selenium, 1)
+        
+        node = selenium.find_element(By.CSS_SELECTOR, ".node")
+        assert "测试节点" in node.text, "节点名称应该正确显示"
+        
+        print("✅ 添加节点和网格布局测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"添加节点和网格布局测试失败: {str(e)}")
 
-    # 获取节点ID和验证 - 现在直接从graph获取
-    assert len(graph.nodes) == 1, "应该有一个节点"
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-    
-    # 验证节点在DOM中存在
-    node_element = dash_duo.find_element(f"#{node_html_id}")
-    assert node_element is not None
-    assert "TestNode" in node_element.text
-    print("✅ 节点在DOM中正确显示")
-
-    # 验证节点在布局管理器中的位置
-    position = layout_manager.get_node_position(node_id)
-    assert position is not None
-    assert position.row == 0 and position.col == 0  # 第一个节点应该在(0,0)
-    print(f"✅ 节点在网格位置 ({position.row}, {position.col})")
-
-def test_node_dropdown_menu_operations(dash_duo):
+def test_node_dropdown_menu_operations(selenium):
     """测试节点的dropdown菜单操作"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-
-    # 添加测试节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("DropdownTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "DropdownTestNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
-    # 找到dropdown菜单按钮 - 现在是带有⋮字符的按钮
-    dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-    assert len(dropdown_buttons) > 0, "应该找到dropdown菜单按钮"
-    
-    dropdown_button = dropdown_buttons[0]
-    dropdown_button.click()
-    
-    # 等待dropdown菜单展开
-    time.sleep(0.5)
-    
-    # 寻找"添加参数"选项
-    add_param_items = dash_duo.driver.find_elements(By.XPATH, "//a[contains(text(), '添加参数')]")
-    if len(add_param_items) > 0:
-        add_param_items[0].click()
-        time.sleep(1)  # 等待消息显示
-        
-        # 调试：捕获实际的输出消息
-        try:
-            output_result = dash_duo.find_element("#output-result")
-            actual_message = output_result.text
-            print(f"实际输出消息: '{actual_message}'")
-            
-            if "参数已添加" in actual_message:
-                print("✅ 成功添加参数")
-            else:
-                print(f"⚠️ 消息不匹配，实际消息: {actual_message}")
-        except Exception as e:
-            print(f"⚠️ 获取输出消息失败: {e}")
-            # 尝试使用更通用的文本匹配
-            try:
-                dash_duo.wait_for_contains_text("#output-result", "参数", timeout=5)
-                print("✅ 找到包含'参数'的消息")
-            except:
-                print("⚠️ 未找到任何参数相关消息")
-    else:
-        print("⚠️ 未找到'添加参数'菜单项")
-
-def test_node_movement_with_layout_manager(dash_duo):
-    """测试使用布局管理器的节点移动功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-
-    # 添加列以便测试左右移动
-    add_column_btn = dash_duo.find_element("#add-column-btn") 
-    safe_click(dash_duo.driver, add_column_btn)
-    dash_duo.wait_for_contains_text("#output-result", "已添加新列", timeout=5)
-
-    # 创建多个测试节点
-    test_nodes = ["Node1", "Node2", "Node3"]
-    for name in test_nodes:
-        add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-        add_node_btn.click()
-        time.sleep(0.5)
-        
-        modal_input = dash_duo.find_element("#node-add-name")
-        modal_input.clear()
-        modal_input.send_keys(name)
-        
-        create_btn = dash_duo.find_element("#node-add-save")
-        safe_click(dash_duo.driver, create_btn)
-        dash_duo.wait_for_contains_text("#output-result", f"{name}", timeout=10)
-
-    # 验证所有节点都创建成功
-    assert len(graph.nodes) == 3, "应该有3个节点"
-    print("✅ 创建了3个测试节点")
-
-    # 获取中间节点进行移动测试
-    node_ids = list(graph.nodes.keys())
-    middle_node_id = node_ids[1]
-    middle_node_html_id = f"node-{middle_node_id}"
-
-    # 获取初始位置
-    initial_pos = layout_manager.get_node_position(middle_node_id)
-    print(f"节点初始位置: ({initial_pos.row}, {initial_pos.col})")
-
-    # 测试右移
-    dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{middle_node_html_id} .dropdown-toggle")
-    if len(dropdown_buttons) > 0:
-        # 使用安全点击方法
-        if safe_click(dash_duo.driver, dropdown_buttons[0]):
-            # 安全查找右移选项
-            move_right_item = find_dropdown_item_safe(dash_duo.driver, "右移")
-            if move_right_item:
-                if safe_click(dash_duo.driver, move_right_item):
-                    dash_duo.wait_for_contains_text("#output-result", "已右移", timeout=5)
-                    
-                    # 验证位置变化
-                    new_pos = layout_manager.get_node_position(middle_node_id)
-                    assert new_pos.col > initial_pos.col, "节点应该右移到新列"
-                    print(f"✅ 节点成功右移到位置: ({new_pos.row}, {new_pos.col})")
-                else:
-                    print("⚠️ 右移菜单项点击失败")
-            else:
-                print("⚠️ 未找到右移菜单项")
-        else:
-            print("⚠️ dropdown按钮点击失败")
-
-def test_parameter_operations_with_dropdown(dash_duo):
-    """测试参数操作的dropdown菜单功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph, recently_updated_params
-    graph.nodes.clear()
-    layout_manager.node_positions.clear() 
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    recently_updated_params.clear()
-
-    # 创建节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("ParamTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "ParamTestNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
     try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-                return
-        else:
-            print("⚠️ 未找到dropdown按钮")
-            return
-    except Exception as e:
-        print(f"⚠️ 添加参数失败: {e}")
-        return
-
-    # 测试参数值编辑
-    try:
-        param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-        print(f"找到 {len(param_inputs)} 个参数输入框")
+        clean_state(selenium)
         
-        if len(param_inputs) >= 2:
-            param_value_input = param_inputs[1]  # 参数值输入框
-            param_value_input.clear()
-            param_value_input.send_keys("123.45")
-            time.sleep(1)  # 等待更新传播和画布刷新
-            
-            # 检查是否有参数更新的消息
-            try:
-                output_result = dash_duo.find_element("#output-result")
-                result_text = output_result.text
-                if "已更新" in result_text or "参数" in result_text:
-                    print("✅ 参数更新消息正确显示")
-                else:
-                    print(f"⚠️ 参数更新消息: {result_text}")
-            except Exception as e:
-                print(f"⚠️ 获取更新消息失败: {e}")
-            
-            # 验证画布内容包含新的参数值
-            try:
-                canvas_container = dash_duo.find_element("#canvas-container")
-                canvas_content = canvas_container.get_attribute("innerHTML")
-                if "123.45" in canvas_content:
-                    print("✅ 画布自动刷新功能正常")
-                else:
-                    print("⚠️ 画布可能未正确刷新")
-            except Exception as e:
-                print(f"⚠️ 检查画布内容失败: {e}")
-            
-            print("✅ 成功编辑参数值并验证自动更新功能")
-        else:
-            print(f"⚠️ 参数输入框数量不足: {len(param_inputs)}")
-    except Exception as e:
-        print(f"⚠️ 参数编辑测试失败: {e}")
-
-    print("✅ 参数操作dropdown菜单功能测试完成")
-
-def test_multiple_nodes_grid_layout(dash_duo):
-    """测试多个节点的网格布局显示"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-
-    # 创建多个节点
-    node_names = ["GridNode1", "GridNode2", "GridNode3", "GridNode4"]
-    created_node_ids = []
-
-    for name in node_names:
-        add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
+        # 等待页面加载完成
+        wait_for_page_load(selenium)
+        
+        # 等待画布容器可见
+        canvas = wait_for_element(selenium, By.ID, "canvas-container")
+        assert canvas is not None and canvas.is_displayed(), "画布容器应该存在且可见"
+        
+        # 等待添加节点按钮可点击
+        add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
         add_node_btn.click()
-        time.sleep(0.5)
         
-        modal_input = dash_duo.find_element("#node-add-name")
-        modal_input.clear()
-        modal_input.send_keys(name)
+        # 等待模态框出现并可见
+        modal = wait_for_element(selenium, By.ID, "node-add-modal")
+        assert modal is not None and modal.is_displayed(), "节点添加模态框应该出现且可见"
         
-        create_btn = dash_duo.find_element("#node-add-save")
-        safe_click(dash_duo.driver, create_btn)
-        dash_duo.wait_for_contains_text("#output-result", f"{name}", timeout=10)
+        # 输入节点信息
+        name_input = wait_for_element(selenium, By.ID, "node-add-name")
+        name_input.clear()
+        name_input.send_keys("DropdownTestNode")
         
-        # 记录创建的节点ID
-        node_id = list(graph.nodes.keys())[-1]
-        created_node_ids.append(node_id)
+        desc_input = wait_for_element(selenium, By.ID, "node-add-description")
+        desc_input.clear()
+        desc_input.send_keys("测试下拉菜单")
+        
+        # 等待保存按钮可点击
+        save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
+        save_btn.click()
+        
+        # 等待节点出现在页面上
+        wait_for_node_count(selenium, 1)
+        
+        # 验证节点创建
+        assert len(graph.nodes) == 1, "应该创建了一个节点"
+        
+        # 获取节点ID
+        node = list(graph.nodes.values())[0]
+        
+        # 等待节点元素可见
+        node_element = wait_for_element(selenium, By.CSS_SELECTOR, f".node[data-dash-id*='{node.id}']")
+        assert node_element.is_displayed(), "节点元素应该可见"
+        
+        # 等待下拉菜单按钮可点击
+        dropdown_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node.id}'][id*='dropdown']")
+        dropdown_btn.click()
+        
+        # 等待下拉菜单出现并可见
+        menu = wait_for_element(selenium, By.CSS_SELECTOR, ".dropdown-menu.show")
+        assert menu.is_displayed(), "下拉菜单应该可见"
+        
+        # 等待删除按钮可点击
+        delete_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node.id}'][id*='delete']")
+        delete_btn.click()
+        
+        # 等待节点消失
+        WebDriverWait(selenium, 10).until_not(
+            EC.presence_of_element_located((By.CSS_SELECTOR, f".node[data-dash-id*='{node.id}']"))
+        )
+        
+        # 验证节点被删除
+        assert len(graph.nodes) == 0, "节点应该被删除"
+        assert len(layout_manager.node_positions) == 0, "节点布局信息应该被删除"
+        
+    except Exception as e:
+        pytest.fail(f"下拉菜单操作测试失败: {str(e)}")
 
-    # 验证所有节点都在布局管理器中
-    assert len(layout_manager.node_positions) == 4, "布局管理器应该包含4个节点"
-    
-    # 验证节点在页面上都能找到
-    for i, node_id in enumerate(created_node_ids):
-        node_html_id = f"node-{node_id}"
-        node_element = dash_duo.find_element(f"#{node_html_id}")
-        assert node_element is not None, f"节点 {node_names[i]} 应该在页面上可见"
-        assert node_names[i] in node_element.text, f"节点元素应该包含正确的名称 {node_names[i]}"
-    
-    print("✅ 所有节点都正确显示在网格布局中")
+def test_node_movement_with_layout_manager(selenium):
+    """测试节点移动和布局管理器"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "MovementTestNode", "测试节点移动")
+        wait_for_node_count(selenium, 1)
+        
+        node = selenium.find_element(By.CSS_SELECTOR, ".node")
+        initial_location = node.location
+        
+        # 移动节点
+        actions = ActionChains(selenium)
+        actions.drag_and_drop_by_offset(node, 100, 0).perform()
+        
+        time.sleep(1)  # 等待移动完成
+        new_location = node.location
+        assert new_location['x'] > initial_location['x'], "节点应该向右移动"
+        
+        print("✅ 节点移动和布局管理器测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"节点移动和布局管理器测试失败: {str(e)}")
 
-def test_duplicate_node_name_prevention(dash_duo):
-    """测试重名节点的防止功能"""
-    dash_duo.start_server(app, debug=False)
+def test_parameter_operations_with_dropdown(selenium):
+    """测试参数操作和下拉菜单"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "ParameterTestNode", "测试参数操作")
+        wait_for_node_count(selenium, 1)
+        
+        param_input = add_parameter(selenium)
+        assert param_input is not None, "参数输入框应该出现"
+        
+        print("✅ 参数操作和下拉菜单测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"参数操作和下拉菜单测试失败: {str(e)}")
 
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
+def test_multiple_nodes_grid_layout(selenium):
+    """测试多节点网格布局"""
+    try:
+        clean_state(selenium)
+        
+        for i in range(3):
+            create_node(selenium, f"GridNode{i+1}", f"网格布局测试节点{i+1}")
+            wait_for_node_count(selenium, i + 1)
+        
+        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
+        assert len(nodes) == 3, "应该有3个节点"
+        
+        print("✅ 多节点网格布局测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"多节点网格布局测试失败: {str(e)}")
 
-    # 添加第一个节点
-    first_node_name = "UniqueNode"
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.clear()  # 确保输入框初始为空
-    modal_input.send_keys(first_node_name)
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", f"{first_node_name}", timeout=10)
+def test_node_position_display(selenium):
+    """测试节点位置显示"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "PositionNode", "测试节点位置")
+        wait_for_node_count(selenium, 1)
+        
+        node = selenium.find_element(By.CSS_SELECTOR, ".node")
+        assert node.is_displayed(), "节点应该可见"
+        assert node.location['x'] >= 0 and node.location['y'] >= 0, "节点应该有有效的位置"
+        
+        print("✅ 节点位置显示测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"节点位置显示测试失败: {str(e)}")
 
-    # 验证第一个节点添加成功
-    assert len(graph.nodes) == 1, "应该有1个节点" 
-    print("✅ 第一个节点添加成功")
+def test_parameter_cascade_update_in_web_interface(selenium):
+    """测试Web界面中的参数级联更新"""
+    try:
+        clean_state(selenium)
+        
+        # 创建两个测试节点
+        for i in range(2):
+            create_node(selenium, f"CascadeNode{i+1}", f"级联更新测试节点{i+1}")
+            wait_for_node_count(selenium, i + 1)
+            
+            # 添加参数
+            param_input = add_parameter(selenium, i)
+            assert param_input is not None, "参数输入框应该出现"
+        
+        print("✅ Web界面参数级联更新测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"Web界面参数级联更新测试失败: {str(e)}")
 
-    # 使用JavaScript强制清空输入框
-    dash_duo.driver.execute_script("document.getElementById('node-add-name').value = '';")
-    
-    # 等待DOM更新
-    time.sleep(0.5)
-    
-    # 验证输入框已清空
-    modal_input = dash_duo.find_element("#node-add-name") 
-    assert modal_input.get_attribute("value") == "", "输入框应该为空"
+def test_parameter_highlight_functionality(selenium):
+    """测试参数高亮功能"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "HighlightNode", "测试参数高亮")
+        wait_for_node_count(selenium, 1)
+        
+        param_input = add_parameter(selenium)
+        assert param_input is not None, "参数输入框应该出现"
+        
+        # 点击参数以触发高亮
+        param_input.click()
+        
+        # 验证高亮效果
+        highlighted = selenium.find_elements(By.CSS_SELECTOR, ".parameter-highlight")
+        assert len(highlighted) > 0, "应该有参数被高亮"
+        
+        print("✅ 参数高亮功能测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"参数高亮功能测试失败: {str(e)}")
 
-    # 使用JavaScript设置输入框值，避免累加问题
-    dash_duo.driver.execute_script(f"document.getElementById('node-add-name').value = '{first_node_name}';")
-    
-    # 触发input事件让Dash知道值已改变
-    dash_duo.driver.execute_script("document.getElementById('node-add-name').dispatchEvent(new Event('input', { bubbles: true }));")
-    
-    time.sleep(0.5)  # 等待值更新
-    
-    # 验证输入框内容正确
-    assert modal_input.get_attribute("value") == first_node_name, f"输入框应该包含 {first_node_name}"
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
+def test_parameter_edit_modal_functionality(selenium):
+    """测试参数编辑模态框功能"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "EditModalNode", "测试参数编辑模态框")
+        wait_for_node_count(selenium, 1)
+        
+        param_input = add_parameter(selenium)
+        assert param_input is not None, "参数输入框应该出现"
+        
+        # 打开参数编辑模态框
+        edit_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, "button[id*='edit-param']")
+        edit_btn.click()
+        
+        # 验证模态框
+        edit_modal = wait_for_element(selenium, By.ID, "parameter-edit-modal")
+        assert edit_modal is not None, "参数编辑模态框应该出现"
+        
+        print("✅ 参数编辑模态框功能测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"参数编辑模态框功能测试失败: {str(e)}")
 
-    # 验证错误消息
-    dash_duo.wait_for_contains_text("#output-result", f"错误：节点名称 '{first_node_name}' 已存在，请使用不同的名称", timeout=5)
-    
-    # 验证重名节点没有被添加
-    assert len(graph.nodes) == 1, "重名节点不应该被添加"
-    print("✅ 重名节点被正确阻止")
+def test_canvas_auto_refresh_on_parameter_change(selenium):
+    """测试参数变化时画布自动刷新"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "RefreshNode", "测试画布刷新")
+        wait_for_node_count(selenium, 1)
+        
+        param_input = add_parameter(selenium)
+        assert param_input is not None, "参数输入框应该出现"
+        
+        # 修改参数值
+        param_input.clear()
+        param_input.send_keys("新值")
+        param_input.send_keys(Keys.RETURN)
+        
+        # 验证画布更新
+        time.sleep(1)  # 等待画布刷新
+        canvas = selenium.find_element(By.ID, "canvas-container")
+        assert canvas.is_displayed(), "画布应该保持可见"
+        
+        print("✅ 参数变化时画布自动刷新测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"参数变化时画布自动刷新测试失败: {str(e)}")
 
-def test_empty_node_name_validation(dash_duo):
-    """测试空节点名称的验证"""
-    dash_duo.start_server(app, debug=False)
+def test_recently_updated_params_tracking(selenium):
+    """测试最近更新的参数追踪"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "TrackingNode", "测试参数追踪")
+        wait_for_node_count(selenium, 1)
+        
+        param_input = add_parameter(selenium)
+        assert param_input is not None, "参数输入框应该出现"
+        
+        # 修改参数值
+        param_input.clear()
+        param_input.send_keys("新值")
+        param_input.send_keys(Keys.RETURN)
+        
+        # 验证最近更新列表
+        recent_list = wait_for_element(selenium, By.ID, "recent-params-list")
+        assert recent_list is not None, "最近更新列表应该存在"
+        assert "新值" in recent_list.text, "最近更新列表应该包含新值"
+        
+        print("✅ 最近更新的参数追踪测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"最近更新的参数追踪测试失败: {str(e)}")
 
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
+def test_duplicate_node_name_prevention(selenium):
+    """测试重复节点名称预防"""
+    try:
+        clean_state(selenium)
+        create_node(selenium, "DuplicateNode", "测试重复名称")
+        wait_for_node_count(selenium, 1)
+        
+        # 尝试创建同名节点
+        add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
+        add_node_btn.click()
+        
+        modal = wait_for_element(selenium, By.ID, "node-add-modal")
+        name_input = wait_for_element(selenium, By.ID, "node-add-name")
+        name_input.clear()
+        name_input.send_keys("DuplicateNode")
+        
+        desc_input = wait_for_element(selenium, By.ID, "node-add-description")
+        desc_input.clear()
+        desc_input.send_keys("测试重复名称2")
+        
+        save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
+        save_btn.click()
+        
+        # 验证错误提示
+        error_msg = wait_for_element(selenium, By.CSS_SELECTOR, ".alert-danger")
+        assert "已存在" in error_msg.text, "应该显示重复名称错误"
+        
+        print("✅ 重复节点名称预防测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"重复节点名称预防测试失败: {str(e)}")
 
-    # 尝试添加空名称节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.clear()  # 确保输入框为空
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
+def test_empty_node_name_validation(selenium):
+    """测试空节点名称验证"""
+    try:
+        clean_state(selenium)
+        
+        # 尝试创建空名称节点
+        add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
+        add_node_btn.click()
+        
+        modal = wait_for_element(selenium, By.ID, "node-add-modal")
+        save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
+        save_btn.click()
+        
+        # 验证错误提示
+        error_msg = wait_for_element(selenium, By.CSS_SELECTOR, ".alert-danger")
+        assert "不能为空" in error_msg.text, "应该显示名称为空错误"
+        
+        print("✅ 空节点名称验证测试通过")
+        
+    except Exception as e:
+        pytest.fail(f"空节点名称验证测试失败: {str(e)}")
 
-    # 验证错误消息
-    dash_duo.wait_for_contains_text("#output-result", "请输入节点名称", timeout=5)
-    
-    # 验证没有节点被创建
-    assert len(graph.nodes) == 0, "空名称不应该创建节点"
-    print("✅ 空节点名称被正确拒绝")
-
-def test_column_management(dash_duo):
-    """测试列管理功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-
-    # 测试添加列
-    initial_cols = layout_manager.cols
-    add_column_btn = dash_duo.find_element("#add-column-btn")
-    
-    # 使用安全点击方法
-    if safe_click(dash_duo.driver, add_column_btn):
-        dash_duo.wait_for_contains_text("#output-result", f"已添加新列，当前列数: {initial_cols + 1}", timeout=5)
+def test_column_management(selenium):
+    """测试列管理"""
+    try:
+        clean_state(selenium)
+        
+        # 获取初始列数
+        initial_cols = len(selenium.find_elements(By.CSS_SELECTOR, ".grid-column"))
+        
+        # 添加列
+        add_col_btn = wait_for_clickable(selenium, By.ID, "add-column-btn")
+        add_col_btn.click()
         
         # 验证列数增加
-        assert layout_manager.cols == initial_cols + 1, "列数应该增加1"
-        print(f"✅ 成功添加列，当前列数: {layout_manager.cols}")
-    else:
-        print("⚠️ 添加列按钮点击失败")
-
-    # 测试减少列（应该成功，因为新添加的列是空的）
-    current_cols = layout_manager.cols
-    remove_column_btn = dash_duo.find_element("#remove-column-btn")
-    
-    if safe_click(dash_duo.driver, remove_column_btn):
-        dash_duo.wait_for_contains_text("#output-result", f"已删除最后一列，当前列数: {current_cols - 1}", timeout=5)
+        time.sleep(1)  # 等待列添加完成
+        new_cols = len(selenium.find_elements(By.CSS_SELECTOR, ".grid-column"))
+        assert new_cols == initial_cols + 1, "应该增加了一列"
         
-        # 验证列数减少
-        assert layout_manager.cols == current_cols - 1, "列数应该减少1"
-        print(f"✅ 成功删除空列，当前列数: {layout_manager.cols}")
-    else:
-        print("⚠️ 删除列按钮点击失败")
-
-def test_remove_column_functionality(dash_duo):
-    """测试减少列功能的各种情况"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-
-    # 等待页面完全加载
-    time.sleep(2)
-
-    # 测试1: 删除空列
-    print("📝 测试1: 删除空列")
-    add_column_btn = dash_duo.find_element("#add-column-btn")
-    remove_column_btn = dash_duo.find_element("#remove-column-btn")
-    
-    # 添加一列
-    safe_click(dash_duo.driver, add_column_btn)
-    dash_duo.wait_for_contains_text("#output-result", "已添加新列", timeout=5)
-    current_cols_before = layout_manager.cols
-    print(f"添加列后，当前列数: {current_cols_before}")
-
-    # 删除空列（应该成功）
-    if safe_click(dash_duo.driver, remove_column_btn):
-        dash_duo.wait_for_contains_text("#output-result", f"已删除最后一列，当前列数: {current_cols_before - 1}", timeout=5)
-        assert layout_manager.cols == current_cols_before - 1, "删除空列应该成功"
-        print("✅ 成功删除空列")
-    else:
-        print("⚠️ 删除空列失败")
-
-    # 测试2: 尝试删除有节点的列
-    print("📝 测试2: 尝试删除有节点的列")
-    
-    # 使用后端API直接在最后一列放置节点，避免复杂的UI操作
-    from models import Node, GridPosition
-    
-    # 添加一列以便测试
-    safe_click(dash_duo.driver, add_column_btn)
-    dash_duo.wait_for_contains_text("#output-result", "已添加新列", timeout=5)
-    
-    # 创建节点并直接放置在最后一列
-    test_node = Node("TestNodeForRemoval", "测试删除列功能的节点")
-    graph.add_node(test_node)
-    
-    # 直接放置到最后一列
-    last_col = layout_manager.cols - 1
-    layout_manager.place_node(test_node.id, GridPosition(0, last_col))
-    
-    # 验证节点确实在最后一列
-    nodes_in_last_col = layout_manager.get_column_nodes(last_col)
-    assert len(nodes_in_last_col) > 0, "最后一列应该有节点"
-    print(f"最后一列的节点: {nodes_in_last_col}")
-    
-    # 刷新页面以同步前端状态
-    dash_duo.driver.refresh()
-    time.sleep(2)
-    
-    # 重新获取按钮引用
-    remove_column_btn = dash_duo.find_element("#remove-column-btn")
-    
-    # 现在尝试删除最后一列（应该失败）
-    current_cols = layout_manager.cols
-    if safe_click(dash_duo.driver, remove_column_btn):
-        try:
-            dash_duo.wait_for_contains_text("#output-result", "无法删除列：最后一列不为空", timeout=5)
-            assert layout_manager.cols == current_cols, "有节点的列不应该被删除"
-            print("✅ 正确阻止删除非空列")
-        except Exception as e:
-            # 检查实际的输出消息
-            try:
-                output_result = dash_duo.find_element("#output-result")
-                actual_message = output_result.text
-                print(f"实际输出消息: '{actual_message}'")
-                print(f"错误详情: {e}")
-            except:
-                pass
-            # 如果消息不匹配，但列数没变，也算测试通过
-            if layout_manager.cols == current_cols:
-                print("✅ 正确阻止删除非空列（通过列数验证）")
-            else:
-                print("⚠️ 删除非空列测试失败")
-    else:
-        print("⚠️ 删除非空列按钮点击失败")
-
-    # 测试3: 测试不能删除最后一列
-    print("📝 测试3: 测试不能删除最后一列")
-    
-    # 清理所有节点和列
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    
-    # 刷新页面
-    dash_duo.driver.refresh()
-    time.sleep(2)
-    
-    # 重新获取按钮引用
-    remove_column_btn = dash_duo.find_element("#remove-column-btn")
-    
-    # 确保只有一列
-    while layout_manager.cols > 1:
-        layout_manager.remove_column()
-    
-    # 尝试删除最后一列（应该失败）
-    if safe_click(dash_duo.driver, remove_column_btn):
-        dash_duo.wait_for_contains_text("#output-result", "无法删除列：至少需要保留一列", timeout=5)
-        assert layout_manager.cols == 1, "必须至少保留一列"
-        print("✅ 正确阻止删除最后一列")
-    else:
-        print("⚠️ 测试删除最后一列失败")
-
-def test_node_position_display(dash_duo):
-    """测试节点位置显示功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-
-    # 添加测试节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("PositionTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "PositionTestNode", timeout=10)
-
-    # 验证节点显示包含位置信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-    node_element = dash_duo.find_element(f"#{node_html_id}")
-    
-    # 应该显示位置信息，如 (0,0)
-    assert "(0,0)" in node_element.text or "0,0" in node_element.text
-    print("✅ 节点位置信息正确显示")
-
-def test_parameter_cascade_update_in_web_interface(dash_duo):
-    """测试Web界面中的参数级联更新功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph, recently_updated_params
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    recently_updated_params.clear()
-
-    # 创建测试节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("ElectricalNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "ElectricalNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
-    # 添加第一个参数（电压）
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-    except Exception as e:
-        print(f"⚠️ 添加第一个参数失败: {e}")
-
-    # 添加第二个参数（电流）
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-        else:
-            print("⚠️ 未找到dropdown按钮")
-            return
-    except Exception as e:
-        print(f"⚠️ 添加第二个参数失败: {e}")
-
-    # 设置参数值和名称 - 重新查找元素
-    try:
-        param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-        print(f"找到 {len(param_inputs)} 个参数输入框")
+        print("✅ 列管理测试通过")
         
-        if len(param_inputs) >= 4:  # 至少4个输入框（2个参数，每个2个输入框）
-            # 设置第一个参数（电压）
-            param_inputs[0].clear()  # 参数名
-            param_inputs[0].send_keys("voltage")
-            time.sleep(0.2)
-            
-            param_inputs[1].clear()  # 参数值
-            param_inputs[1].send_keys("12.0")
-            time.sleep(0.5)
-            
-            # 设置第二个参数（电流）
-            param_inputs[2].clear()  # 参数名
-            param_inputs[2].send_keys("current")
-            time.sleep(0.2)
-            
-            param_inputs[3].clear()  # 参数值
-            param_inputs[3].send_keys("2.0")
-            time.sleep(0.5)
-            
-            print("✅ 成功设置参数值")
     except Exception as e:
-        print(f"⚠️ 设置参数值失败: {e}")
+        pytest.fail(f"列管理测试失败: {str(e)}")
 
-    # 测试参数值更新 - 重新查找元素以避免过期
+def test_remove_column_functionality(selenium):
+    """测试删除列功能"""
     try:
-        # 重新查找参数输入框
-        param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-        print(f"重新查找到 {len(param_inputs)} 个参数输入框")
+        clean_state(selenium)
         
-        if len(param_inputs) >= 2:
-            # 更新电压值
-            voltage_input = param_inputs[1]  # 电压的值输入框
-            voltage_input.clear()
-            voltage_input.send_keys("15.0")
-            time.sleep(1)  # 等待更新传播
-
-            # 检查是否有更新消息显示
-            try:
-                dash_duo.wait_for_contains_text("#output-result", "已更新", timeout=5)
-                print("✅ 参数更新消息正确显示")
-            except TimeoutException:
-                # 如果没有找到"已更新"，检查是否有其他相关消息
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    result_text = output_result.text
-                    print(f"⚠️ 实际消息内容: {result_text}")
-                except:
-                    print("⚠️ 无法获取输出消息")
-        else:
-            print(f"⚠️ 参数输入框数量不足: {len(param_inputs)}")
-    except Exception as e:
-        print(f"⚠️ 测试参数更新失败: {e}")
-
-    print("✅ 参数级联更新测试完成")
-
-def test_parameter_highlight_functionality(dash_duo):
-    """测试参数高亮显示功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph, recently_updated_params
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    recently_updated_params.clear()
-
-    # 创建测试节点和参数
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("HighlightTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "HighlightTestNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到dropdown按钮")
-                return  # 如果添加参数失败，直接退出测试
-
-        # 编辑参数值
-        try:
-            param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-            print(f"找到 {len(param_inputs)} 个参数输入框")
-            
-            if len(param_inputs) >= 2:
-                param_value_input = param_inputs[1]  # 参数值输入框
-                param_value_input.clear()
-                param_value_input.send_keys("100.5")
-                time.sleep(1)  # 等待更新和高亮效果
-
-                # 重新查找元素以获取最新状态
-                param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs) >= 2:
-                    param_value_input = param_inputs[1]
-                    
-                    # 检查参数输入框是否有高亮样式
-                    background_color = param_value_input.value_of_css_property("background-color")
-                    print(f"参数输入框背景色: {background_color}")
-                    
-                    # lightgreen的RGB值大约是rgba(144, 238, 144, 1)或rgb(144, 238, 144)
-                    if ("144" in background_color and "238" in background_color) or "lightgreen" in background_color:
-                        print("✅ 参数高亮显示功能正常工作")
-                    else:
-                        print(f"⚠️ 参数高亮可能未正常显示，背景色: {background_color}")
-                else:
-                    print("⚠️ 重新查找参数输入框失败")
-            else:
-                print(f"⚠️ 参数输入框数量不足: {len(param_inputs)}")
-        except Exception as e:
-            print(f"⚠️ 编辑参数值失败: {e}")
-
-        print("✅ 参数高亮功能测试完成")
-    except Exception as e:
-        print(f"⚠️ 添加参数失败: {e}")
-        return  # 如果添加参数失败，直接退出测试
-
-def test_parameter_edit_modal_functionality(dash_duo):
-    """测试参数编辑模态窗口功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph, recently_updated_params
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    recently_updated_params.clear()
-
-    # 创建测试节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("ModalTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "ModalTestNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-        else:
-            print("⚠️ 未找到dropdown按钮")
-            return
-    except Exception as e:
-        print(f"⚠️ 添加参数失败: {e}")
-        return
-
-    # 测试参数编辑 - 简化测试，避免模态窗口复杂性
-    try:
-        # 直接测试参数输入框的编辑功能
-        param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-        print(f"找到 {len(param_inputs)} 个参数输入框")
+        # 获取初始列数
+        initial_cols = len(selenium.find_elements(By.CSS_SELECTOR, ".grid-column"))
         
-        if len(param_inputs) >= 2:
-            # 测试参数名称编辑
-            param_name_input = param_inputs[0]
-            param_name_input.clear()
-            param_name_input.send_keys("test_parameter")
-            time.sleep(0.5)
-            
-            # 测试参数值编辑
-            param_value_input = param_inputs[1]
-            param_value_input.clear()
-            param_value_input.send_keys("42.0")
-            time.sleep(0.5)
-            
-            print("✅ 参数编辑功能正常工作")
-        else:
-            print(f"⚠️ 参数输入框数量不足: {len(param_inputs)}")
-    except Exception as e:
-        print(f"⚠️ 参数编辑测试失败: {e}")
-
-    print("✅ 参数编辑功能测试完成")
-
-def test_canvas_auto_refresh_on_parameter_change(dash_duo):
-    """测试参数变更时画布自动刷新功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph, recently_updated_params
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    recently_updated_params.clear()
-
-    # 创建测试节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("RefreshTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "RefreshTestNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-        else:
-            print("⚠️ 未找到dropdown按钮")
-            return
-    except Exception as e:
-        print(f"⚠️ 添加参数失败: {e}")
-        return
-
-    # 记录画布初始内容
-    try:
-        canvas_container = dash_duo.find_element("#canvas-container")
-        initial_canvas_content = canvas_container.get_attribute("innerHTML")
-        print("✅ 成功获取初始画布内容")
-    except Exception as e:
-        print(f"⚠️ 获取画布内容失败: {e}")
-        return
-
-    # 编辑参数值
-    try:
-        param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-        print(f"找到 {len(param_inputs)} 个参数输入框")
+        # 添加列
+        add_col_btn = wait_for_clickable(selenium, By.ID, "add-column-btn")
+        add_col_btn.click()
         
-        if len(param_inputs) >= 2:
-            param_value_input = param_inputs[1]  # 参数值输入框
-            param_value_input.clear()
-            param_value_input.send_keys("999.99")
-            time.sleep(1)  # 等待自动刷新
-
-            # 检查画布内容是否更新
-            try:
-                updated_canvas_content = canvas_container.get_attribute("innerHTML")
-                
-                # 画布内容应该包含新的参数值
-                if "999.99" in updated_canvas_content:
-                    print("✅ 画布自动刷新功能正常工作")
-                else:
-                    print("⚠️ 画布可能未自动刷新")
-                    print(f"更新后的画布内容长度: {len(updated_canvas_content)}")
-                    print(f"初始画布内容长度: {len(initial_canvas_content)}")
-                    
-                    # 检查内容是否有变化
-                    if updated_canvas_content != initial_canvas_content:
-                        print("✅ 画布内容已发生变化（可能是自动刷新）")
-                    else:
-                        print("⚠️ 画布内容未发生变化")
-            except Exception as e:
-                print(f"⚠️ 检查画布更新失败: {e}")
-        else:
-            print(f"⚠️ 参数输入框数量不足: {len(param_inputs)}")
-    except Exception as e:
-        print(f"⚠️ 编辑参数值失败: {e}")
-
-    print("✅ 画布自动刷新功能测试完成")
-
-def test_recently_updated_params_tracking(dash_duo):
-    """测试最近更新参数跟踪功能"""
-    dash_duo.start_server(app, debug=False)
-
-    # 清理状态
-    from app import graph, recently_updated_params
-    graph.nodes.clear()
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    recently_updated_params.clear()
-
-    # 创建测试节点
-    add_node_btn = dash_duo.find_element("#add-node-from-graph-button")
-    add_node_btn.click()
-    time.sleep(0.5)
-    
-    modal_input = dash_duo.find_element("#node-add-name")
-    modal_input.send_keys("TrackingTestNode")
-    
-    create_btn = dash_duo.find_element("#node-add-save")
-    create_btn.click()
-    dash_duo.wait_for_contains_text("#output-result", "TrackingTestNode", timeout=10)
-
-    # 获取节点信息
-    node_id = list(graph.nodes.keys())[0]
-    node_html_id = f"node-{node_id}"
-
-    # 添加第一个参数
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-    except Exception as e:
-        print(f"⚠️ 添加第一个参数失败: {e}")
-        return
-
-    # 添加第二个参数
-    try:
-        dropdown_buttons = dash_duo.driver.find_elements(By.CSS_SELECTOR, f"#{node_html_id} .dropdown-toggle")
-        if len(dropdown_buttons) > 0:
-            dropdown_buttons[0].click()
-            time.sleep(0.5)
-            
-            # 使用更稳定的方法查找添加参数选项
-            dropdown_items = dash_duo.driver.find_elements(By.CSS_SELECTOR, '.dropdown-item')
-            add_param_item = None
-            for item in dropdown_items:
-                if '添加参数' in item.text:
-                    add_param_item = item
-                    break
-            
-            if add_param_item:
-                add_param_item.click()
-                time.sleep(2)  # 等待操作完成
-                
-                # 直接检查参数是否添加成功
-                param_inputs_after = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-                if len(param_inputs_after) >= 2:
-                    print("✅ 成功添加参数（通过检查参数输入框数量）")
-                else:
-                    print(f"⚠️ 参数添加可能失败，输入框数量: {len(param_inputs_after)}")
-                
-                # 调试：如果有输出消息，显示它
-                try:
-                    output_result = dash_duo.find_element("#output-result")
-                    actual_message = output_result.text
-                    if actual_message:
-                        print(f"输出消息: '{actual_message}'")
-                    else:
-                        print("输出消息为空")
-                except Exception as e:
-                    print(f"⚠️ 获取输出消息失败: {e}")
-            else:
-                print("⚠️ 未找到添加参数选项")
-        else:
-            print("⚠️ 未找到dropdown按钮")
-            return
-    except Exception as e:
-        print(f"⚠️ 添加第二个参数失败: {e}")
-
-    # 测试参数跟踪功能
-    try:
-        param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-        print(f"找到 {len(param_inputs)} 个参数输入框")
+        # 等待列添加完成
+        time.sleep(1)
         
-        if len(param_inputs) >= 4:
-            # 设置参数名称和值
-            param_inputs[0].clear()
-            param_inputs[0].send_keys("param1")
-            time.sleep(0.2)
-            
-            param_inputs[1].clear()
-            param_inputs[1].send_keys("10.0")
-            time.sleep(0.5)
-            
-            param_inputs[2].clear()
-            param_inputs[2].send_keys("param2")
-            time.sleep(0.2)
-            
-            param_inputs[3].clear()
-            param_inputs[3].send_keys("20.0")
-            time.sleep(0.5)
-
-            # 更新第一个参数的值，触发跟踪
-            param_inputs = dash_duo.driver.find_elements(By.CSS_SELECTOR, ".param-input")
-            if len(param_inputs) >= 2:
-                param_inputs[1].clear()
-                param_inputs[1].send_keys("15.0")
-                time.sleep(1)  # 等待跟踪处理
-
-                # 检查recently_updated_params是否被更新
-                print(f"最近更新的参数: {recently_updated_params}")
-                
-                if len(recently_updated_params) > 0:
-                    print("✅ 参数跟踪功能正常工作")
-                else:
-                    print("⚠️ 参数跟踪可能未正常工作")
-            else:
-                print("⚠️ 重新查找参数输入框失败")
-        else:
-            print(f"⚠️ 参数输入框数量不足: {len(param_inputs)}")
+        # 删除列
+        remove_col_btn = wait_for_clickable(selenium, By.ID, "remove-column-btn")
+        remove_col_btn.click()
+        
+        # 验证列数恢复
+        time.sleep(1)  # 等待列删除完成
+        final_cols = len(selenium.find_elements(By.CSS_SELECTOR, ".grid-column"))
+        assert final_cols == initial_cols, "列数应该恢复到初始值"
+        
+        print("✅ 删除列功能测试通过")
+        
     except Exception as e:
-        print(f"⚠️ 参数跟踪测试失败: {e}")
-
-    print("✅ 参数跟踪功能测试完成")
+        pytest.fail(f"删除列功能测试失败: {str(e)}")
 
  

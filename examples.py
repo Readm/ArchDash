@@ -142,6 +142,10 @@ core_count = dependencies[2].value   # 核心数量
 # 简化的功耗模型：功耗与电压平方和频率成正比
 capacitance = 2.5  # 等效电容常数
 result = capacitance * voltage * voltage * frequency * core_count
+
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.95  # 取最低置信度并略微降低
 """
     power_node.add_parameter(cpu_power_param)
     
@@ -154,6 +158,9 @@ total_cache_mb = dependencies[0].value  # 总缓存 MB
 
 # 缓存功耗大约每MB消耗0.3W
 result = total_cache_mb * 0.33
+
+# 置信度处理：基于依赖参数的置信度
+self.confidence = dependencies[0].confidence * 0.9  # 略微降低置信度
 """
     power_node.add_parameter(cache_power_param)
     
@@ -166,6 +173,9 @@ bandwidth = dependencies[0].value  # 内存带宽 GB/s
 
 # 功耗与带宽成正比，大约每10GB/s消耗1W
 result = bandwidth * 0.12
+
+# 置信度处理：基于依赖参数的置信度
+self.confidence = dependencies[0].confidence * 0.9  # 略微降低置信度
 """
     power_node.add_parameter(memory_power_param)
     
@@ -183,6 +193,10 @@ memory_power = dependencies[2].value    # 内存控制器功耗
 # 其他功耗（GPU、IO等）约占15%
 other_power = 10
 result = cpu_power + cache_power + memory_power + other_power
+
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.9  # 取最低置信度并略微降低
 """
     power_node.add_parameter(total_power_param)
     
@@ -198,30 +212,36 @@ result = cpu_power + cache_power + memory_power + other_power
     single_core_param.add_dependency(cache_node.parameters[2])     # L3缓存
     single_core_param.calculation_func = """
 # 单核性能计算
-frequency = dependencies[0].value  # 最大频率 GHz
-l3_cache = dependencies[1].value   # L3缓存 MB
+freq = dependencies[0].value  # 最大频率 GHz
+l3_cache = dependencies[1].value  # L3缓存 MB
 
-# 性能评分 = 基础分 × 频率因子 × 缓存因子
-base_score = 1000
-freq_factor = frequency / 2.5  # 相对于2.5GHz的提升
-cache_factor = (l3_cache + 8) / 24  # 相对于16MB缓存的提升
+# 性能评分计算：频率和缓存大小都会影响性能
+base_score = freq * 1000  # 基础分数
+cache_bonus = l3_cache * 20  # 缓存带来的性能提升
+result = int(base_score + cache_bonus)
 
-result = int(base_score * freq_factor * cache_factor)
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.9  # 取最低置信度并略微降低
 """
     performance_node.add_parameter(single_core_param)
     
     # 多核性能 - 依赖单核性能和核心数
-    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75, param_type="float")
+    multi_core_param = Parameter("多核性能", 18000, "分", description="多核心性能评分", confidence=0.75, param_type="int")
     multi_core_param.add_dependency(performance_node.parameters[0])  # 单核性能
     multi_core_param.add_dependency(cpu_core_node.parameters[1])     # 核心数量
     multi_core_param.calculation_func = """
 # 多核性能计算
-single_core = dependencies[0].value  # 单核性能
+single_core = dependencies[0].value  # 单核性能分数
 core_count = dependencies[1].value   # 核心数量
 
-# 多核性能 = 单核性能 × 核心数 × 并行效率
-parallel_efficiency = 0.9  # 90%的并行效率
-result = single_core * core_count * parallel_efficiency
+# 多核性能不是简单的线性关系，有一定的效率损失
+scaling_factor = 0.9  # 90%的并行效率
+result = int(single_core * core_count * scaling_factor)
+
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.95  # 取最低置信度并略微降低
 """
     performance_node.add_parameter(multi_core_param)
     
@@ -229,134 +249,150 @@ result = single_core * core_count * parallel_efficiency
     graph.layout_manager.place_node(performance_node.id, GridPosition(2, 1))
     
     # 7. 热设计节点
-    thermal_node = Node(name="热设计", description="散热和温度分析")
+    thermal_node = Node(name="热设计", description="芯片散热分析")
     
-    # 热阻 - 依赖工艺和功耗
-    thermal_resistance_param = Parameter("热阻", 0.8, "°C/W", description="散热器热阻", confidence=0.85, param_type="float")
-    thermal_resistance_param.add_dependency(process_node.parameters[0])  # 工艺节点
-    thermal_resistance_param.add_dependency(power_node.parameters[3])    # 总功耗
-    thermal_resistance_param.calculation_func = """
-# 热阻计算
-process_node = dependencies[0].value  # 工艺节点 nm
-total_power = dependencies[1].value   # 总功耗 W
-
-# 热阻基值
-base_resistance = 0.8
-
-# 工艺越小，热密度越大，需要更好的散热（更低的热阻）
-process_factor = (7 / process_node) ** 0.5
-
-# 功耗越大，需要更好的散热
-power_factor = (85 / total_power) ** 0.3
-
-result = base_resistance * process_factor * power_factor
-"""
-    thermal_node.add_parameter(thermal_resistance_param)
-    
-    # 结温 - 依赖热阻和总功耗
-    junction_temp_param = Parameter("结温", 70, "°C", description="芯片结温", confidence=0.8, param_type="float")
-    junction_temp_param.add_dependency(thermal_node.parameters[0])  # 热阻
+    # 结温 - 依赖总功耗和工艺温度
+    junction_temp_param = Parameter("结温", 95, "°C", description="芯片结温", confidence=0.7, param_type="float")
     junction_temp_param.add_dependency(power_node.parameters[3])    # 总功耗
+    junction_temp_param.add_dependency(process_node.parameters[2])  # 工作温度
     junction_temp_param.calculation_func = """
 # 结温计算
-thermal_resistance = dependencies[0].value  # 热阻 °C/W
-total_power = dependencies[1].value         # 总功耗 W
+total_power = dependencies[0].value  # 总功耗
+ambient_temp = dependencies[1].value  # 环境温度
 
-# 结温 = 环境温度 + 热阻 × 功耗
-ambient_temp = 25  # 环境温度25°C
-result = ambient_temp + thermal_resistance * total_power
+# 热阻约为0.3°C/W
+thermal_resistance = 0.3
+temp_rise = total_power * thermal_resistance
+result = ambient_temp + temp_rise
+
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.9  # 取最低置信度并略微降低
 """
     thermal_node.add_parameter(junction_temp_param)
     
-    graph.add_node(thermal_node)
+    # 散热功率 - 依赖结温和环境温度
+    cooling_power_param = Parameter("散热功率", 95, "W", description="散热器功率", confidence=0.75, param_type="float")
+    cooling_power_param.add_dependency(thermal_node.parameters[0])  # 结温
+    cooling_power_param.add_dependency(process_node.parameters[2])  # 环境温度
+    cooling_power_param.calculation_func = """
+# 散热功率计算
+junction_temp = dependencies[0].value  # 结温
+ambient_temp = dependencies[1].value   # 环境温度
+
+# 散热功率 = 温差 / 热阻
+thermal_resistance = 0.3
+result = (junction_temp - ambient_temp) / thermal_resistance
+
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.9  # 取最低置信度并略微降低
+"""
+    thermal_node.add_parameter(cooling_power_param)
+    
+    graph.add_node(thermal_node, auto_place=False)
     graph.layout_manager.place_node(thermal_node.id, GridPosition(0, 2))
     
     # 8. 成本分析节点
-    cost_node = Node(name="成本分析", description="芯片成本分析")
+    cost_node = Node(name="成本分析", description="芯片成本估算")
     
-    # 芯片面积 - 依赖工艺和总缓存
-    die_area_param = Parameter("芯片面积", 180, "mm²", description="芯片核心面积", confidence=0.85, param_type="float")
-    die_area_param.add_dependency(process_node.parameters[0])  # 工艺节点
-    die_area_param.add_dependency(cache_node.parameters[3])    # 总缓存
-    die_area_param.calculation_func = """
-# 芯片面积计算
-process_node = dependencies[0].value  # 工艺节点 nm
-total_cache = dependencies[1].value   # 总缓存 MB
+    # 硅片成本 - 依赖工艺节点
+    die_cost_param = Parameter("硅片成本", 120, "美元", description="单颗芯片硅片成本", confidence=0.6, param_type="float")
+    die_cost_param.add_dependency(process_node.parameters[0])  # 工艺节点
+    die_cost_param.calculation_func = """
+# 硅片成本计算
+process_node = dependencies[0].value  # 工艺节点
 
-# 基础面积
-base_area = 100  # mm²
+# 成本与工艺节点成反比关系
+base_cost = 40  # 基础成本
+node_factor = 7 / process_node  # 工艺系数
+result = base_cost * node_factor * node_factor  # 成本与工艺节点平方成反比
 
-# 工艺缩放
-process_factor = (7 / process_node) ** 2
-
-# 缓存面积（每MB约12mm²@7nm）
-cache_area = total_cache * 12 * process_factor
-
-result = (base_area + cache_area) * 1.2  # 20%余量
+# 置信度处理：成本预估的不确定性较大
+self.confidence = dependencies[0].confidence * 0.8  # 较低的置信度
 """
-    cost_node.add_parameter(die_area_param)
+    cost_node.add_parameter(die_cost_param)
     
-    # 制造成本 - 依赖面积
-    manufacturing_cost_param = Parameter("制造成本", 45, "美元", description="芯片制造成本", confidence=0.8, param_type="float")
-    manufacturing_cost_param.add_dependency(cost_node.parameters[0])  # 芯片面积
-    manufacturing_cost_param.calculation_func = """
-# 制造成本计算
-die_area = dependencies[0].value  # 芯片面积 mm²
+    # 封装成本 - 依赖核心数和缓存
+    package_cost_param = Parameter("封装成本", 25, "美元", description="芯片封装成本", confidence=0.7, param_type="float")
+    package_cost_param.add_dependency(cpu_core_node.parameters[1])  # 核心数量
+    package_cost_param.add_dependency(cache_node.parameters[3])     # 总缓存
+    package_cost_param.calculation_func = """
+# 封装成本计算
+core_count = dependencies[0].value  # 核心数量
+total_cache = dependencies[1].value  # 总缓存大小
 
-# 每平方毫米成本（考虑良率等因素）
-cost_per_mm2 = 0.25  # 美元/mm²
+# 基础封装成本加上核心和缓存带来的额外成本
+base_cost = 15
+core_cost = core_count * 1.2
+cache_cost = total_cache * 0.1
+result = base_cost + core_cost + cache_cost
 
-# 考虑封装和测试成本
-packaging_cost = 5  # 美元
-
-result = die_area * cost_per_mm2 + packaging_cost
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.9  # 取最低置信度并略微降低
 """
-    cost_node.add_parameter(manufacturing_cost_param)
+    cost_node.add_parameter(package_cost_param)
     
-    graph.add_node(cost_node)
+    graph.add_node(cost_node, auto_place=False)
     graph.layout_manager.place_node(cost_node.id, GridPosition(1, 2))
     
     # 9. 能效分析节点
     efficiency_node = Node(name="能效分析", description="性能功耗比分析")
     
-    # 性能功耗比
-    perf_power_ratio_param = Parameter("性能功耗比", 212, "分/W", description="每瓦性能", confidence=0.75, param_type="float")
-    perf_power_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
-    perf_power_ratio_param.add_dependency(power_node.parameters[3])        # 总功耗
-    perf_power_ratio_param.calculation_func = """
+    # 性能功耗比 - 依赖多核性能和总功耗
+    perf_per_watt_param = Parameter("性能功耗比", 200, "分/瓦", description="每瓦性能得分", confidence=0.7, param_type="float")
+    perf_per_watt_param.add_dependency(performance_node.parameters[1])  # 多核性能
+    perf_per_watt_param.add_dependency(power_node.parameters[3])       # 总功耗
+    perf_per_watt_param.calculation_func = """
 # 性能功耗比计算
-performance = dependencies[0].value  # 多核性能分
-total_power = dependencies[1].value  # 总功耗 W
+performance = dependencies[0].value  # 多核性能分数
+power = dependencies[1].value       # 总功耗
 
-result = performance / total_power
-"""
-    efficiency_node.add_parameter(perf_power_ratio_param)
-    
-    # 性价比
-    cost_performance_ratio_param = Parameter("性价比", 400, "分/美元", description="每美元性能", confidence=0.7, param_type="float")
-    cost_performance_ratio_param.add_dependency(performance_node.parameters[1])  # 多核性能
-    cost_performance_ratio_param.add_dependency(cost_node.parameters[1])         # 制造成本
-    cost_performance_ratio_param.calculation_func = """
-# 性价比计算
-performance = dependencies[0].value  # 多核性能分
-cost = dependencies[1].value        # 制造成本 美元
+# 简单的性能功耗比
+result = performance / power
 
-result = performance / cost
+# 置信度处理：基于依赖参数的置信度
+dep_confidences = [dep.confidence for dep in dependencies]
+self.confidence = min(dep_confidences) * 0.9  # 取最低置信度并略微降低
 """
-    efficiency_node.add_parameter(cost_performance_ratio_param)
+    efficiency_node.add_parameter(perf_per_watt_param)
     
-    graph.add_node(efficiency_node)
+    # 能效等级 - 依赖性能功耗比
+    efficiency_class_param = Parameter("能效等级", "A", "", description="能效等级评定", confidence=0.8, param_type="string")
+    efficiency_class_param.add_dependency(efficiency_node.parameters[0])  # 性能功耗比
+    efficiency_class_param.calculation_func = """
+# 能效等级计算
+perf_per_watt = dependencies[0].value  # 性能功耗比
+
+# 根据性能功耗比确定等级
+if perf_per_watt >= 250:
+    result = "A+"
+elif perf_per_watt >= 200:
+    result = "A"
+elif perf_per_watt >= 150:
+    result = "B"
+else:
+    result = "C"
+
+# 置信度处理：基于依赖参数的置信度，但因为是离散等级，所以置信度稍高
+self.confidence = dependencies[0].confidence * 0.95
+"""
+    efficiency_node.add_parameter(efficiency_class_param)
+    
+    graph.add_node(efficiency_node, auto_place=False)
     graph.layout_manager.place_node(efficiency_node.id, GridPosition(2, 2))
     
-    # 为所有参数设置计算图引用
-    for node in graph.nodes.values():
-        for param in node.parameters:
-            param.set_graph(graph)
+    # 返回创建结果统计
+    nodes_created = len(graph.nodes)
+    total_params = sum(len(node.parameters) for node in graph.nodes.values())
+    calculated_params = sum(
+        sum(1 for param in node.parameters if param.calculation_func)
+        for node in graph.nodes.values()
+    )
     
-    # 返回创建结果和图对象
     return {
-        "nodes_created": len(graph.nodes),
-        "total_params": sum(len(node.parameters) for node in graph.nodes.values()),
-        "calculated_params": sum(1 for node in graph.nodes.values() for param in node.parameters if param.calculation_func),
-        "graph": graph
+        "nodes_created": nodes_created,
+        "total_params": total_params,
+        "calculated_params": calculated_params
     }

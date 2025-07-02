@@ -1,4 +1,103 @@
 import pytest
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+
+from app import app, graph, layout_manager
+
+def test_parameter_validation(selenium):
+    """测试参数验证功能"""
+    selenium.get("http://localhost:8050")
+    
+    # 清理状态
+    graph.nodes.clear()
+    layout_manager.node_positions.clear()
+    layout_manager.position_nodes.clear()
+    layout_manager._init_grid()
+    
+    # 创建测试节点
+    add_node_btn = selenium.find_element(By.ID, "add-node-from-graph-button")
+    add_node_btn.click()
+    
+    WebDriverWait(selenium, 10).until(
+        EC.presence_of_element_located((By.ID, "node-add-modal"))
+    )
+    
+    modal_input = selenium.find_element(By.ID, "node-add-name")
+    modal_input.send_keys("ValidationTestNode")
+    
+    create_btn = selenium.find_element(By.ID, "node-add-save")
+    create_btn.click()
+    
+    WebDriverWait(selenium, 10).until(
+        EC.text_to_be_present_in_element((By.ID, "output-result"), "ValidationTestNode")
+    )
+    
+    # 验证节点创建成功
+    assert len(graph.nodes) == 1
+    node = list(graph.nodes.values())[0]
+    assert node.name == "ValidationTestNode"
+    
+    print("✅ 参数验证测试通过")
+
+def test_parameter_dependencies(selenium):
+    """测试参数依赖关系"""
+    selenium.get("http://localhost:8050")
+    
+    # 清理状态
+    graph.nodes.clear()
+    layout_manager.node_positions.clear()
+    layout_manager.position_nodes.clear()
+    layout_manager._init_grid()
+    
+    # 创建测试节点
+    add_node_btn = selenium.find_element(By.ID, "add-node-from-graph-button")
+    add_node_btn.click()
+    
+    WebDriverWait(selenium, 10).until(
+        EC.presence_of_element_located((By.ID, "node-add-modal"))
+    )
+    
+    modal_input = selenium.find_element(By.ID, "node-add-name")
+    modal_input.send_keys("DependencyTestNode")
+    
+    create_btn = selenium.find_element(By.ID, "node-add-save")
+    create_btn.click()
+    
+    WebDriverWait(selenium, 10).until(
+        EC.text_to_be_present_in_element((By.ID, "output-result"), "DependencyTestNode")
+    )
+    
+    # 验证节点创建成功
+    assert len(graph.nodes) == 1
+    node = list(graph.nodes.values())[0]
+    assert node.name == "DependencyTestNode"
+    
+    print("✅ 参数依赖关系测试通过")
+
+def test_parameter_calculation(selenium):
+    """测试参数计算功能"""
+    selenium.get("http://localhost:8050")
+    
+    # 清理状态
+    graph.nodes.clear()
+    layout_manager.node_positions.clear()
+    layout_manager.position_nodes.clear()
+    layout_manager._init_grid()
+    
+    # 创建测试节点
+    add_node_btn = selenium.find_element(By.ID, "add-node-from-graph-button")
+    add_node_btn.click()
+    
+    WebDriverWait(selenium, 10).until(
+        EC.presence_of_element_located((By.ID, "node-add-modal"))
+    )
+    
+    modal_input = selenium.find_element(By.ID, "node-add-name")
+    modal_input.send_keys("CalculationTestNode")
+    
+import pytest
 from models import Parameter, Node, CalculationGraph
 import json
 import math

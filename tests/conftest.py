@@ -4,7 +4,13 @@ import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.webdriver import WebDriver
 from dash.testing.application_runners import import_app
+import threading
+import time
+import multiprocessing
+from werkzeug.serving import make_server
+from app import app
 
 # 确保可以导入项目模块
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -113,51 +119,82 @@ def pytest_addoption(parser):
     # 不再添加自己的--headless选项，因为dash-testing已经提供了
     pass
 
+class FlaskThread(threading.Thread):
+    def __init__(self, app, port=8050):
+        threading.Thread.__init__(self)
+        self.srv = make_server('127.0.0.1', port, app)
+        self.ctx = app.app_context()
+        self.ctx.push()
+        self.is_ready = threading.Event()
+
+    def run(self):
+        self.is_ready.set()
+        self.srv.serve_forever()
+
+    def shutdown(self):
+        self.srv.shutdown()
+
+def wait_for_server(url, timeout=10):
+    """Wait for server to be ready"""
+    import requests
+    from requests.exceptions import RequestException
+    import time
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                return True
+        except RequestException:
+            time.sleep(0.1)
+    return False
+
 @pytest.fixture(scope="session")
 def chrome_options():
-    """为WSL2环境配置Chrome选项"""
+    """配置Chrome选项"""
     options = Options()
-    options.add_argument("--headless")
+    options.add_argument("--headless")  # 无头模式
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-web-security")
-    options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--window-size=1920,1080")
-    
-    # 设置Chromium二进制路径
-    if os.path.exists("/usr/bin/chromium-browser"):
-        options.binary_location = "/usr/bin/chromium-browser"
-    elif os.path.exists("/usr/bin/google-chrome"):
-        options.binary_location = "/usr/bin/google-chrome"
-    elif os.path.exists("/usr/bin/google-chrome-stable"):
-        options.binary_location = "/usr/bin/google-chrome-stable"
-    
     return options
 
-def pytest_setup_options():
-    """为dash-testing设置Chrome选项"""
-    # 返回默认的Chrome选项用于headless测试
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-web-security")
-    options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--remote-debugging-port=9222")
-    options.add_argument("--window-size=1920,1080")
+@pytest.fixture(scope="session")
+def chrome_service():
+    """配置Chrome服务"""
+    service = Service()
+    return service
+
+@pytest.fixture(scope="session")
+def flask_app():
+    """启动Flask应用服务器"""
+    server = FlaskThread(app.server)
+    server.daemon = True
+    server.start()
     
-    # 设置Chromium二进制路径
-    if os.path.exists("/usr/bin/chromium-browser"):
-        options.binary_location = "/usr/bin/chromium-browser"
-    elif os.path.exists("/usr/bin/google-chrome"):
-        options.binary_location = "/usr/bin/google-chrome"
-    elif os.path.exists("/usr/bin/google-chrome-stable"):
-        options.binary_location = "/usr/bin/google-chrome-stable"
+    # Wait for server to be ready
+    assert wait_for_server("http://127.0.0.1:8050"), "Server failed to start within timeout"
     
-    return options
+    yield app
+    server.shutdown()
+
+@pytest.fixture(scope="session")
+def selenium(chrome_options, chrome_service, flask_app):
+    """创建Selenium WebDriver实例"""
+    driver = WebDriver(service=chrome_service, options=chrome_options)
+    yield driver
+    driver.quit()
+
+@pytest.fixture(autouse=True)
+def clean_app_state():
+    """每个测试前清理应用状态"""
+    from app import graph, layout_manager
+    graph.nodes.clear()
+    layout_manager.node_positions.clear()
+    layout_manager.position_nodes.clear()
+    layout_manager._init_grid()
+    yield
 
 # dash-testing已经提供了内置的无头模式支持
 # 使用 pytest --headless 来启用无头模式

@@ -148,7 +148,9 @@ class Parameter:
         self.unlinked = False
         if self.calculation_func:
             new_value = self.calculate()
-            self.value = new_value  # Setter会触发下游更新
+            # 通过图来传播更新
+            if self._graph:
+                self._graph.set_parameter_value(self, new_value)
             return new_value
         return self.value
     
