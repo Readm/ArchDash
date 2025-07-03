@@ -24,7 +24,7 @@ import app
 
 def test_create_dependency_checkboxes(test_graph):
     """测试创建依赖复选框列表的函数"""
-    graph, _, _ = test_graph
+    graph = test_graph
     import app
     app.graph = graph
     

@@ -24,7 +24,7 @@ import app
 
 def test_get_plotting_parameters(test_graph):
     """测试获取所有可用于绘图的参数"""
-    graph, _, _ = test_graph
+    graph = test_graph
     import app
     app.graph = graph
     

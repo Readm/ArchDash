@@ -1,3 +1,4 @@
+from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -10,7 +11,8 @@ from flask import Flask, request
 from session_graph import get_graph, SESSION_GRAPHS
 
 def test_graph_isolation_by_sid():
-    app = create_app()
+    from app import app
+    from flask import Flask
 
     # 第一次请求，sid=A
     with app.test_request_context('/?_sid=A'):

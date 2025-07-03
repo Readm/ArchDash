@@ -17,9 +17,9 @@ from dash import html
 import dash_bootstrap_components as dbc
 import app
 
-def test_ensure_minimum_columns(test_app_context):
+def test_ensure_minimum_columns():
     """测试确保最小列数的功能"""
-    _, layout_manager = test_app_context
+    from app import layout_manager
     
     layout_manager.cols = 2
     ensure_minimum_columns(min_cols=3)

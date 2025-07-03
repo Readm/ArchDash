@@ -17,7 +17,7 @@ from dash import html
 import dash_bootstrap_components as dbc
 import app
 
-def test_update_canvas(test_app_context):
+def test_update_canvas():
     """测试画布更新函数"""
     canvas_content = update_canvas()
     

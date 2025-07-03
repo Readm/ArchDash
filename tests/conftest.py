@@ -16,7 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
+
 
 # 确保可以导入项目模块
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -44,17 +44,17 @@ def clean_state(selenium):
     except Exception as e:
         print(f"清理状态时出错: {e}")
 
-def wait_for_page_load(selenium, timeout=10):
+def wait_for_page_load(selenium, timeout=5):
     """等待页面加载完成"""
     try:
         WebDriverWait(selenium, timeout).until(
             lambda driver: driver.execute_script("return document.readyState") == "complete"
         )
-        time.sleep(0.5)  # 额外等待以确保所有元素都加载完成
+        time.sleep(0.2)  # 减少额外等待时间
     except TimeoutException:
         print("页面加载超时")
 
-def wait_for_element(selenium, by, value, timeout=10):
+def wait_for_element(selenium, by, value, timeout=5):
     """等待元素出现并返回"""
     try:
         element = WebDriverWait(selenium, timeout).until(
@@ -65,7 +65,7 @@ def wait_for_element(selenium, by, value, timeout=10):
         print(f"等待元素超时: {by}={value}")
         return None
 
-def wait_for_clickable(selenium, by, value, timeout=10):
+def wait_for_clickable(selenium, by, value, timeout=5):
     """等待元素可点击并返回"""
     try:
         element = WebDriverWait(selenium, timeout).until(
@@ -73,7 +73,7 @@ def wait_for_clickable(selenium, by, value, timeout=10):
         )
         return element
     except TimeoutException:
-        print(f"等待元素可点击超时: {by}={value}")
+        print(f"wait_for_clickable超时: {by}={value}")
         return None
 
 def wait_for_visible(selenium, by, value, timeout=10):
@@ -220,26 +220,7 @@ def get_node_element(selenium, node_name):
         print(f"获取节点元素失败: {e}")
         return None
 
-def drag_and_drop(selenium, source_element, target_element):
-    """拖拽操作"""
-    try:
-        actions = ActionChains(selenium)
-        actions.drag_and_drop(source_element, target_element).perform()
-        time.sleep(0.5)
-        return True
-    except Exception as e:
-        print(f"拖拽操作失败: {e}")
-        return False
 
-def scroll_to_element(selenium, element):
-    """滚动到指定元素"""
-    try:
-        selenium.execute_script("arguments[0].scrollIntoView(true);", element)
-        time.sleep(0.5)
-        return True
-    except Exception as e:
-        print(f"滚动到元素失败: {e}")
-        return False
 
 # ==================== 测试夹具 ====================
 
@@ -376,20 +357,34 @@ class FlaskThread(threading.Thread):
     def shutdown(self):
         self.srv.shutdown()
 
-def wait_for_server(url, timeout=10):
+def wait_for_server(url, timeout=30):
     """Wait for server to be ready"""
     import requests
     from requests.exceptions import RequestException
     import time
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                return True
-        except RequestException:
-            time.sleep(0.1)
-    return False
+    import os
+    
+    # 临时禁用所有代理环境变量
+    original_proxies = {}
+    for proxy_var in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
+        if proxy_var in os.environ:
+            original_proxies[proxy_var] = os.environ[proxy_var]
+            del os.environ[proxy_var]
+    
+    try:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(url, timeout=5, proxies={'http': None, 'https': None})
+                if response.status_code == 200:
+                    return True
+            except RequestException:
+                time.sleep(0.5)
+        return False
+    finally:
+        # 恢复原始代理设置
+        for proxy_var, value in original_proxies.items():
+            os.environ[proxy_var] = value
 
 @pytest.fixture(scope="session")
 def chrome_options():
@@ -419,13 +414,24 @@ def flask_app():
     server_url = f"http://127.0.0.1:{server.port}"
     assert wait_for_server(server_url), f"Server failed to start within timeout on port {server.port}"
     
-    yield app
+    # 返回包含应用和服务器信息的字典
+    yield {
+        'app': app,
+        'server': server,
+        'port': server.port,
+        'url': server_url
+    }
     server.shutdown()
 
 @pytest.fixture(scope="function")
 def selenium(chrome_options, chrome_service, flask_app):
     """创建Selenium WebDriver实例 - 每个测试用例使用独立的浏览器实例"""
     driver = WebDriver(service=chrome_service, options=chrome_options)
+    
+    # 导航到应用页面
+    server_url = flask_app['url']
+    driver.get(server_url)
+    
     yield driver
     driver.quit()
 
@@ -454,4 +460,16 @@ def dash_thread_server():
     
     app = import_app('app')
     
-    yield app.server 
+    yield app.server
+
+@pytest.fixture
+def test_app_context():
+    """提供测试应用上下文"""
+    from app import app
+    with app.test_request_context():
+        yield app
+
+@pytest.fixture
+def app_server_driver(selenium, flask_app):
+    """提供应用服务器和驱动器的组合"""
+    return flask_app['app'], selenium 
