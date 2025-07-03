@@ -480,7 +480,7 @@ app_layout = dbc.Container([
                         tabSize=4,
                         enableBasicAutocompletion=True,
                         enableLiveAutocompletion=True,
-                        height='250px',
+                        height='500px',
                         style={"width": "100%", "fontFamily": "monospace", "fontSize": "12px"}
                     ),
                     html.Small("使用 dependencies[i].value 访问依赖参数值，将结果赋值给 result 变量", className="text-muted", style={"fontSize": "0.8rem"})

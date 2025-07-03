@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 import uuid
 import os
+import traceback
 
 # 定义类型变量
 T = TypeVar('T', float, int, str)
@@ -23,6 +24,7 @@ class Parameter:
         dependencies: 依赖参数列表
         unlinked: 是否断开计算连接（用户手动设置值时为True）
         _graph: 所属的计算图（用于自动更新传播）
+        _calculation_traceback: 新增属性
     """
     name: str
     unit: str
@@ -35,6 +37,7 @@ class Parameter:
     _value: T = 0.0  # 内部值存储
     _graph: Optional['CalculationGraph'] = field(default=None, repr=False)  # 计算图引用
     _internal_id: uuid.UUID = field(default_factory=uuid.uuid4, repr=False)  # 内部唯一ID
+    _calculation_traceback: Optional[str] = field(default=None, repr=False) # 新增属性
     
     def __init__(self, name: str, value: T = 0.0, unit: str = "", **kwargs):
         self.name = name
@@ -110,8 +113,10 @@ class Parameter:
                 # 直接调用该函数，并将参数自身作为参数传递
                 result = self.calculation_func(self)
                 self._value = result
+                self._calculation_traceback = None # 计算成功，清除回溯
                 return result
             except Exception as e:
+                self._calculation_traceback = traceback.format_exc() # 捕获回溯
                 print(f"计算错误: 在执行参数 '{self.name}' 的计算函数时发生错误: {e}")
                 return self._value
 
@@ -119,7 +124,7 @@ class Parameter:
         import builtins
         
         safe_globals = {
-            '__builtins__': builtins.__dict__.copy(),
+            '__builtins__': builtins.__dict__.copy(), # 修改这里
             'math': math,
             'datetime': datetime,
         }
@@ -138,8 +143,10 @@ class Parameter:
                 # 如果计算函数没有产生 'result'，也视为一种计算失败
                 raise ValueError("计算函数未设置result变量作为输出")
             self._value = result
+            self._calculation_traceback = None # 计算成功，清除回溯
             return result
         except Exception as e:
+            self._calculation_traceback = traceback.format_exc() # 捕获回溯
             print(f"计算错误: 在执行参数 '{self.name}' 的计算时发生错误: {e}")
             raise ValueError(f"计算失败: {e}") from e
     
@@ -178,7 +185,8 @@ class Parameter:
             "calculation_func": self.calculation_func,
             "dependencies": [dep.name for dep in self.dependencies],
             "unlinked": self.unlinked,
-            "param_type": self.param_type  # 新增：包含参数类型
+            "param_type": self.param_type,  # 新增：包含参数类型
+            "calculation_traceback": self._calculation_traceback
         }
     
     @classmethod

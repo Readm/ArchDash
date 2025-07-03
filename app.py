@@ -12,6 +12,7 @@ import numpy as np
 import os
 from layout import *
 from examples import *
+import traceback
 
 # 删除 IDMapper 类的定义
 
@@ -1142,30 +1143,45 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
             return "错误: 参数不存在", "danger"
         
         current_param = node.parameters[param_index]
-        current_value = current_param.value
         
-        # 如果没有计算函数，直接返回当前值
-        if not calculation_code or calculation_code.strip() == "":
-            return f"当前值: {current_value}", "info"
+        # 将计算函数临时设置到参数对象上进行测试
+        original_calc_func = current_param.calculation_func
+        original_dependencies = current_param.dependencies
         
-        # 创建计算环境
-        local_env = {
-            'dependencies': selected_deps,
-            'value': current_value or 0,
-            'datetime': datetime
-        }
+        current_param.calculation_func = calculation_code
+        current_param.dependencies = selected_deps
         
-        # 执行计算代码
-        exec(calculation_code, {"__builtins__": {}}, local_env)
-        result = local_env.get('result', None)
-        
-        if result is None:
-            return "错误: 计算函数未设置result变量", "warning"
-        
-        return f"计算结果: {result}", "success"
+        # 执行计算
+        try:
+            result = current_param.calculate()
+            # 成功后清除可能的旧回溯
+            current_param._calculation_traceback = None 
+            return f"计算结果: {result}", "success"
+        except Exception as e:
+            # 获取并显示回溯
+            traceback_info = current_param._calculation_traceback or str(e)
+            return html.Div([
+                html.P(f"计算错误: {str(e)}", className="mb-1"),
+                html.Details([
+                    html.Summary("查看详细回溯"),
+                    html.Pre(traceback_info, style={"fontSize": "0.7em", "color": "darkred"})
+                ])
+            ]), "danger"
+        finally:
+            # 恢复原始的计算函数和依赖，避免影响实际图结构
+            current_param.calculation_func = original_calc_func
+            current_param.dependencies = original_dependencies
         
     except Exception as e:
-        return f"计算错误: {str(e)}", "danger"
+        import traceback
+        full_traceback = traceback.format_exc()
+        return html.Div([
+            html.P(f"测试功能内部错误: {str(e)}", className="mb-1"),
+            html.Details([
+                html.Summary("查看详细回溯"),
+                html.Pre(full_traceback, style={"fontSize": "0.7em", "color": "darkred"})
+            ])
+        ]), "danger"
 
 # 保存参数修改
 @callback(
