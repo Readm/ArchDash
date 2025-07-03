@@ -1,0 +1,166 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-7.4.3, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+sensitiveurl: .*
+metadata: {'Python': '3.10.12', 'Platform': 'Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.35', 'Packages': {'pytest': '7.4.3', 'pluggy': '1.6.0'}, 'Plugins': {'variables': '3.1.0', 'html': '4.1.1', 'selenium': '4.1.0', 'xdist': '3.7.0', 'metadata': '3.1.1', 'base-url': '2.1.0', 'timeout': '2.4.0', 'dash': '3.1.1', 'cov': '4.1.0'}, 'Base URL': '', 'Driver': None, 'Capabilities': {}}
+rootdir: /home/readm/ArchDash
+configfile: pytest.ini
+plugins: variables-3.1.0, html-4.1.1, selenium-4.1.0, xdist-3.7.0, metadata-3.1.1, base-url-2.1.0, timeout-2.4.0, dash-1.1.0, dash-3.1.1, cov-4.1.0
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 79 items
+
+tests/test_T101_parameter_validation.py::test_parameter_validation PASSED [  1%]
+tests/test_T102_parameter_dependencies.py::test_parameter_dependencies PASSED [  2%]
+tests/test_T103_parameter_calculation.py::test_parameter_calculation PASSED [  3%]
+tests/test_T104_calculation_function_safety.py::test_calculation_function_safety PASSED [  5%]
+tests/test_T105_calculation_function_scope.py::test_calculation_function_scope PASSED [  6%]
+tests/test_T106_node_operations.py::test_node_operations PASSED          [  7%]
+tests/test_T107_calculation_graph.py::test_calculation_graph PASSED      [  8%]
+tests/test_T108_missing_dependency.py::test_missing_dependency PASSED    [ 10%]
+tests/test_T111_node_id_duplicate_prevention.py::test_node_id_duplicate_prevention PASSED [ 11%]
+tests/test_T112_parameter_update_propagation.py::test_parameter_update_propagation PASSED [ 12%]
+tests/test_T113_circular_dependency_detection.py::test_circular_dependency_detection PASSED [ 13%]
+tests/test_T114_propagate_updates_with_calculation_errors.py::test_propagate_updates_with_calculation_errors PASSED [ 15%]
+tests/test_T115_dependency_chain_analysis.py::test_dependency_chain_analysis PASSED [ 16%]
+tests/test_T116_save_and_load_graph.py::test_save_and_load_graph PASSED  [ 17%]
+tests/test_T117_error_handling.py::test_error_handling PASSED            [ 18%]
+tests/test_T201_update_canvas.py::test_update_canvas ERROR               [ 20%]
+tests/test_T202_create_arrows.py::test_create_arrows PASSED              [ 21%]
+tests/test_T203_ensure_minimum_columns.py::test_ensure_minimum_columns ERROR [ 22%]
+tests/test_T204_get_all_available_parameters.py::test_get_all_available_parameters FAILED [ 24%]
+tests/test_T205_generate_code_template.py::test_generate_code_template PASSED [ 25%]
+tests/test_T206_create_dependency_checkboxes.py::test_create_dependency_checkboxes FAILED [ 26%]
+tests/test_T207_get_plotting_parameters.py::test_get_plotting_parameters FAILED [ 27%]
+tests/test_T208_perform_sensitivity_analysis.py::test_perform_sensitivity_analysis FAILED [ 29%]
+tests/test_T209_create_empty_plot.py::test_create_empty_plot PASSED      [ 30%]
+tests/test_T301_example_basic.py::test_example_basic PASSED              [ 31%]
+tests/test_T302_example_callback.py::test_example_callback PASSED        [ 32%]
+tests/test_T303_example_function_import.py::test_example_function_import PASSED [ 34%]
+tests/test_T304_example_function_execution.py::test_example_function_execution PASSED [ 35%]
+tests/test_T305_example_function_consistency.py::test_example_function_consistency PASSED [ 36%]
+tests/test_T306_example_creates_valid_data.py::test_example_creates_valid_data FAILED [ 37%]
+tests/test_T307_example_parameter_calculations.py::test_example_parameter_calculations FAILED [ 39%]
+tests/test_T308_example_performance.py::test_example_performance PASSED  [ 40%]
+tests/test_T401_unlinked_functionality.py::test_unlinked_functionality PASSED [ 41%]
+tests/test_T402_serialization.py::test_serialization PASSED              [ 43%]
+tests/test_T403_layout_manager_basic_operations.py::test_layout_manager_basic_operations PASSED [ 44%]
+tests/test_T404_layout_manager_node_movements.py::test_layout_manager_node_movements PASSED [ 45%]
+tests/test_T405_layout_manager_column_operations.py::test_layout_manager_column_operations PASSED [ 46%]
+tests/test_T406_layout_manager_add_remove_columns.py::test_layout_manager_add_remove_columns PASSED [ 48%]
+tests/test_T407_layout_manager_remove_column_edge_cases.py::test_layout_manager_remove_column_edge_cases PASSED [ 49%]
+tests/test_T408_layout_serialization.py::test_layout_serialization PASSED [ 50%]
+tests/test_T409_node_name_editing.py::test_node_name_editing PASSED      [ 51%]
+tests/test_T410_node_id_generation.py::test_node_id_generation PASSED    [ 53%]
+tests/test_T412_html_dash_id_generation.py::test_html_dash_id_generation PASSED [ 54%]
+tests/test_T413_node_retrieval.py::test_node_retrieval PASSED            [ 55%]
+tests/test_T414_id_persistence.py::test_id_persistence PASSED            [ 56%]
+tests/test_T415_calculation_graph_id_management.py::test_calculation_graph_id_management PASSED [ 58%]
+tests/test_T416_enhanced_unlink_display_logic.py::test_enhanced_unlink_display_logic PASSED [ 59%]
+tests/test_T417_manual_value_auto_unlink.py::test_manual_value_auto_unlink PASSED [ 60%]
+tests/test_T419_sensitivity_analysis_auto_unlink_simulation.py::test_sensitivity_analysis_auto_unlink_simulation PASSED [ 62%]
+tests/test_T420_edge_cases_and_error_handling.py::test_edge_cases_and_error_handling PASSED [ 63%]
+tests/test_T421_unlink_with_complex_dependencies.py::test_unlink_with_complex_dependencies PASSED [ 64%]
+tests/test_T422_parameter_deletion_restriction.py::test_parameter_deletion_restriction PASSED [ 65%]
+tests/test_T423_node_deletion_restriction.py::test_node_deletion_restriction PASSED [ 67%]
+tests/test_T424_complex_dependency_network.py::test_complex_dependency_network PASSED [ 68%]
+tests/test_T425_unlink_icon_display_logic.py::test_unlink_icon_display_logic ERROR [ 69%]
+tests/test_T426_manual_value_change_auto_unlink.py::test_manual_value_change_auto_unlink ERROR [ 70%]
+tests/test_T427_unlink_icon_click_reconnect.py::test_unlink_icon_click_reconnect ERROR [ 72%]
+tests/test_T428_sensitivity_analysis_auto_unlink.py::test_sensitivity_analysis_auto_unlink ERROR [ 73%]
+tests/test_T429_unlink_ui_integration.py::test_unlink_ui_integration ERROR [ 74%]
+tests/test_T501_add_node_with_grid_layout.py::test_add_node_with_grid_layout FAILED [ 75%]
+tests/test_T502_node_dropdown_menu_operations.py::test_node_dropdown_menu_operations FAILED [ 77%]
+tests/test_T503_node_movement_with_layout_manager.py::test_node_movement_with_layout_manager FAILED [ 78%]
+tests/test_T504_parameter_operations_with_dropdown.py::test_parameter_operations_with_dropdown FAILED [ 79%]
+tests/test_T505_multiple_nodes_grid_layout.py::test_multiple_nodes_grid_layout FAILED [ 81%]
+tests/test_T506_node_position_display.py::test_node_position_display FAILED [ 82%]
+tests/test_T507_parameter_cascade_update_in_web_interface.py::test_parameter_cascade_update_in_web_interface FAILED [ 83%]
+tests/test_T508_parameter_highlight_functionality.py::test_parameter_highlight_functionality FAILED [ 84%]
+tests/test_T509_parameter_edit_modal_functionality.py::test_parameter_edit_modal_functionality FAILED [ 86%]
+tests/test_T510_canvas_auto_refresh_on_parameter_change.py::test_canvas_auto_refresh_on_parameter_change FAILED [ 87%]
+tests/test_T511_recently_updated_params_tracking.py::test_recently_updated_params_tracking FAILED [ 88%]
+tests/test_T512_duplicate_node_name_prevention.py::test_duplicate_node_name_prevention FAILED [ 89%]
+tests/test_T513_empty_node_name_validation.py::test_empty_node_name_validation FAILED [ 91%]
+tests/test_T514_column_management.py::test_column_management FAILED      [ 92%]
+tests/test_T515_remove_column_functionality.py::test_remove_column_functionality FAILED [ 93%]
+tests/test_T516_single_node_creation.py::test_single_node_creation FAILED [ 94%]
+tests/test_T517_headless_basic_operations.py::test_headless_basic_operations FAILED [ 96%]
+tests/test_T518_headless_layout_operations.py::test_headless_layout_operations FAILED [ 97%]
+tests/test_T519_headless_parameter_operations.py::test_headless_parameter_operations FAILED [ 98%]
+tests/test_T520_graph_isolation_by_sid.py::test_graph_isolation_by_sid FAILED [100%]
+
+=============================== warnings summary ===============================
+tests/test_T301_example_basic.py::test_example_basic
+  /home/readm/.local/lib/python3.10/site-packages/_pytest/python.py:198: PytestReturnNotNoneWarning:
+  
+  Expected None, but tests/test_T301_example_basic.py::test_example_basic returned False, which will be an error in a future version of pytest.  Did you mean to use `assert` instead of `return`?
+
+tests/test_T302_example_callback.py::test_example_callback
+  /home/readm/.local/lib/python3.10/site-packages/_pytest/python.py:198: PytestReturnNotNoneWarning:
+  
+  Expected None, but tests/test_T302_example_callback.py::test_example_callback returned True, which will be an error in a future version of pytest.  Did you mean to use `assert` instead of `return`?
+
+tests/test_T401_unlinked_functionality.py::test_unlinked_functionality
+tests/test_T416_enhanced_unlink_display_logic.py::test_enhanced_unlink_display_logic
+  /home/readm/ArchDash/models.py:167: UserWarning:
+  
+  参数 面积 已断开自动计算连接
+
+tests/test_T417_manual_value_auto_unlink.py::test_manual_value_auto_unlink
+  /home/readm/ArchDash/models.py:167: UserWarning:
+  
+  参数 计算参数 已断开自动计算连接
+
+tests/test_T419_sensitivity_analysis_auto_unlink_simulation.py::test_sensitivity_analysis_auto_unlink_simulation
+  /home/readm/ArchDash/models.py:167: UserWarning:
+  
+  参数 X参数 已断开自动计算连接
+
+tests/test_T420_edge_cases_and_error_handling.py::test_edge_cases_and_error_handling
+  /home/readm/ArchDash/models.py:167: UserWarning:
+  
+  参数 完整参数 已断开自动计算连接
+
+tests/test_T421_unlink_with_complex_dependencies.py::test_unlink_with_complex_dependencies
+  /home/readm/ArchDash/models.py:167: UserWarning:
+  
+  参数 C 已断开自动计算连接
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_T204_get_all_available_parameters.py::test_get_all_available_parameters
+FAILED tests/test_T206_create_dependency_checkboxes.py::test_create_dependency_checkboxes
+FAILED tests/test_T207_get_plotting_parameters.py::test_get_plotting_parameters
+FAILED tests/test_T208_perform_sensitivity_analysis.py::test_perform_sensitivity_analysis
+FAILED tests/test_T306_example_creates_valid_data.py::test_example_creates_valid_data
+FAILED tests/test_T307_example_parameter_calculations.py::test_example_parameter_calculations
+FAILED tests/test_T501_add_node_with_grid_layout.py::test_add_node_with_grid_layout
+FAILED tests/test_T502_node_dropdown_menu_operations.py::test_node_dropdown_menu_operations
+FAILED tests/test_T503_node_movement_with_layout_manager.py::test_node_movement_with_layout_manager
+FAILED tests/test_T504_parameter_operations_with_dropdown.py::test_parameter_operations_with_dropdown
+FAILED tests/test_T505_multiple_nodes_grid_layout.py::test_multiple_nodes_grid_layout
+FAILED tests/test_T506_node_position_display.py::test_node_position_display
+FAILED tests/test_T507_parameter_cascade_update_in_web_interface.py::test_parameter_cascade_update_in_web_interface
+FAILED tests/test_T508_parameter_highlight_functionality.py::test_parameter_highlight_functionality
+FAILED tests/test_T509_parameter_edit_modal_functionality.py::test_parameter_edit_modal_functionality
+FAILED tests/test_T510_canvas_auto_refresh_on_parameter_change.py::test_canvas_auto_refresh_on_parameter_change
+FAILED tests/test_T511_recently_updated_params_tracking.py::test_recently_updated_params_tracking
+FAILED tests/test_T512_duplicate_node_name_prevention.py::test_duplicate_node_name_prevention
+FAILED tests/test_T513_empty_node_name_validation.py::test_empty_node_name_validation
+FAILED tests/test_T514_column_management.py::test_column_management - Failed:...
+FAILED tests/test_T515_remove_column_functionality.py::test_remove_column_functionality
+FAILED tests/test_T516_single_node_creation.py::test_single_node_creation - N...
+FAILED tests/test_T517_headless_basic_operations.py::test_headless_basic_operations
+FAILED tests/test_T518_headless_layout_operations.py::test_headless_layout_operations
+FAILED tests/test_T519_headless_parameter_operations.py::test_headless_parameter_operations
+FAILED tests/test_T520_graph_isolation_by_sid.py::test_graph_isolation_by_sid
+ERROR tests/test_T201_update_canvas.py::test_update_canvas
+ERROR tests/test_T203_ensure_minimum_columns.py::test_ensure_minimum_columns
+ERROR tests/test_T425_unlink_icon_display_logic.py::test_unlink_icon_display_logic
+ERROR tests/test_T426_manual_value_change_auto_unlink.py::test_manual_value_change_auto_unlink
+ERROR tests/test_T427_unlink_icon_click_reconnect.py::test_unlink_icon_click_reconnect
+ERROR tests/test_T428_sensitivity_analysis_auto_unlink.py::test_sensitivity_analysis_auto_unlink
+ERROR tests/test_T429_unlink_ui_integration.py::test_unlink_ui_integration
+============= 26 failed, 46 passed, 8 warnings, 7 errors in 1.75s ==============
