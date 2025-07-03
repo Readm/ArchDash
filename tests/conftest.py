@@ -153,11 +153,11 @@ def wait_for_server(url, timeout=10):
 def chrome_options():
     """配置Chrome选项"""
     options = Options()
-    options.add_argument("--headless")  # 无头模式
+    # 移除headless模式
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--window-size=800,600")  # 设置更小的窗口尺寸
     return options
 
 @pytest.fixture(scope="session")
@@ -207,8 +207,8 @@ def pytest_configure(config):
     is_ci = os.environ.get('TEST_ENV') == 'CI'
     if is_ci:
         # CI环境特定配置
-        os.environ['NO_BROWSER'] = '1'
-        os.environ['DASH_TEST_CHROMEPATH'] = ''  # 使用无头Chrome
+        os.environ['NO_BROWSER'] = '0'  # 允许使用浏览器
+        os.environ['DASH_TEST_CHROMEPATH'] = ''
         os.environ['DASH_TESTING_MODE'] = 'True'
 
 @pytest.fixture(scope='session')

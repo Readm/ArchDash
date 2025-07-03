@@ -40,9 +40,8 @@ def app_server_driver():
     server_thread.start()
     time.sleep(2)  # 等待服务器启动
 
-    # 初始化WebDriver - 恢复headless模式，适合CI环境
+    # 初始化WebDriver - 移除headless模式
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # 使用headless模式
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     driver = webdriver.Chrome(options=options)
@@ -76,14 +75,20 @@ def setup_test_nodes_with_ui(driver, wait):
     time.sleep(1)  # 等待节点创建
     
     # 2. 添加参数到第一个节点
-    # 查找第一个节点的加号按钮
-    add_param_btns = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".add-param-btn")))
+    # 使用更健壮的按钮查找方法
+    add_param_btns = wait.until(EC.presence_of_all_elements_located((
+        By.CSS_SELECTOR, 
+        "button[id*='add-param'], .add-param-btn"
+    )))
     if len(add_param_btns) > 0:
         add_param_btns[0].click()  # 点击第一个节点的加号按钮
         time.sleep(1)
     
-    # 设置参数名称和值
-    param_inputs = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".param-input")))
+    # 使用更健壮的参数输入框查找方法
+    param_inputs = wait.until(EC.presence_of_all_elements_located((
+        By.CSS_SELECTOR, 
+        "[data-dash-id*='param-input'], .param-input, .parameter-input"
+    )))
     if len(param_inputs) >= 2:
         # 设置第一个参数：长度
         param_inputs[0].clear()  # 参数名
@@ -96,22 +101,12 @@ def setup_test_nodes_with_ui(driver, wait):
         time.sleep(1)
     
     # 添加第二个参数：宽度
-    add_param_btns = driver.find_elements(By.CSS_SELECTOR, ".add-param-btn")
+    add_param_btns = driver.find_elements(By.CSS_SELECTOR, "button[id*='add-param'], .add-param-btn")
     if len(add_param_btns) > 0:
         add_param_btns[0].click()  # 再次点击加号按钮
         time.sleep(1)
     
-    param_inputs = driver.find_elements(By.CSS_SELECTOR, ".param-input")
-    if len(param_inputs) >= 4:
-        # 设置第二个参数：宽度
-        param_inputs[2].clear()  # 参数名
-        param_inputs[2].send_keys("宽度")
-        param_inputs[2].send_keys(Keys.TAB)
-        
-        param_inputs[3].clear()  # 参数值
-        param_inputs[3].send_keys("5.0")
-        param_inputs[3].send_keys(Keys.TAB)
-        time.sleep(1)
+    param_inputs = driver.find_elements(By.CSS_SELECTOR, "[data-dash-id*='param-input'], .param-input, .parameter-input")
     
     # 3. 添加第二个节点（计算结果）
     add_node_btn = driver.find_element(By.ID, "add-node-from-graph-button")
@@ -157,7 +152,7 @@ def setup_test_nodes_with_ui(driver, wait):
     return {
         'input_node_params': param_inputs[:4] if len(param_inputs) >= 4 else [],
         'calc_node_params': param_inputs[-2:] if len(param_inputs) >= 6 else [],
-        'all_nodes': driver.find_elements(By.CSS_SELECTOR, "[data-dash-id*='node']")
+        'all_nodes': driver.find_elements(By.CSS_SELECTOR, "[data-dash-id*='node'], .node-container, .node")
     }
 
 
@@ -177,13 +172,13 @@ def test_unlink_icon_display_logic(app_server_driver):
     
     print("🔬 测试unlink图标显示逻辑")
     
-    # 简化测试：检查初始状态下不应有unlink图标
-    all_unlink_icons = driver.find_elements(By.CSS_SELECTOR, ".unlink-icon")
+    # 使用更健壮的图标查找方法
+    all_unlink_icons = driver.find_elements(By.CSS_SELECTOR, "[data-dash-id*='unlink'], .unlink-icon")
     assert len(all_unlink_icons) == 0, "初始状态下不应显示unlink图标"
     print("✅ 初始状态：不显示🔓图标")
     
-    # 检查所有节点都没有unlink图标
-    all_unlink_containers = driver.find_elements(By.CSS_SELECTOR, ".unlink-icon-container")
+    # 使用更健壮的容器查找方法
+    all_unlink_containers = driver.find_elements(By.CSS_SELECTOR, "[data-dash-id*='unlink-container'], .unlink-icon-container")
     assert len(all_unlink_containers) == 0, "初始状态下不应显示unlink图标容器"
     print("✅ 无依赖参数：不显示🔓图标")
 

@@ -65,7 +65,7 @@ def run_tests(test_type=None, verbose=True, coverage=True, parallel=True):
     
     # 如果在CI环境中运行，添加额外的参数
     if os.environ.get("TEST_ENV") == "CI":
-        test_args.extend(["--headless"])
+        pass
 
     # 打印测试命令
     print(f"\n执行测试命令: pytest {' '.join(test_args)}\n")

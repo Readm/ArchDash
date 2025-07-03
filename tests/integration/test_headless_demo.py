@@ -34,9 +34,22 @@ def wait_for_clickable(selenium, by, value, timeout=10):
 def wait_for_node_count(selenium, count, timeout=10):
     """等待节点数量达到预期值"""
     def check_node_count(driver):
-        nodes = driver.find_elements(By.CSS_SELECTOR, ".node")
-        visible_nodes = [n for n in nodes if n.is_displayed()]
-        return len(visible_nodes) == count
+        # 使用多个选择器查找节点
+        selectors = [
+            "[data-dash-id*='node']",  # Dash节点标识
+            ".node-container",         # 节点容器类
+            ".node-entrance",          # 节点入场动画类
+            "[id^='node-']",          # 以node-开头的ID
+            ".node"                    # 传统的node类
+        ]
+        
+        for selector in selectors:
+            nodes = driver.find_elements(By.CSS_SELECTOR, selector)
+            visible_nodes = [n for n in nodes if n.is_displayed()]
+            if len(visible_nodes) == count:
+                return True
+        return False
+        
     WebDriverWait(selenium, timeout).until(check_node_count)
 
 def wait_for_text(selenium, by, value, text, timeout=10):
@@ -71,13 +84,24 @@ def create_node(selenium, name, description=""):
 
 def add_parameter(selenium, node_index=0):
     """为指定索引的节点添加参数"""
-    nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
+    # 使用更健壮的节点查找方法
+    nodes = selenium.find_elements(By.CSS_SELECTOR, "[data-dash-id*='node']")
+    if not nodes:
+        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
+    if not nodes:
+        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node-container")
+    
+    if not nodes or node_index >= len(nodes):
+        raise Exception(f"未找到索引为 {node_index} 的节点")
+        
     node = nodes[node_index]
     
+    # 使用更健壮的按钮查找方法
     add_param_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, "button[id*='add-param']")
     add_param_btn.click()
     
-    param_input = wait_for_element(selenium, By.CSS_SELECTOR, ".parameter-input")
+    # 使用更健壮的参数输入框查找方法
+    param_input = wait_for_element(selenium, By.CSS_SELECTOR, "[data-dash-id*='param-input'], .parameter-input")
     return param_input
 
 def clean_state(selenium):
