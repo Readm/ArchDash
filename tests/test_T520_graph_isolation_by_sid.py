@@ -1,4 +1,3 @@
-from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -10,10 +9,12 @@ import pytest
 from flask import Flask, request
 from session_graph import get_graph, SESSION_GRAPHS
 
-def test_graph_isolation_by_sid():
-    from app import app
+def test_graph_isolation_by_sid(flask_app):
     from flask import Flask
 
+    # 获取Flask应用对象
+    app = flask_app['app'].server
+    
     # 第一次请求，sid=A
     with app.test_request_context('/?_sid=A'):
         g1 = get_graph()
@@ -41,5 +42,6 @@ def test_graph_isolation_by_sid():
     assert set(SESSION_GRAPHS.keys()) >= {'A', 'B'}
 
 if __name__ == "__main__":
-    test_graph_isolation_by_sid()
-    print("✅ T520 测试通过")
+    # 注意：这个测试需要 flask_app 夹具，不能直接运行
+    print("⚠️  此测试需要 pytest 环境和 flask_app 夹具")
+    print("请使用: pytest tests/test_T520_graph_isolation_by_sid.py -v")

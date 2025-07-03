@@ -210,4 +210,55 @@ def get_node_element(selenium, node_name):
         print(f"获取节点元素失败: {e}")
         return None
 
+def setup_test_nodes_with_ui(driver, wait):
+    """设置测试节点和UI环境"""
+    try:
+        # 清理状态
+        clean_state(driver)
+        
+        # 创建测试节点
+        test_nodes = [
+            ("输入节点", "输入数据节点"),
+            ("计算节点", "执行计算的节点"),
+            ("输出节点", "输出结果节点")
+        ]
+        
+        created_nodes = []
+        for name, description in test_nodes:
+            if create_node(driver, name, description):
+                created_nodes.append(name)
+                # 等待节点出现
+                wait_for_node_count(driver, len(created_nodes))
+        
+        return {
+            'nodes': created_nodes,
+            'driver': driver,
+            'wait': wait
+        }
+    except Exception as e:
+        print(f"设置测试节点失败: {e}")
+        return None
+
+def safe_click(selenium, element):
+    """安全点击元素，处理可能的遮挡问题"""
+    try:
+        # 滚动到元素可见
+        selenium.execute_script("arguments[0].scrollIntoView(true);", element)
+        time.sleep(0.2)
+        
+        # 尝试直接点击
+        element.click()
+        return True
+    except ElementClickInterceptedException:
+        try:
+            # 如果被遮挡，使用JavaScript点击
+            selenium.execute_script("arguments[0].click();", element)
+            return True
+        except Exception as e:
+            print(f"JavaScript点击失败: {e}")
+            return False
+    except Exception as e:
+        print(f"安全点击失败: {e}")
+        return False
+
  

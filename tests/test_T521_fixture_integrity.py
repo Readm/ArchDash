@@ -31,9 +31,17 @@ def test_setup_and_teardown_fixture_works():
 
 def test_flask_app_fixture_works(flask_app):
     """测试 flask_app 夹具是否正常工作"""
-    # 验证 flask_app 是有效的 Dash 应用
-    assert hasattr(flask_app, 'server'), "flask_app 应该有 server 属性"
-    assert hasattr(flask_app, 'layout'), "flask_app 应该有 layout 属性"
+    # 验证 flask_app 是有效的字典，包含必要的键
+    assert isinstance(flask_app, dict), "flask_app 应该是字典"
+    assert 'app' in flask_app, "flask_app 应该包含 'app' 键"
+    assert 'server' in flask_app, "flask_app 应该包含 'server' 键"
+    assert 'port' in flask_app, "flask_app 应该包含 'port' 键"
+    assert 'url' in flask_app, "flask_app 应该包含 'url' 键"
+    
+    # 验证应用对象
+    app = flask_app['app']
+    assert hasattr(app, 'server'), "应用对象应该有 server 属性"
+    assert hasattr(app, 'layout'), "应用对象应该有 layout 属性"
     
     # 验证服务器是否正在运行
     import requests

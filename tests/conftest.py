@@ -329,21 +329,42 @@ def pytest_addoption(parser):
     pass
 
 class FlaskThread(threading.Thread):
-    def __init__(self, app, port=8051):  # 使用不同的端口避免冲突
+    def __init__(self, app, port=None):  # 使用不同的端口避免冲突
         threading.Thread.__init__(self)
-        try:
-            self.srv = make_server('127.0.0.1', port, app)
-        except OSError:
-            # 如果端口被占用，尝试其他端口
-            for alt_port in range(8052, 8060):
-                try:
-                    self.srv = make_server('127.0.0.1', alt_port, app)
-                    port = alt_port
-                    break
-                except OSError:
-                    continue
-            else:
-                raise OSError("无法找到可用的端口")
+        
+        # 获取worker ID，用于端口分配
+        worker_id = os.environ.get('PYTEST_XDIST_WORKER', '0')
+        
+        # 解析worker ID：格式可能是 'gw0', 'gw1', 'gw2' 等
+        if worker_id.startswith('gw'):
+            try:
+                worker_num = int(worker_id[2:])  # 提取数字部分
+            except ValueError:
+                worker_num = 0
+        else:
+            try:
+                worker_num = int(worker_id)
+            except ValueError:
+                worker_num = 0
+        
+        if worker_num > 0:
+            # 并行模式：每个worker使用不同端口范围
+            base_port = 8051 + (worker_num * 10)  # 每个worker间隔10个端口
+        else:
+            # 串行模式：使用默认端口
+            base_port = 8051
+        
+        # 尝试绑定端口
+        for port_offset in range(10):  # 每个worker最多尝试10个端口
+            try_port = base_port + port_offset
+            try:
+                self.srv = make_server('127.0.0.1', try_port, app)
+                port = try_port
+                break
+            except OSError:
+                continue
+        else:
+            raise OSError(f"Worker {worker_id} 无法找到可用端口 (范围: {base_port}-{base_port+9})")
         
         self.port = port
         self.ctx = app.app_context()
@@ -405,7 +426,7 @@ def chrome_service():
 
 @pytest.fixture(scope="session")
 def flask_app():
-    """启动Flask应用服务器"""
+    """启动Flask应用服务器 - 支持并发访问"""
     server = FlaskThread(app.server)
     server.daemon = True
     server.start()
@@ -413,6 +434,9 @@ def flask_app():
     # Wait for server to be ready using the actual port
     server_url = f"http://127.0.0.1:{server.port}"
     assert wait_for_server(server_url), f"Server failed to start within timeout on port {server.port}"
+    
+    print(f"🌐 测试服务器启动成功: {server_url}")
+    print(f"🔄 支持并发访问，每个测试用例使用独立浏览器会话")
     
     # 返回包含应用和服务器信息的字典
     yield {
@@ -472,4 +496,4 @@ def test_app_context():
 @pytest.fixture
 def app_server_driver(selenium, flask_app):
     """提供应用服务器和驱动器的组合"""
-    return flask_app['app'], selenium 
+    return selenium, flask_app['url'] 
