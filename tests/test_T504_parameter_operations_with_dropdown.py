@@ -37,7 +37,7 @@ def test_parameter_operations_with_dropdown(selenium):
         
         # 找到添加参数按钮
         print("\n查找添加参数按钮...")
-        add_param_btn = wait_for_element(selenium, By.CSS_SELECTOR, "button[id*='add-param']")
+        add_param_btn = wait_for_element(selenium, By.CSS_SELECTOR, '[data-testid="add-param-btn"]')
         if not add_param_btn:
             raise Exception("未找到添加参数按钮")
         print("✅ 找到添加参数按钮")

@@ -10,8 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from app import app, graph, layout_manager
-import pytest
+from app import app
 from models import Parameter, Node, CalculationGraph
 import json
 import math

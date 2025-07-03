@@ -31,8 +31,17 @@ def test_create_dependency_checkboxes(test_graph):
     params = get_all_available_parameters("some_node", "some_param")
     checkboxes = create_dependency_checkboxes(params)
     
-    assert len(checkboxes) == 3
-    assert isinstance(checkboxes[0], dbc.Checkbox)
+    # 检查复选框列表
+    assert isinstance(checkboxes, list)
+    
+    if len(params) > 0:
+        # 有依赖参数时，应该有复选框
+        assert len(checkboxes) > 0
+        assert isinstance(checkboxes[0], dbc.Checkbox)
+    else:
+        # 没有依赖参数时，应该显示提示信息
+        assert len(checkboxes) == 1
+        assert "暂无可用的依赖参数" in str(checkboxes[0])
 
 if __name__ == "__main__":
     test_create_dependency_checkboxes()

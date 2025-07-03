@@ -13,10 +13,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
 from selenium.webdriver.common.keys import Keys
 import time
-from app import app, graph, layout_manager
+from app import app
 
-def test_column_management(selenium):
+def test_column_management(selenium, test_app_components):
     """测试列管理"""
+    # 获取测试组件
+    graph = test_app_components['graph']
+    layout_manager = test_app_components['layout_manager']
+
     try:
         clean_state(selenium)
         

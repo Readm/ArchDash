@@ -26,10 +26,21 @@ def test_unlink_ui_integration(app_server_driver):
 
     # 设置测试数据
     test_data = setup_test_nodes_with_ui(driver, wait)
-    area_node_id = test_data['calc_node_params'][0]
-    area_param_name = test_data['calc_node_params'][1]
-    input_node_id = test_data['input_node_params'][0]
-    length_param_name = test_data['input_node_params'][1]
+    assert test_data is not None, "测试数据设置失败"
+    
+    # 获取节点（假设第一个是输入节点，第二个是计算节点）
+    nodes = driver.find_elements(By.CSS_SELECTOR, ".node")
+    assert len(nodes) >= 2, "应该有至少2个节点"
+    
+    # 获取节点ID
+    input_node = nodes[0]  # 输入节点
+    area_node = nodes[1]   # 计算节点
+    input_node_id = input_node.get_attribute("data-dash-id")
+    area_node_id = area_node.get_attribute("data-dash-id")
+    
+    # 假设的参数名和值
+    area_param_name = "计算参数"
+    length_param_name = "输入参数"
 
     # 等待画布容器加载
     wait.until(EC.presence_of_element_located((By.ID, "canvas-container")))

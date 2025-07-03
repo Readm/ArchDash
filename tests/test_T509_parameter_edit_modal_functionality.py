@@ -30,7 +30,7 @@ def test_parameter_edit_modal_functionality(selenium):
         edit_btn.click()
         
         # 验证模态框
-        edit_modal = wait_for_element(selenium, By.ID, "parameter-edit-modal")
+        edit_modal = wait_for_element(selenium, By.CSS_SELECTOR, '[data-testid="parameter-edit-modal"]')
         assert edit_modal is not None, "参数编辑模态框应该出现"
         
         print("✅ 参数编辑模态框功能测试通过")

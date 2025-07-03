@@ -26,6 +26,7 @@ def test_duplicate_node_name_prevention(selenium):
         add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
         add_node_btn.click()
         
+        time.sleep(1)  # 等待模态框加载
         modal = wait_for_element(selenium, By.ID, "node-add-modal")
         name_input = wait_for_element(selenium, By.ID, "node-add-name")
         name_input.clear()
@@ -39,7 +40,7 @@ def test_duplicate_node_name_prevention(selenium):
         save_btn.click()
         
         # 验证错误提示
-        error_msg = wait_for_element(selenium, By.CSS_SELECTOR, ".alert-danger")
+        error_msg = wait_for_element(selenium, By.CSS_SELECTOR, '[data-testid="error-message"]')
         assert "已存在" in error_msg.text, "应该显示重复名称错误"
         
         print("✅ 重复节点名称预防测试通过")

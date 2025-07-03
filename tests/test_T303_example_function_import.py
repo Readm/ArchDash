@@ -13,14 +13,11 @@ from dash import callback
 from models import CalculationGraph, CanvasLayoutManager
 from session_graph import set_graph, get_graph
 from app import create_example_soc_graph
-from app import create_example_soc_graph
-from app import create_example_soc_graph
 import time
 
 def test_example_function_import():
     """测试能否正确导入示例函数"""
     try:
-        from app import create_example_soc_graph
         assert callable(create_example_soc_graph), "create_example_soc_graph应该是可调用的函数"
         print("✅ 示例函数导入成功")
     except ImportError as e:

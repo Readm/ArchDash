@@ -75,7 +75,6 @@ def test_save_and_load_graph():
     # 读取文件内容验证
     print("📖 验证保存的文件内容...")
     with open(temp_path, 'r', encoding='utf-8') as f:
-        import json
         saved_data = json.load(f)
         
     print(f"   版本: {saved_data.get('version', '未知')}")

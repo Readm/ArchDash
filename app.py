@@ -483,7 +483,8 @@ def update_canvas(node_data=None):
                                     "color": "#6c757d",
                                     "marginRight": "6px"
                                 },
-                                title="添加参数"
+                                title="添加参数",
+                                **{"data-testid": "add-param-btn"}
                             ),
                             dbc.DropdownMenu(
                                 children=[
@@ -523,7 +524,7 @@ def update_canvas(node_data=None):
                 ],
                 className="p-2 node-container node-entrance fade-in",
                 id=f"node-{node_id}",
-                **{"data-row": row, "data-col": col, "data-dash-id": json.dumps({"type": "node", "index": node_id})}
+                **{"data-row": row, "data-col": col, "data-dash-id": json.dumps({"type": "node", "index": node_id}), "data-testid": "node-container"}
             )
             col_content.append(node_div)
         
@@ -3035,6 +3036,7 @@ def create_new_node(save_clicks, node_name, node_description):
         
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{node_name}' 已创建并添加到位置 ({position.row}, {position.col})"
+        print(f"🎯 节点创建成功，准备返回: 模态框关闭={False}, 画布更新=update_canvas(), 消息={success_message}")
         return False, update_canvas(), success_message
         
     except Exception as e:

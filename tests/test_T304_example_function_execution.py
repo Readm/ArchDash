@@ -13,14 +13,11 @@ from dash import callback
 from models import CalculationGraph, CanvasLayoutManager
 from session_graph import set_graph, get_graph
 from app import create_example_soc_graph
-from app import create_example_soc_graph
-from app import create_example_soc_graph
 import time
 
 def test_example_function_execution():
     """测试示例函数是否能正常执行"""
     try:
-        from app import create_example_soc_graph
         
         # 执行示例创建函数
         result = create_example_soc_graph()

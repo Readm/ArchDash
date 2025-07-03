@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-T409 - 测试
-从原始测试文件分离出的独立测试
+T409 - 测试节点名称编辑功能
+使用会话隔离的graph实例
 """
 
 import sys
 import os
-from app import graph
 from models import Node, CalculationGraph
 
 def test_node_name_editing():
     """测试节点名称编辑功能"""
     print("🧪 测试节点名称编辑功能")
+    
+    # 创建独立的计算图实例
+    graph = CalculationGraph()
     
     # 清理状态
     graph.nodes.clear()

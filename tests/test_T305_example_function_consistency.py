@@ -13,14 +13,11 @@ from dash import callback
 from models import CalculationGraph, CanvasLayoutManager
 from session_graph import set_graph, get_graph
 from app import create_example_soc_graph
-from app import create_example_soc_graph
-from app import create_example_soc_graph
 import time
 
 def test_example_function_consistency():
     """测试示例函数的一致性（多次调用应该产生相同结果）"""
     try:
-        from app import create_example_soc_graph
         
         # 第一次调用
         result1 = create_example_soc_graph()

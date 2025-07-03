@@ -1,433 +1,229 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+测试配置文件
+提供所有测试文件共用的夹具和配置
+"""
+
 import pytest
-import sys
 import os
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.webdriver import WebDriver
-from dash.testing.application_runners import import_app
-import threading
+import sys
 import time
-import multiprocessing
-from werkzeug.serving import make_server
-from app import app
+import threading
+import subprocess
+import signal
+from pathlib import Path
+from urllib.parse import urlparse
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
-from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver import Chrome as WebDriver
 
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-# 确保可以导入项目模块
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+# 导入应用模块
+from app import app
 
-# ==================== 辅助函数 ====================
+# 测试配置
+TEST_TIMEOUT = 60  # 测试超时时间（秒）
+SERVER_START_TIMEOUT = 30  # 服务器启动超时时间（秒）
+PAGE_LOAD_TIMEOUT = 10  # 页面加载超时时间（秒）
 
-def clean_state(selenium):
-    """清理测试状态"""
+# 端口分配配置
+BASE_PORT = 8051
+PORTS_PER_WORKER = 10
+
+def get_worker_port_range():
+    """获取当前worker的端口范围"""
+    worker_id = os.environ.get('PYTEST_XDIST_WORKER', '0')
     try:
-        # 清理应用状态
-        from app import graph, layout_manager
-        graph.nodes.clear()
-        layout_manager.node_positions.clear()
-        layout_manager.position_nodes.clear()
-        layout_manager._init_grid()
-        graph.recently_updated_params.clear()
-        
-        # 刷新页面
-        selenium.refresh()
-        time.sleep(1)
-        
-        # 等待页面加载完成
-        wait_for_page_load(selenium)
-        
-    except Exception as e:
-        print(f"清理状态时出错: {e}")
-
-def wait_for_page_load(selenium, timeout=5):
-    """等待页面加载完成"""
-    try:
-        WebDriverWait(selenium, timeout).until(
-            lambda driver: driver.execute_script("return document.readyState") == "complete"
-        )
-        time.sleep(0.2)  # 减少额外等待时间
-    except TimeoutException:
-        print("页面加载超时")
-
-def wait_for_element(selenium, by, value, timeout=5):
-    """等待元素出现并返回"""
-    try:
-        element = WebDriverWait(selenium, timeout).until(
-            EC.presence_of_element_located((by, value))
-        )
-        return element
-    except TimeoutException:
-        print(f"等待元素超时: {by}={value}")
-        return None
-
-def wait_for_clickable(selenium, by, value, timeout=5):
-    """等待元素可点击并返回"""
-    try:
-        element = WebDriverWait(selenium, timeout).until(
-            EC.element_to_be_clickable((by, value))
-        )
-        return element
-    except TimeoutException:
-        print(f"wait_for_clickable超时: {by}={value}")
-        return None
-
-def wait_for_visible(selenium, by, value, timeout=10):
-    """等待元素可见并返回"""
-    try:
-        element = WebDriverWait(selenium, timeout).until(
-            EC.visibility_of_element_located((by, value))
-        )
-        return element
-    except TimeoutException:
-        print(f"等待元素可见超时: {by}={value}")
-        return None
-
-def create_node(selenium, name, description):
-    """创建节点"""
-    try:
-        # 等待添加节点按钮可点击
-        add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
-        add_node_btn.click()
-        
-        # 等待模态框出现
-        modal = wait_for_element(selenium, By.ID, "node-add-modal")
-        assert modal is not None and modal.is_displayed(), "节点添加模态框应该出现"
-        
-        # 输入节点信息
-        name_input = wait_for_element(selenium, By.ID, "node-add-name")
-        name_input.clear()
-        name_input.send_keys(name)
-        
-        desc_input = wait_for_element(selenium, By.ID, "node-add-description")
-        desc_input.clear()
-        desc_input.send_keys(description)
-        
-        # 保存节点
-        save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
-        save_btn.click()
-        
-        # 等待模态框消失
-        WebDriverWait(selenium, 10).until_not(
-            EC.visibility_of_element_located((By.ID, "node-add-modal"))
-        )
-        
-        return True
-    except Exception as e:
-        print(f"创建节点失败: {e}")
-        return False
-
-def wait_for_node_count(selenium, expected_count, timeout=10):
-    """等待节点数量达到预期值"""
-    try:
-        WebDriverWait(selenium, timeout).until(
-            lambda driver: len(driver.find_elements(By.CSS_SELECTOR, ".node")) == expected_count
-        )
-        return True
-    except TimeoutException:
-        print(f"等待节点数量超时，期望: {expected_count}")
-        return False
-
-def delete_node(selenium, node_id):
-    """删除指定节点"""
-    try:
-        # 点击节点的下拉菜单
-        dropdown_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node_id}'][id*='dropdown']")
-        dropdown_btn.click()
-        
-        # 点击删除按钮
-        delete_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node_id}'][id*='delete']")
-        delete_btn.click()
-        
-        # 等待节点消失
-        WebDriverWait(selenium, 10).until_not(
-            EC.presence_of_element_located((By.CSS_SELECTOR, f".node[data-dash-id*='{node_id}']"))
-        )
-        
-        return True
-    except Exception as e:
-        print(f"删除节点失败: {e}")
-        return False
-
-def add_parameter(selenium, node_id, param_name, param_value, param_unit):
-    """为节点添加参数"""
-    try:
-        # 点击节点的参数添加按钮
-        add_param_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node_id}'][id*='add-param']")
-        add_param_btn.click()
-        
-        # 等待参数添加模态框
-        modal = wait_for_element(selenium, By.ID, "parameter-add-modal")
-        assert modal.is_displayed(), "参数添加模态框应该出现"
-        
-        # 输入参数信息
-        name_input = wait_for_element(selenium, By.ID, "parameter-add-name")
-        name_input.clear()
-        name_input.send_keys(param_name)
-        
-        value_input = wait_for_element(selenium, By.ID, "parameter-add-value")
-        value_input.clear()
-        value_input.send_keys(str(param_value))
-        
-        unit_input = wait_for_element(selenium, By.ID, "parameter-add-unit")
-        unit_input.clear()
-        unit_input.send_keys(param_unit)
-        
-        # 保存参数
-        save_btn = wait_for_clickable(selenium, By.ID, "parameter-add-save")
-        save_btn.click()
-        
-        # 等待模态框消失
-        WebDriverWait(selenium, 10).until_not(
-            EC.visibility_of_element_located((By.ID, "parameter-add-modal"))
-        )
-        
-        return True
-    except Exception as e:
-        print(f"添加参数失败: {e}")
-        return False
-
-def edit_parameter(selenium, node_id, param_name, new_value):
-    """编辑参数值"""
-    try:
-        # 找到参数输入框
-        param_input = wait_for_element(selenium, By.CSS_SELECTOR, f"input[data-dash-id*='{node_id}'][data-param='{param_name}']")
-        param_input.clear()
-        param_input.send_keys(str(new_value))
-        
-        # 触发值变化事件
-        param_input.send_keys(Keys.TAB)
-        time.sleep(0.5)
-        
-        return True
-    except Exception as e:
-        print(f"编辑参数失败: {e}")
-        return False
-
-def get_node_element(selenium, node_name):
-    """获取指定名称的节点元素"""
-    try:
-        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
-        for node in nodes:
-            if node_name in node.text:
-                return node
-        return None
-    except Exception as e:
-        print(f"获取节点元素失败: {e}")
-        return None
-
-
-
-# ==================== 测试夹具 ====================
-
-@pytest.fixture(autouse=True)
-def setup_and_teardown():
-    """每个测试前后的设置和清理"""
+        worker_num = int(worker_id.replace('gw', ''))
+    except ValueError:
+        worker_num = 0
     
-    # 清理全局状态
-    try:
-        from app import graph, layout_manager
-        
-        graph.nodes.clear()
-        layout_manager.node_positions.clear()
-        layout_manager.position_nodes.clear()
-        layout_manager._init_grid()
-        graph.recently_updated_params.clear()
-    except ImportError:
-        # 如果导入失败，跳过清理
-        pass
+    start_port = BASE_PORT + (worker_num * PORTS_PER_WORKER)
+    end_port = start_port + PORTS_PER_WORKER - 1
     
-    yield  # 运行测试
+    return start_port, end_port
+
+def find_available_port(start_port, end_port):
+    """在指定范围内查找可用端口"""
+    import socket
     
-    # 测试后清理（如果需要）
-    try:
-        from app import graph, layout_manager
-        
-        graph.nodes.clear()
-        layout_manager.node_positions.clear()
-        layout_manager.position_nodes.clear()
-        layout_manager._init_grid()
-        graph.recently_updated_params.clear()
-    except ImportError:
-        pass
+    for port in range(start_port, end_port + 1):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                return port
+        except OSError:
+            continue
+    
+    raise RuntimeError(f"在端口范围 {start_port}-{end_port} 内没有找到可用端口")
 
-# 用于测试的辅助函数
-def create_test_node(name="测试节点", description="测试描述"):
-    """创建测试节点的辅助函数"""
-    from models import Node
-    return Node(name=name, description=description)
-
-def add_test_node_to_graph(node):
-    """将测试节点添加到计算图的辅助函数"""
-    from app import graph
-    graph.add_node(node)
-    return node.id
-
-# 常用的测试配置
-@pytest.fixture
-def test_graph():
-    """提供一个干净的测试计算图"""
-    from app import graph
-    graph.nodes.clear()
-    return graph
-
-@pytest.fixture
-def test_layout_manager():
-    """提供一个干净的测试布局管理器"""
-    from app import layout_manager
-    layout_manager.node_positions.clear()
-    layout_manager.position_nodes.clear()
-    layout_manager._init_grid()
-    return layout_manager
-
-# 测试数据
-@pytest.fixture
-def sample_nodes():
-    """提供示例节点数据"""
-    from models import Node
-    return [
-        Node(name="输入节点", description="输入数据节点"),
-        Node(name="计算节点", description="执行计算的节点"),
-        Node(name="输出节点", description="输出结果节点")
-    ]
-
-# 性能测试相关
-@pytest.fixture
-def performance_timer():
-    """性能测试计时器"""
-    import time
+def wait_for_server(url, timeout=SERVER_START_TIMEOUT):
+    """等待服务器启动"""
     start_time = time.time()
-    yield
-    end_time = time.time()
-    print(f"\n⏱️ 测试执行时间: {end_time - start_time:.3f}秒")
-
-# 日志配置
-@pytest.fixture(autouse=True)
-def configure_logging():
-    """配置测试日志"""
-    import logging
-    logging.basicConfig(
-        level=logging.WARNING,  # 只显示警告和错误
-        format='%(levelname)s: %(message)s'
-    )
-
-# 错误处理
-@pytest.fixture
-def suppress_errors():
-    """抑制某些预期的错误输出"""
-    import warnings
-    warnings.filterwarnings("ignore", category=UserWarning)
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-def pytest_addoption(parser):
-    """为pytest添加自定义命令行选项"""
-    # 不再添加自己的--headless选项，因为dash-testing已经提供了
-    pass
+    
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get(url, timeout=2)
+            if response.status_code == 200:
+                return True
+        except requests.RequestException:
+            pass
+        
+        time.sleep(0.5)
+    
+    return False
 
 class FlaskThread(threading.Thread):
-    def __init__(self, app, port=None):  # 使用不同的端口避免冲突
-        threading.Thread.__init__(self)
-        
-        # 获取worker ID，用于端口分配
-        worker_id = os.environ.get('PYTEST_XDIST_WORKER', '0')
-        
-        # 解析worker ID：格式可能是 'gw0', 'gw1', 'gw2' 等
-        if worker_id.startswith('gw'):
-            try:
-                worker_num = int(worker_id[2:])  # 提取数字部分
-            except ValueError:
-                worker_num = 0
-        else:
-            try:
-                worker_num = int(worker_id)
-            except ValueError:
-                worker_num = 0
-        
-        if worker_num > 0:
-            # 并行模式：每个worker使用不同端口范围
-            base_port = 8051 + (worker_num * 10)  # 每个worker间隔10个端口
-        else:
-            # 串行模式：使用默认端口
-            base_port = 8051
-        
-        # 尝试绑定端口
-        for port_offset in range(10):  # 每个worker最多尝试10个端口
-            try_port = base_port + port_offset
-            try:
-                self.srv = make_server('127.0.0.1', try_port, app)
-                port = try_port
-                break
-            except OSError:
-                continue
-        else:
-            raise OSError(f"Worker {worker_id} 无法找到可用端口 (范围: {base_port}-{base_port+9})")
-        
-        self.port = port
-        self.ctx = app.app_context()
-        self.ctx.push()
-        self.is_ready = threading.Event()
-
+    """Flask应用服务器线程"""
+    
+    def __init__(self, app, port=None):
+        super().__init__()
+        self.app = app
+        self.port = port or find_available_port(*get_worker_port_range())
+        self.server = None
+        self._shutdown_event = threading.Event()
+    
     def run(self):
-        self.is_ready.set()
-        self.srv.serve_forever()
-
+        """运行Flask服务器"""
+        try:
+            self.server = self.app.run(
+                host='127.0.0.1',
+                port=self.port,
+                debug=False,
+                use_reloader=False,
+                threaded=True
+            )
+        except Exception as e:
+            print(f"Flask服务器启动失败: {e}")
+    
     def shutdown(self):
-        self.srv.shutdown()
-
-def wait_for_server(url, timeout=30):
-    """Wait for server to be ready"""
-    import requests
-    from requests.exceptions import RequestException
-    import time
-    import os
-    
-    # 临时禁用所有代理环境变量
-    original_proxies = {}
-    for proxy_var in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
-        if proxy_var in os.environ:
-            original_proxies[proxy_var] = os.environ[proxy_var]
-            del os.environ[proxy_var]
-    
-    try:
-        start_time = time.time()
-        while time.time() - start_time < timeout:
+        """关闭服务器"""
+        self._shutdown_event.set()
+        if self.server:
             try:
-                response = requests.get(url, timeout=5, proxies={'http': None, 'https': None})
-                if response.status_code == 200:
-                    return True
-            except RequestException:
-                time.sleep(0.5)
-        return False
-    finally:
-        # 恢复原始代理设置
-        for proxy_var, value in original_proxies.items():
-            os.environ[proxy_var] = value
+                # 发送SIGTERM信号
+                os.kill(os.getpid(), signal.SIGTERM)
+            except:
+                pass
 
 @pytest.fixture(scope="session")
 def chrome_options():
-    """配置Chrome选项"""
+    """Chrome浏览器选项配置"""
     options = Options()
-    # 移除headless模式
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=800,600")  # 设置更小的窗口尺寸
+    
+    # 基本配置
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-plugins')
+    options.add_argument('--disable-images')
+    options.add_argument('--disable-javascript')
+    options.add_argument('--disable-web-security')
+    options.add_argument('--allow-running-insecure-content')
+    options.add_argument('--disable-features=VizDisplayCompositor')
+    
+    # 窗口配置
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--start-maximized')
+    
+    # 性能优化
+    options.add_argument('--disable-background-timer-throttling')
+    options.add_argument('--disable-backgrounding-occluded-windows')
+    options.add_argument('--disable-renderer-backgrounding')
+    options.add_argument('--disable-features=TranslateUI')
+    options.add_argument('--disable-ipc-flooding-protection')
+    
+    # 日志配置
+    options.add_argument('--log-level=3')
+    options.add_argument('--silent')
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    
+    # 无头模式（可通过环境变量控制）
+    if os.environ.get('HEADLESS', 'true').lower() == 'true':
+        options.add_argument('--headless')
+    
     return options
 
 @pytest.fixture(scope="session")
 def chrome_service():
-    """配置Chrome服务"""
-    service = Service()
+    """Chrome服务配置"""
+    # 查找Chrome可执行文件
+    chrome_paths = [
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/snap/bin/chromium',
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  # macOS
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',  # Windows
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',  # Windows
+    ]
+    
+    chrome_path = None
+    for path in chrome_paths:
+        if os.path.exists(path):
+            chrome_path = path
+            break
+    
+    if not chrome_path:
+        # 尝试使用系统PATH中的Chrome
+        try:
+            result = subprocess.run(['which', 'google-chrome'], capture_output=True, text=True)
+            if result.returncode == 0:
+                chrome_path = result.stdout.strip()
+        except:
+            pass
+    
+    if not chrome_path:
+        # 最后尝试使用默认路径
+        chrome_path = 'google-chrome'
+    
+    print(f"使用Chrome路径: {chrome_path}")
+    
+    service = Service(executable_path=chrome_path)
     return service
+
+@pytest.fixture(scope="function")
+def selenium(chrome_options, chrome_service, flask_app):
+    """创建Selenium WebDriver实例 - 每个测试用例使用独立的浏览器实例"""
+    driver = WebDriver(service=chrome_service, options=chrome_options)
+    
+    # 为每个测试生成唯一的会话ID
+    import uuid
+    session_id = str(uuid.uuid4())
+    
+    # 导航到应用页面，添加会话ID参数
+    server_url = flask_app['url']
+    test_url = f"{server_url}?_sid={session_id}"
+    driver.get(test_url)
+    
+    print(f"🔗 测试会话ID: {session_id}")
+    
+    yield driver
+    driver.quit()
 
 @pytest.fixture(scope="session")
 def flask_app():
-    """启动Flask应用服务器 - 支持并发访问"""
-    server = FlaskThread(app.server)
+    """启动Flask应用服务器 - 每个worker使用独立的应用实例"""
+    from app import app as original_app
+    
+    # 为每个worker创建独立的应用实例
+    worker_id = os.environ.get('PYTEST_XDIST_WORKER', '0')
+    
+    # 确保每个worker有独立的会话管理
+    original_app.server.secret_key = f"test_secret_key_{worker_id}"
+    
+    server = FlaskThread(original_app.server)
     server.daemon = True
     server.start()
     
@@ -435,65 +231,209 @@ def flask_app():
     server_url = f"http://127.0.0.1:{server.port}"
     assert wait_for_server(server_url), f"Server failed to start within timeout on port {server.port}"
     
-    print(f"🌐 测试服务器启动成功: {server_url}")
-    print(f"🔄 支持并发访问，每个测试用例使用独立浏览器会话")
+    print(f"🌐 Worker {worker_id} 测试服务器启动成功: {server_url}")
+    print(f"🔄 使用会话隔离，每个测试有独立的graph实例")
     
     # 返回包含应用和服务器信息的字典
     yield {
-        'app': app,
+        'app': original_app,
         'server': server,
         'port': server.port,
-        'url': server_url
+        'url': server_url,
+        'worker_id': worker_id
     }
+    
+    # 清理
     server.shutdown()
+    server.join(timeout=5)
 
 @pytest.fixture(scope="function")
-def selenium(chrome_options, chrome_service, flask_app):
-    """创建Selenium WebDriver实例 - 每个测试用例使用独立的浏览器实例"""
-    driver = WebDriver(service=chrome_service, options=chrome_options)
-    
-    # 导航到应用页面
-    server_url = flask_app['url']
-    driver.get(server_url)
-    
-    yield driver
-    driver.quit()
+def wait():
+    """WebDriverWait实例"""
+    def _wait(driver, timeout=PAGE_LOAD_TIMEOUT):
+        return WebDriverWait(driver, timeout)
+    return _wait
 
-# dash-testing已经提供了内置的无头模式支持
-# 使用 pytest --headless 来启用无头模式
-# 这是dash-testing官方推荐的方式
+@pytest.fixture(scope="function")
+def clean_test_environment(selenium):
+    """清理测试环境"""
+    try:
+        # 清理浏览器状态
+        selenium.delete_all_cookies()
+        selenium.execute_script("window.localStorage.clear();")
+        selenium.execute_script("window.sessionStorage.clear();")
+        
+        # 刷新页面
+        selenium.refresh()
+        time.sleep(1)
+        
+        yield
+        
+    except Exception as e:
+        print(f"清理测试环境时出错: {e}")
+        yield
 
+@pytest.fixture(scope="session")
+def test_data():
+    """测试数据"""
+    return {
+        'nodes': [
+            {'name': '输入节点', 'description': '输入数据节点'},
+            {'name': '计算节点', 'description': '执行计算的节点'},
+            {'name': '输出节点', 'description': '输出结果节点'}
+        ],
+        'parameters': [
+            {'name': '参数1', 'value': 10, 'unit': 'mm'},
+            {'name': '参数2', 'value': 20, 'unit': 'kg'},
+            {'name': '参数3', 'value': 30, 'unit': 's'}
+        ]
+    }
+
+@pytest.fixture(scope="function")
+def setup_test_nodes(selenium, test_data):
+    """设置测试节点"""
+    try:
+        from utils import clean_state, create_node, wait_for_node_count
+        
+        # 清理状态
+        clean_state(selenium)
+        
+        # 创建测试节点
+        created_nodes = []
+        for node_data in test_data['nodes']:
+            if create_node(selenium, node_data['name'], node_data['description']):
+                created_nodes.append(node_data['name'])
+                wait_for_node_count(selenium, len(created_nodes))
+        
+        yield created_nodes
+        
+    except Exception as e:
+        print(f"设置测试节点失败: {e}")
+        yield []
+
+@pytest.fixture(scope="function")
+def setup_test_parameters(selenium, setup_test_nodes):
+    """设置测试参数"""
+    try:
+        from utils import add_parameter
+        
+        # 为第一个节点添加参数
+        if setup_test_nodes:
+            node_id = "1"  # 假设第一个节点的ID是1
+            for param_data in [
+                {'name': '参数1', 'value': 10, 'unit': 'mm'},
+                {'name': '参数2', 'value': 20, 'unit': 'kg'}
+            ]:
+                add_parameter(selenium, node_id, param_data['name'], param_data['value'], param_data['unit'])
+        
+        yield
+        
+    except Exception as e:
+        print(f"设置测试参数失败: {e}")
+        yield
+
+# 性能测试夹具
+@pytest.fixture(scope="function")
+def performance_timer():
+    """性能计时器"""
+    start_time = time.time()
+    
+    def get_elapsed():
+        return time.time() - start_time
+    
+    return get_elapsed
+
+# 错误处理夹具
+@pytest.fixture(scope="function")
+def error_handler():
+    """错误处理器"""
+    errors = []
+    
+    def add_error(error):
+        errors.append(error)
+    
+    def get_errors():
+        return errors
+    
+    return add_error, get_errors
+
+# 调试夹具
+@pytest.fixture(scope="function")
+def debug_info(selenium):
+    """调试信息收集器"""
+    def collect_info():
+        info = {
+            'url': selenium.current_url,
+            'title': selenium.title,
+            'page_source_length': len(selenium.page_source),
+            'cookies': len(selenium.get_cookies()),
+            'window_size': selenium.get_window_size(),
+            'screenshot': None
+        }
+        
+        try:
+            screenshot_path = f"debug_screenshot_{int(time.time())}.png"
+            selenium.save_screenshot(screenshot_path)
+            info['screenshot'] = screenshot_path
+        except:
+            pass
+        
+        return info
+    
+    return collect_info
+
+# 并行测试支持
 def pytest_configure(config):
-    """
-    Called before tests are collected.
-    """
-    is_ci = os.environ.get('TEST_ENV') == 'CI'
-    if is_ci:
-        # CI环境特定配置
-        os.environ['NO_BROWSER'] = '0'  # 允许使用浏览器
-        os.environ['DASH_TEST_CHROMEPATH'] = ''
-        os.environ['DASH_TESTING_MODE'] = 'True'
+    """pytest配置"""
+    # 添加自定义标记
+    config.addinivalue_line("markers", "slow: 标记为慢速测试")
+    config.addinivalue_line("markers", "integration: 标记为集成测试")
+    config.addinivalue_line("markers", "ui: 标记为UI测试")
+    config.addinivalue_line("markers", "headless: 标记为无头模式测试")
 
-@pytest.fixture(scope='session')
-def dash_thread_server():
-    """
-    启动测试服务器的fixture
-    """
-    is_ci = os.environ.get('TEST_ENV') == 'CI'
-    options = {'headless': True} if is_ci else {}
+def pytest_collection_modifyitems(config, items):
+    """修改测试项"""
+    for item in items:
+        # 为UI测试添加超时
+        if "ui" in item.keywords or "selenium" in str(item.fspath):
+            item.add_marker(pytest.mark.timeout(60))
+        
+        # 为集成测试添加标记
+        if "integration" in item.keywords:
+            item.add_marker(pytest.mark.integration)
+
+# 测试报告配置
+def pytest_html_report_title(report):
+    """HTML报告标题"""
+    report.title = "ArchDash 测试报告"
+
+def pytest_html_results_table_header(cells):
+    """HTML结果表头"""
+    cells.insert(2, html.th('描述'))
+    cells.pop()
+
+def pytest_html_results_table_row(report, cells):
+    """HTML结果表行"""
+    cells.insert(2, html.td(report.description))
+    cells.pop()
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """生成测试报告"""
+    outcome = yield
+    report = outcome.get_result()
     
-    app = import_app('app')
+    # 添加描述
+    report.description = str(item.function.__doc__)
     
-    yield app.server
-
-@pytest.fixture
-def test_app_context():
-    """提供测试应用上下文"""
-    from app import app
-    with app.test_request_context():
-        yield app
-
-@pytest.fixture
-def app_server_driver(selenium, flask_app):
-    """提供应用服务器和驱动器的组合"""
-    return selenium, flask_app['url'] 
+    # 添加截图（如果测试失败）
+    if report.when == "call" and report.failed:
+        try:
+            # 获取selenium实例
+            selenium = item.funcargs.get('selenium')
+            if selenium:
+                screenshot_path = f"failure_{item.name}_{int(time.time())}.png"
+                selenium.save_screenshot(screenshot_path)
+                report.extra = [pytest_html.extras.image(screenshot_path)]
+        except:
+            pass 

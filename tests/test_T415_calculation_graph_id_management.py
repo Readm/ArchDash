@@ -7,7 +7,6 @@ T415 - 测试
 
 import sys
 import os
-from app import graph
 from models import Node, Parameter, CalculationGraph
 
 def test_calculation_graph_id_management():

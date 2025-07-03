@@ -16,7 +16,6 @@ def test_example_basic():
     
     try:
         # 1. 测试函数导入
-        from app import create_example_soc_graph
         print("✅ 示例函数导入成功")
         
         # 2. 测试函数执行
@@ -42,7 +41,6 @@ def test_example_basic():
         print("✅ 多次调用一致性验证通过")
         
         # 6. 测试性能（应该在合理时间内完成）
-        import time
         start_time = time.time()
         create_example_soc_graph()
         end_time = time.time()

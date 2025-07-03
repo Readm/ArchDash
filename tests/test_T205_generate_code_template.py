@@ -18,9 +18,6 @@ from models import CalculationGraph, Node, Parameter
 import dash_bootstrap_components as dbc
 import numpy as np
 import app
-import app
-import app
-import app
 
 def test_generate_code_template():
     """测试生成代码模板的函数"""

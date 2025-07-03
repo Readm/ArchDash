@@ -29,8 +29,16 @@ def test_unlink_icon_click_reconnect(app_server_driver):
 
     # 设置并手动更改参数以显示图标
     test_data = setup_test_nodes_with_ui(driver, wait)
-    calc_node_id = test_data['calc_node_params'][0]
-    calc_param_name = test_data['calc_node_params'][1]
+    assert test_data is not None, "测试数据设置失败"
+    
+    # 获取计算节点（假设是第二个节点）
+    nodes = driver.find_elements(By.CSS_SELECTOR, ".node")
+    assert len(nodes) >= 2, "应该有至少2个节点"
+    
+    # 获取计算节点的ID
+    calc_node = nodes[1]  # 计算节点
+    calc_node_id = calc_node.get_attribute("data-dash-id")
+    calc_param_name = "计算参数"  # 假设的参数名
     
     # 修复: 使用正确的CSS选择器
     calc_input_selector = f"div[data-dash-id*='{calc_node_id}'] .param-input"

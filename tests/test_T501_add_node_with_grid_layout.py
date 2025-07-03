@@ -1,75 +1,56 @@
-from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-T501 - 测试
-从原始测试文件分离出的独立测试
+T501 - 测试添加节点和网格布局
+使用会话隔离的graph实例
 """
 
 import pytest
+import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
-from selenium.webdriver.common.keys import Keys
-import time
-from app import app, graph, layout_manager
-from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count
+from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count, get_node_count
 
-def test_add_node_with_grid_layout(selenium):
-    """测试添加节点和网格布局"""
+def test_add_node_with_grid_layout(selenium, flask_app):
+    """测试添加节点并验证网格布局"""
     try:
-        print("\n=== 开始测试添加节点和网格布局 ===")
+        print("\n========== 开始网格布局节点添加测试 ==========")
+        
+        # 清理状态
         clean_state(selenium)
-        print("清理状态完成")
+        time.sleep(2)
         
-        create_node(selenium, "测试节点", "这是一个测试节点")
-        print("节点创建完成")
-        
+        # 创建第一个节点
+        print("\n第1步：创建第一个节点")
+        assert create_node(selenium, "节点1", "第一个测试节点"), "第一个节点创建失败"
         wait_for_node_count(selenium, 1)
-        print("等待节点数量验证完成")
         
-        print("\n尝试查找节点...")
-        # 尝试所有可能的选择器
-        selectors = [
-            "[data-dash-id*='node']",
-            ".node",
-            ".node-container",
-            "[id^='node-']"
-        ]
+        # 创建第二个节点
+        print("\n第2步：创建第二个节点")
+        assert create_node(selenium, "节点2", "第二个测试节点"), "第二个节点创建失败"
+        wait_for_node_count(selenium, 2)
         
-        node = None
-        for selector in selectors:
-            print(f"\n尝试选择器: {selector}")
-            elements = selenium.find_elements(By.CSS_SELECTOR, selector)
-            print(f"找到 {len(elements)} 个元素")
-            for i, elem in enumerate(elements):
-                print(f"元素 {i+1}:")
-                print(f"- class: {elem.get_attribute('class')}")
-                print(f"- id: {elem.get_attribute('id')}")
-                print(f"- text: {elem.text}")
-                print(f"- 是否显示: {elem.is_displayed()}")
-                if "测试节点" in elem.text and elem.is_displayed():
-                    node = elem
-                    print("✅ 找到目标节点!")
-                    break
-            if node:
-                break
-                
-        if not node:
-            raise Exception("未找到包含'测试节点'文本的可见节点")
-            
-        assert "测试节点" in node.text, "节点名称应该正确显示"
-        print("✅ 节点名称验证通过")
+        # 创建第三个节点
+        print("\n第3步：创建第三个节点")
+        assert create_node(selenium, "节点3", "第三个测试节点"), "第三个节点创建失败"
+        wait_for_node_count(selenium, 3)
         
-        print("✅ 添加节点和网格布局测试通过")
+        # 验证节点数量
+        final_count = get_node_count(selenium)
+        assert final_count == 3, f"期望3个节点，实际找到 {final_count} 个"
+        
+        # 验证页面内容
+        page_source = selenium.page_source
+        assert "节点1" in page_source, "页面应该包含节点1"
+        assert "节点2" in page_source, "页面应该包含节点2"
+        assert "节点3" in page_source, "页面应该包含节点3"
+        
+        print("✅ 网格布局节点添加测试通过")
         
     except Exception as e:
-        print(f"\n❌ 测试失败: {str(e)}")
-        print("\n当前页面HTML:")
-        print(selenium.page_source)
-        pytest.fail(f"添加节点和网格布局测试失败: {str(e)}")
+        print(f"❌ 网格布局节点添加测试失败: {e}")
+        raise
 
 if __name__ == "__main__":
-    test_add_node_with_grid_layout()
-    print("✅ T501 测试通过")
+    pytest.main([__file__, "-v"])

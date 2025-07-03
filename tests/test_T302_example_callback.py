@@ -15,7 +15,6 @@ def test_example_callback():
     print("\n🧪 测试Example按钮回调...")
     
     try:
-        from app import app
         
         # 检查回调是否存在
         callbacks = app.callback_map

@@ -13,14 +13,11 @@ from dash import callback
 from models import CalculationGraph, CanvasLayoutManager
 from session_graph import set_graph, get_graph
 from app import create_example_soc_graph
-from app import create_example_soc_graph
-from app import create_example_soc_graph
 import time
 
 def test_example_performance():
     """测试示例创建的性能"""
     try:
-        import time
         
         # 记录开始时间
         start_time = time.time()

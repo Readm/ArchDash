@@ -18,9 +18,6 @@ from models import CalculationGraph, Node, Parameter
 import dash_bootstrap_components as dbc
 import numpy as np
 import app
-import app
-import app
-import app
 
 def test_create_empty_plot():
     """测试创建空图表对象"""

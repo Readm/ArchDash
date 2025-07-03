@@ -28,9 +28,11 @@ def test_headless_basic_operations(selenium):
         wait_for_node_count(selenium, 1)
         
         # 验证节点创建
-        node = wait_for_element(selenium, By.CSS_SELECTOR, ".node")
+        node = wait_for_element(selenium, By.CSS_SELECTOR, '[data-testid="node-container"]')
+        assert node is not None, "节点元素应该存在"
         assert node.is_displayed(), "节点应该可见"
-        assert "测试节点" in node.text, "节点名称应该正确显示"
+        node_text = node.text or ""
+        assert "测试节点" in node_text, f"节点名称应该正确显示，实际显示: {node_text}"
         
         print("✅ 无头模式基本操作测试通过")
         

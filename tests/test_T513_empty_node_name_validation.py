@@ -24,13 +24,16 @@ def test_empty_node_name_validation(selenium):
         add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
         add_node_btn.click()
         
+        time.sleep(1)  # 等待模态框加载
         modal = wait_for_element(selenium, By.ID, "node-add-modal")
         save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
         save_btn.click()
         
         # 验证错误提示
-        error_msg = wait_for_element(selenium, By.CSS_SELECTOR, ".alert-danger")
-        assert "不能为空" in error_msg.text, "应该显示名称为空错误"
+        error_msg = wait_for_element(selenium, By.CSS_SELECTOR, '[data-testid="error-message"]')
+        assert error_msg is not None, "错误消息元素应该存在"
+        error_text = error_msg.text or ""
+        assert "不能为空" in error_text, f"应该显示名称为空错误，实际显示: {error_text}"
         
         print("✅ 空节点名称验证测试通过")
         
