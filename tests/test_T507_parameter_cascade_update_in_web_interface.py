@@ -1,4 +1,4 @@
-from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count, add_parameter
+from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count, add_parameter, get_parameter_input_box
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -34,7 +34,11 @@ def test_parameter_cascade_update_in_web_interface(selenium):
             time.sleep(2)  # 等待节点完全渲染
             
             # 添加参数
-            param_input = add_parameter(selenium, i)
+            node_id = str(i + 1)  # 节点ID通常是从1开始的
+            add_parameter(selenium, node_id, f"test_param_{i+1}", 100, "unit")
+            
+            # 获取参数输入框（参数值输入框）
+            param_input = get_parameter_input_box(selenium, node_id, f"test_param_{i+1}", "param-value")
             assert param_input is not None, "参数输入框应该出现"
             print(f"为节点 {i+1} 添加了参数")
             time.sleep(1)  # 等待参数添加完成

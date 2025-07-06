@@ -1,4 +1,4 @@
-from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count, add_parameter
+from utils import clean_state, wait_for_page_load, create_node, wait_for_element, wait_for_clickable, wait_for_node_count, add_parameter, get_parameter_input_box
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -28,7 +28,10 @@ def test_headless_parameter_operations(selenium):
         wait_for_node_count(selenium, 1)
         
         # 添加参数
-        param_input = add_parameter(selenium)
+        add_parameter(selenium, "1", "test_param", 100, "unit")
+        
+        # 获取参数输入框（参数值输入框）
+        param_input = get_parameter_input_box(selenium, "1", "test_param", "param-value")
         assert param_input is not None and param_input.is_displayed(), "参数输入框应该出现且可见"
         
         # 输入参数值

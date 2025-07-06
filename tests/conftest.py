@@ -21,232 +21,31 @@ from selenium.webdriver.common.keys import Keys
 # 确保可以导入项目模块
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# ==================== 辅助函数 ====================
-
-def clean_state(selenium):
-    """清理测试状态"""
-    try:
-        # 清理应用状态
-        from app import graph, layout_manager
-        graph.nodes.clear()
-        layout_manager.node_positions.clear()
-        layout_manager.position_nodes.clear()
-        layout_manager._init_grid()
-        graph.recently_updated_params.clear()
-        
-        # 刷新页面
-        selenium.refresh()
-        time.sleep(1)
-        
-        # 等待页面加载完成
-        wait_for_page_load(selenium)
-        
-    except Exception as e:
-        print(f"清理状态时出错: {e}")
-
-def wait_for_page_load(selenium, timeout=5):
-    """等待页面加载完成"""
-    try:
-        WebDriverWait(selenium, timeout).until(
-            lambda driver: driver.execute_script("return document.readyState") == "complete"
-        )
-        time.sleep(0.2)  # 减少额外等待时间
-    except TimeoutException:
-        print("页面加载超时")
-
-def wait_for_element(selenium, by, value, timeout=5):
-    """等待元素出现并返回"""
-    try:
-        element = WebDriverWait(selenium, timeout).until(
-            EC.presence_of_element_located((by, value))
-        )
-        return element
-    except TimeoutException:
-        print(f"等待元素超时: {by}={value}")
-        return None
-
-def wait_for_clickable(selenium, by, value, timeout=5):
-    """等待元素可点击并返回"""
-    try:
-        element = WebDriverWait(selenium, timeout).until(
-            EC.element_to_be_clickable((by, value))
-        )
-        return element
-    except TimeoutException:
-        print(f"wait_for_clickable超时: {by}={value}")
-        return None
-
-def wait_for_visible(selenium, by, value, timeout=10):
-    """等待元素可见并返回"""
-    try:
-        element = WebDriverWait(selenium, timeout).until(
-            EC.visibility_of_element_located((by, value))
-        )
-        return element
-    except TimeoutException:
-        print(f"等待元素可见超时: {by}={value}")
-        return None
-
-def create_node(selenium, name, description):
-    """创建节点"""
-    try:
-        # 等待添加节点按钮可点击
-        add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
-        add_node_btn.click()
-        
-        # 等待模态框出现
-        modal = wait_for_element(selenium, By.ID, "node-add-modal")
-        assert modal is not None and modal.is_displayed(), "节点添加模态框应该出现"
-        
-        # 输入节点信息
-        name_input = wait_for_element(selenium, By.ID, "node-add-name")
-        name_input.clear()
-        name_input.send_keys(name)
-        
-        desc_input = wait_for_element(selenium, By.ID, "node-add-description")
-        desc_input.clear()
-        desc_input.send_keys(description)
-        
-        # 保存节点
-        save_btn = wait_for_clickable(selenium, By.ID, "node-add-save")
-        save_btn.click()
-        
-        # 等待模态框消失
-        WebDriverWait(selenium, 10).until_not(
-            EC.visibility_of_element_located((By.ID, "node-add-modal"))
-        )
-        
-        return True
-    except Exception as e:
-        print(f"创建节点失败: {e}")
-        return False
-
-def wait_for_node_count(selenium, expected_count, timeout=10):
-    """等待节点数量达到预期值"""
-    try:
-        WebDriverWait(selenium, timeout).until(
-            lambda driver: len(driver.find_elements(By.CSS_SELECTOR, ".node")) == expected_count
-        )
-        return True
-    except TimeoutException:
-        print(f"等待节点数量超时，期望: {expected_count}")
-        return False
-
-def delete_node(selenium, node_id):
-    """删除指定节点"""
-    try:
-        # 点击节点的下拉菜单
-        dropdown_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node_id}'][id*='dropdown']")
-        dropdown_btn.click()
-        
-        # 点击删除按钮
-        delete_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node_id}'][id*='delete']")
-        delete_btn.click()
-        
-        # 等待节点消失
-        WebDriverWait(selenium, 10).until_not(
-            EC.presence_of_element_located((By.CSS_SELECTOR, f".node[data-dash-id*='{node_id}']"))
-        )
-        
-        return True
-    except Exception as e:
-        print(f"删除节点失败: {e}")
-        return False
-
-def add_parameter(selenium, node_id, param_name, param_value, param_unit):
-    """为节点添加参数"""
-    try:
-        # 点击节点的参数添加按钮
-        add_param_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, f"button[data-dash-id*='{node_id}'][id*='add-param']")
-        add_param_btn.click()
-        
-        # 等待参数添加模态框
-        modal = wait_for_element(selenium, By.ID, "parameter-add-modal")
-        assert modal.is_displayed(), "参数添加模态框应该出现"
-        
-        # 输入参数信息
-        name_input = wait_for_element(selenium, By.ID, "parameter-add-name")
-        name_input.clear()
-        name_input.send_keys(param_name)
-        
-        value_input = wait_for_element(selenium, By.ID, "parameter-add-value")
-        value_input.clear()
-        value_input.send_keys(str(param_value))
-        
-        unit_input = wait_for_element(selenium, By.ID, "parameter-add-unit")
-        unit_input.clear()
-        unit_input.send_keys(param_unit)
-        
-        # 保存参数
-        save_btn = wait_for_clickable(selenium, By.ID, "parameter-add-save")
-        save_btn.click()
-        
-        # 等待模态框消失
-        WebDriverWait(selenium, 10).until_not(
-            EC.visibility_of_element_located((By.ID, "parameter-add-modal"))
-        )
-        
-        return True
-    except Exception as e:
-        print(f"添加参数失败: {e}")
-        return False
-
-def edit_parameter(selenium, node_id, param_name, new_value):
-    """编辑参数值"""
-    try:
-        # 找到参数输入框
-        param_input = wait_for_element(selenium, By.CSS_SELECTOR, f"input[data-dash-id*='{node_id}'][data-param='{param_name}']")
-        param_input.clear()
-        param_input.send_keys(str(new_value))
-        
-        # 触发值变化事件
-        param_input.send_keys(Keys.TAB)
-        time.sleep(0.5)
-        
-        return True
-    except Exception as e:
-        print(f"编辑参数失败: {e}")
-        return False
-
-def get_node_element(selenium, node_name):
-    """获取指定名称的节点元素"""
-    try:
-        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
-        for node in nodes:
-            if node_name in node.text:
-                return node
-        return None
-    except Exception as e:
-        print(f"获取节点元素失败: {e}")
-        return None
-
-
+# ==================== 测试辅助函数已移至utils.py ====================
+# 所有测试辅助函数都已迁移到utils.py中，conftest.py只保留pytest fixtures
 
 # ==================== 测试夹具 ====================
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown():
-    """每个测试前后的设置和清理"""
-    
-    # 清理全局状态
+    """全局测试设置和清理"""
+    # 测试前设置
     try:
         from app import graph, layout_manager
-        
+        # 清理状态但不影响其他并发测试
         graph.nodes.clear()
         layout_manager.node_positions.clear()
         layout_manager.position_nodes.clear()
         layout_manager._init_grid()
         graph.recently_updated_params.clear()
     except ImportError:
-        # 如果导入失败，跳过清理
         pass
     
-    yield  # 运行测试
+    yield
     
-    # 测试后清理（如果需要）
+    # 测试后清理
     try:
         from app import graph, layout_manager
-        
         graph.nodes.clear()
         layout_manager.node_positions.clear()
         layout_manager.position_nodes.clear()
@@ -449,51 +248,52 @@ def flask_app():
 
 @pytest.fixture(scope="function")
 def selenium(chrome_options, chrome_service, flask_app):
-    """创建Selenium WebDriver实例 - 每个测试用例使用独立的浏览器实例"""
-    driver = WebDriver(service=chrome_service, options=chrome_options)
+    """为每个测试提供独立的浏览器实例"""
+    driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     
-    # 导航到应用页面
+    # 生成唯一的会话ID
+    import uuid
+    session_id = str(uuid.uuid4())
     server_url = flask_app['url']
-    driver.get(server_url)
+    url = f"{server_url}?_sid={session_id}"
+    
+    driver.get(url)
+    time.sleep(1)  # 等待页面初始化
     
     yield driver
+    
+    # 清理
     driver.quit()
 
-# dash-testing已经提供了内置的无头模式支持
-# 使用 pytest --headless 来启用无头模式
-# 这是dash-testing官方推荐的方式
-
 def pytest_configure(config):
-    """
-    Called before tests are collected.
-    """
-    is_ci = os.environ.get('TEST_ENV') == 'CI'
-    if is_ci:
-        # CI环境特定配置
-        os.environ['NO_BROWSER'] = '0'  # 允许使用浏览器
-        os.environ['DASH_TEST_CHROMEPATH'] = ''
-        os.environ['DASH_TESTING_MODE'] = 'True'
+    """全局pytest配置"""
+    # 设置测试环境变量
+    os.environ['TESTING'] = 'True'
+    
+    # 配置日志级别
+    import logging
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 @pytest.fixture(scope='session')
 def dash_thread_server():
-    """
-    启动测试服务器的fixture
-    """
-    is_ci = os.environ.get('TEST_ENV') == 'CI'
-    options = {'headless': True} if is_ci else {}
-    
-    app = import_app('app')
-    
-    yield app.server
+    """为Dash应用提供线程化服务器"""
+    port = 8052  # 不同的端口避免冲突
+    server = make_server('127.0.0.1', port, app.server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(2)  # 等待服务器启动
+    yield f"http://127.0.0.1:{port}"
+    server.shutdown()
 
 @pytest.fixture
 def test_app_context():
-    """提供测试应用上下文"""
-    from app import app
-    with app.test_request_context():
-        yield app
+    """提供应用上下文"""
+    with app.app_context():
+        yield
 
 @pytest.fixture
 def app_server_driver(selenium, flask_app):
     """提供应用服务器和驱动器的组合"""
+    # 为了保持向后兼容，返回两个值：driver 和 url
     return selenium, flask_app['url'] 

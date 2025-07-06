@@ -261,4 +261,201 @@ def safe_click(selenium, element):
         print(f"安全点击失败: {e}")
         return False
 
+def get_parameter_input_box(selenium, node_id=None, param_name=None, input_type="param-value"):
+    """获取参数输入框元素，用于测试中直接操作参数
+    
+    Args:
+        selenium: WebDriver实例
+        node_id: 节点ID（可选）
+        param_name: 参数名称（可选，暂时未使用，因为需要根据索引查找）
+        input_type: 输入框类型，"param-value" 或 "param-name"
+    
+    Returns:
+        WebElement: 参数输入框元素，如果未找到则返回None
+    """
+    try:
+        print(f"🔍 开始查找参数输入框: 节点{node_id}, 类型{input_type}")
+        
+        # 首先等待页面稳定
+        time.sleep(2)
+        
+        # 方法1: 使用简化的选择器，专注于可交互的输入框
+        if node_id:
+            # 简化选择器：查找节点内的可见参数输入框
+            simple_selectors = [
+                'input.param-input',  # 任何param-input
+                f'input[data-dash-id*="{node_id}"]',  # 带有节点ID的输入框
+                f'div[data-dash-id*="{node_id}"] input',  # 节点内的任何输入框
+            ]
+            
+            for selector in simple_selectors:
+                try:
+                    # 查找所有匹配的输入框
+                    elements = selenium.find_elements(By.CSS_SELECTOR, selector)
+                    print(f"🔍 选择器 '{selector}' 找到 {len(elements)} 个元素")
+                    
+                    for i, element in enumerate(elements):
+                        # 检查元素是否可见和可交互
+                        if element.is_displayed() and element.is_enabled():
+                            try:
+                                # 尝试滚动到元素
+                                selenium.execute_script("arguments[0].scrollIntoView(true);", element)
+                                time.sleep(0.5)
+                                
+                                # 检查是否真的可以交互
+                                WebDriverWait(selenium, 3).until(
+                                    EC.element_to_be_clickable(element)
+                                )
+                                
+                                print(f"✅ 找到可交互的参数输入框: 元素{i}")
+                                return element
+                                
+                            except Exception as e:
+                                print(f"⚠️ 元素{i}不可交互: {e}")
+                                continue
+                except Exception as e:
+                    print(f"⚠️ 选择器失败: {selector}, 错误: {e}")
+                    continue
+        
+        # 方法2: 全局查找第一个可交互的param-input
+        try:
+            all_param_inputs = selenium.find_elements(By.CSS_SELECTOR, 'input.param-input')
+            print(f"🔍 全局找到 {len(all_param_inputs)} 个 param-input 元素")
+            
+            for i, element in enumerate(all_param_inputs):
+                if element.is_displayed() and element.is_enabled():
+                    try:
+                        # 滚动到元素并等待可交互
+                        selenium.execute_script("arguments[0].scrollIntoView(true);", element)
+                        time.sleep(0.5)
+                        
+                        WebDriverWait(selenium, 3).until(
+                            EC.element_to_be_clickable(element)
+                        )
+                        
+                        print(f"✅ 全局找到可交互的参数输入框: 元素{i}")
+                        return element
+                        
+                    except Exception as e:
+                        print(f"⚠️ 全局元素{i}不可交互: {e}")
+                        continue
+        except Exception as e:
+            print(f"⚠️ 全局查找失败: {e}")
+        
+        # 方法3: 最后的备用方法
+        print("🔍 尝试备用选择器...")
+        fallback_selectors = [
+            'input[type="text"]:not([style*="display: none"])',
+            'input[type="number"]:not([style*="display: none"])',
+            'input[type="text"]',
+            'input'
+        ]
+        
+        for selector in fallback_selectors:
+            try:
+                elements = selenium.find_elements(By.CSS_SELECTOR, selector)
+                print(f"🔍 备用选择器 '{selector}' 找到 {len(elements)} 个元素")
+                
+                for element in elements:
+                    if element.is_displayed() and element.is_enabled():
+                        try:
+                            selenium.execute_script("arguments[0].scrollIntoView(true);", element)
+                            time.sleep(0.5)
+                            
+                            WebDriverWait(selenium, 2).until(
+                                EC.element_to_be_clickable(element)
+                            )
+                            
+                            print(f"✅ 备用方法找到可交互输入框")
+                            return element
+                            
+                        except:
+                            continue
+            except Exception as e:
+                print(f"⚠️ 备用选择器失败: {selector}, 错误: {e}")
+                continue
+        
+        print(f"❌ 未找到可交互的参数输入框: 节点{node_id}, 类型{input_type}")
+        
+        # 调试信息：详细分析页面状态
+        print("\n🔍 页面调试信息:")
+        all_inputs = selenium.find_elements(By.TAG_NAME, "input")
+        print(f"   总输入框数量: {len(all_inputs)}")
+        
+        visible_inputs = [inp for inp in all_inputs if inp.is_displayed()]
+        print(f"   可见输入框数量: {len(visible_inputs)}")
+        
+        enabled_inputs = [inp for inp in visible_inputs if inp.is_enabled()]
+        print(f"   可用输入框数量: {len(enabled_inputs)}")
+        
+        for i, inp in enumerate(enabled_inputs[:5]):  # 只显示前5个
+            try:
+                dash_id = inp.get_attribute("data-dash-id")
+                class_name = inp.get_attribute("class")
+                value = inp.get_attribute("value")
+                print(f"   输入框{i}: class='{class_name}', value='{value}', dash_id='{dash_id[:50]}...' ")
+            except:
+                print(f"   输入框{i}: 无法获取属性")
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ 获取参数输入框失败: {e}")
+        import traceback
+        print(f"完整错误: {traceback.format_exc()}")
+        return None
+
+def add_parameter_and_get_input(selenium, node_id, param_name="test_param", param_value=100, param_unit="unit"):
+    """添加参数并返回参数输入框元素
+    
+    Args:
+        selenium: WebDriver实例
+        node_id: 节点ID
+        param_name: 参数名称
+        param_value: 参数值
+        param_unit: 参数单位
+    
+    Returns:
+        WebElement: 参数输入框元素，如果失败则返回None
+    """
+    try:
+        print(f"🔄 开始添加参数: 节点{node_id}, 名称{param_name}")
+        
+        # 先添加参数
+        success = add_parameter(selenium, node_id, param_name, param_value, param_unit)
+        if not success:
+            print(f"❌ 添加参数失败")
+            return None
+        
+        print(f"✅ 参数添加成功，等待页面更新...")
+        
+        # 等待更长时间确保参数已经添加并渲染完成
+        time.sleep(3)
+        
+        # 多次尝试获取参数输入框
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            print(f"🔍 第{attempt+1}次尝试获取参数输入框...")
+            
+            # 获取参数输入框（参数值输入框）
+            param_input = get_parameter_input_box(selenium, node_id, param_name, "param-value")
+            
+            if param_input:
+                print(f"✅ 第{attempt+1}次尝试成功获取参数输入框")
+                return param_input
+            
+            # 如果失败，等待一段时间再重试
+            if attempt < max_attempts - 1:
+                print(f"⚠️ 第{attempt+1}次尝试失败，等待2秒后重试...")
+                time.sleep(2)
+        
+        print(f"❌ 经过{max_attempts}次尝试，仍无法获取参数输入框")
+        return None
+        
+    except Exception as e:
+        print(f"❌ 添加参数并获取输入框失败: {e}")
+        import traceback
+        print(f"完整错误: {traceback.format_exc()}")
+        return None
+
  
