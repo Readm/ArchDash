@@ -27,7 +27,7 @@ def test_multiple_nodes_grid_layout(selenium):
         # 使用更健壮的节点查找方法
         nodes = selenium.find_elements(By.CSS_SELECTOR, "[data-dash-id*='node']")
         if not nodes:
-            nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
+            nodes = selenium.find_elements(By.CSS_SELECTOR, ".node-container")
         assert len(nodes) == 3, "应该有3个节点"
         
         print("✅ 多节点网格布局测试通过")

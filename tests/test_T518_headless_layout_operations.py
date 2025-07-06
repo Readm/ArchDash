@@ -29,7 +29,7 @@ def test_headless_layout_operations(selenium):
             wait_for_node_count(selenium, i + 1)
         
         # 验证节点创建
-        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node")
+        nodes = selenium.find_elements(By.CSS_SELECTOR, ".node-container")
         visible_nodes = [n for n in nodes if n.is_displayed()]
         assert len(visible_nodes) == 3, "应该有3个可见节点"
         

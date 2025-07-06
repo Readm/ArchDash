@@ -28,7 +28,7 @@ def test_headless_basic_operations(selenium):
         wait_for_node_count(selenium, 1)
         
         # 验证节点创建
-        node = wait_for_element(selenium, By.CSS_SELECTOR, ".node")
+        node = wait_for_element(selenium, By.CSS_SELECTOR, ".node-container")
         assert node.is_displayed(), "节点应该可见"
         assert "测试节点" in node.text, "节点名称应该正确显示"
         

@@ -38,21 +38,59 @@ def setup_and_teardown():
         layout_manager.position_nodes.clear()
         layout_manager._init_grid()
         graph.recently_updated_params.clear()
+        
+        # 清理任何残留的回调或状态
+        if hasattr(graph, '_callbacks'):
+            graph._callbacks.clear()
+        if hasattr(graph, '_dependency_cache'):
+            graph._dependency_cache.clear()
+        
+        # 强制垃圾回收
+        import gc
+        gc.collect()
+        
     except ImportError:
         pass
+    except Exception as e:
+        print(f"⚠️ 测试前状态清理异常: {e}")
     
     yield
     
     # 测试后清理
     try:
         from app import graph, layout_manager
+        
+        # 完全清理状态
         graph.nodes.clear()
         layout_manager.node_positions.clear()
         layout_manager.position_nodes.clear()
         layout_manager._init_grid()
         graph.recently_updated_params.clear()
+        
+        # 清理任何残留的回调或状态
+        if hasattr(graph, '_callbacks'):
+            graph._callbacks.clear()
+        if hasattr(graph, '_dependency_cache'):
+            graph._dependency_cache.clear()
+        
+        # 重置应用状态到初始状态
+        try:
+            if hasattr(graph, 'reset'):
+                graph.reset()
+            if hasattr(layout_manager, 'reset'):
+                layout_manager.reset()
+        except Exception as e:
+            print(f"⚠️ 应用状态重置异常: {e}")
+        
+        # 强制垃圾回收
+        import gc
+        gc.collect()
+        
     except ImportError:
         pass
+    except Exception as e:
+        print(f"⚠️ 测试后状态清理异常: {e}")
+        # 如果清理失败，记录但不中断测试
 
 # 用于测试的辅助函数
 def create_test_node(name="测试节点", description="测试描述"):
@@ -166,16 +204,39 @@ class FlaskThread(threading.Thread):
             raise OSError(f"Worker {worker_id} 无法找到可用端口 (范围: {base_port}-{base_port+9})")
         
         self.port = port
+        self.app = app
         self.ctx = app.app_context()
         self.ctx.push()
         self.is_ready = threading.Event()
+        self.is_shutdown = threading.Event()
+        self.exception = None  # 记录异常
 
     def run(self):
-        self.is_ready.set()
-        self.srv.serve_forever()
+        try:
+            self.is_ready.set()
+            self.srv.serve_forever()
+        except Exception as e:
+            self.exception = e
+            print(f"❌ Flask服务器异常: {e}")
+        finally:
+            self.is_shutdown.set()
 
     def shutdown(self):
-        self.srv.shutdown()
+        try:
+            self.srv.shutdown()
+            self.is_shutdown.wait(timeout=10)  # 等待关闭完成
+        except Exception as e:
+            print(f"⚠️ 关闭Flask服务器时出错: {e}")
+    
+    def health_check(self):
+        """检查服务器健康状态"""
+        if self.exception:
+            return False, f"服务器异常: {self.exception}"
+        if not self.is_ready.is_set():
+            return False, "服务器未就绪"
+        if self.is_shutdown.is_set():
+            return False, "服务器已关闭"
+        return True, "服务器正常"
 
 def wait_for_server(url, timeout=30):
     """Wait for server to be ready"""
@@ -206,6 +267,48 @@ def wait_for_server(url, timeout=30):
         for proxy_var, value in original_proxies.items():
             os.environ[proxy_var] = value
 
+def check_flask_health(flask_app):
+    """检查Flask应用健康状态"""
+    try:
+        server = flask_app['server']
+        is_healthy, message = server.health_check()
+        if not is_healthy:
+            print(f"⚠️ Flask应用健康检查失败: {message}")
+            return False
+        
+        # 尝试访问服务器
+        import requests
+        import os
+        
+        # 临时禁用所有代理环境变量
+        original_proxies = {}
+        for proxy_var in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
+            if proxy_var in os.environ:
+                original_proxies[proxy_var] = os.environ[proxy_var]
+                del os.environ[proxy_var]
+        
+        try:
+            response = requests.get(
+                flask_app['url'], 
+                timeout=5, 
+                proxies={'http': None, 'https': None}
+            )
+            if response.status_code != 200:
+                print(f"⚠️ Flask应用响应异常: {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"⚠️ Flask应用连接失败: {e}")
+            return False
+        finally:
+            # 恢复原始代理设置
+            for proxy_var, value in original_proxies.items():
+                os.environ[proxy_var] = value
+        
+        return True
+    except Exception as e:
+        print(f"⚠️ Flask应用健康检查异常: {e}")
+        return False
+
 @pytest.fixture(scope="session")
 def chrome_options():
     """配置Chrome选项"""
@@ -232,38 +335,97 @@ def flask_app():
     
     # Wait for server to be ready using the actual port
     server_url = f"http://127.0.0.1:{server.port}"
-    assert wait_for_server(server_url), f"Server failed to start within timeout on port {server.port}"
+    
+    # 增加健康检查
+    if not wait_for_server(server_url):
+        # 如果服务器启动失败，尝试获取异常信息
+        if server.exception:
+            raise Exception(f"Flask服务器启动失败: {server.exception}")
+        else:
+            raise Exception(f"Flask服务器在端口{server.port}上启动超时")
     
     print(f"🌐 测试服务器启动成功: {server_url}")
     print(f"🔄 支持并发访问，每个测试用例使用独立浏览器会话")
     
     # 返回包含应用和服务器信息的字典
-    yield {
+    flask_app_data = {
         'app': app,
         'server': server,
         'port': server.port,
         'url': server_url
     }
-    server.shutdown()
+    
+    try:
+        yield flask_app_data
+    finally:
+        # 确保服务器被正确关闭
+        try:
+            print(f"🔄 正在关闭Flask服务器 (端口: {server.port})...")
+            server.shutdown()
+            print("✅ Flask服务器已关闭")
+        except Exception as e:
+            print(f"❌ 关闭Flask服务器时出错: {e}")
+        
+        # 最后检查服务器状态
+        if server.exception:
+            print(f"⚠️ 服务器运行期间发生异常: {server.exception}")
+
+# 添加专门的健康检查fixture
+@pytest.fixture(scope="function")
+def flask_health_check(flask_app):
+    """在每个测试前后检查Flask应用健康状态"""
+    # 测试前检查
+    if not check_flask_health(flask_app):
+        pytest.fail("测试前Flask应用健康检查失败")
+    
+    yield flask_app
+    
+    # 测试后检查
+    if not check_flask_health(flask_app):
+        print("⚠️ 测试后Flask应用健康检查失败，可能影响后续测试")
+        # 不失败，但记录警告
 
 @pytest.fixture(scope="function")
 def selenium(chrome_options, chrome_service, flask_app):
     """为每个测试提供独立的浏览器实例"""
+    # 创建WebDriver前先检查Flask应用健康状态
+    if not check_flask_health(flask_app):
+        pytest.fail("Flask应用健康检查失败，无法创建WebDriver")
+    
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     
-    # 生成唯一的会话ID
-    import uuid
-    session_id = str(uuid.uuid4())
-    server_url = flask_app['url']
-    url = f"{server_url}?_sid={session_id}"
-    
-    driver.get(url)
-    time.sleep(1)  # 等待页面初始化
-    
-    yield driver
-    
-    # 清理
-    driver.quit()
+    try:
+        # 生成唯一的会话ID
+        import uuid
+        session_id = str(uuid.uuid4())
+        server_url = flask_app['url']
+        url = f"{server_url}?_sid={session_id}"
+        
+        # 访问URL前再次检查Flask应用状态
+        if not check_flask_health(flask_app):
+            raise Exception("Flask应用在WebDriver创建后变为不健康状态")
+        
+        driver.get(url)
+        time.sleep(1)  # 等待页面初始化
+        
+        # 验证页面加载成功
+        try:
+            driver.find_element(By.TAG_NAME, "body")
+        except Exception as e:
+            raise Exception(f"页面加载失败: {e}")
+        
+        yield driver
+        
+    except Exception as e:
+        print(f"❌ Selenium初始化失败: {e}")
+        driver.quit()
+        raise
+    finally:
+        # 清理
+        try:
+            driver.quit()
+        except Exception as e:
+            print(f"⚠️ 关闭WebDriver时出错: {e}")
 
 def pytest_configure(config):
     """全局pytest配置"""

@@ -43,7 +43,8 @@ app_layout = dbc.Container([
                                     "color": "#6c757d",
                                     "marginRight": "8px"
                                 },
-                                title="添加新节点"
+                                title="添加新节点",
+                                **{"data-testid": "add-node-button"}
                             ),
                             # 列管理下拉菜单（移到后面）
                             dbc.DropdownMenu([
@@ -76,7 +77,8 @@ app_layout = dbc.Container([
                                     "minHeight": "500px"
                                 }
                             )
-                        ]
+                        ],
+                        **{"data-testid": "canvas-container"}
                     ),
                 ], className="p-1")
             ], className="glass-card mb-2"),
@@ -99,7 +101,8 @@ app_layout = dbc.Container([
                             children=html.Button(
                                 "📁", 
                                 className="btn btn-info btn-sm",
-                                title="加载文件"
+                                title="加载文件",
+                                **{"data-testid": "load-file-button"}
                             ),
                             accept=".json",
                             multiple=False
@@ -108,7 +111,8 @@ app_layout = dbc.Container([
                             "💾", 
                             id="save-graph-button", 
                             className="btn btn-success btn-sm",
-                            title="保存文件"
+                            title="保存文件",
+                            **{"data-testid": "save-file-button"}
                         ),
                         # 分隔符1
                         html.Div(
@@ -122,7 +126,8 @@ app_layout = dbc.Container([
                             "🎯", 
                             id="load-example-graph-button", 
                             className="btn btn-warning btn-sm",
-                            title="加载示例计算图"
+                            title="加载示例计算图",
+                            **{"data-testid": "load-example-button"}
                         ),
                         # 分隔符2
                         html.Div(
@@ -138,7 +143,8 @@ app_layout = dbc.Container([
                             id="theme-toggle", 
                             className="btn btn-outline-secondary btn-sm",
                             title="切换深色/浅色主题",
-                            style={"minWidth": "32px"}
+                            style={"minWidth": "32px"},
+                            **{"data-testid": "theme-toggle-button"}
                         ),
                     ], className="d-flex align-items-center justify-content-around w-100"),
                 ])

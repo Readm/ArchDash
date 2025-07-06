@@ -33,7 +33,6 @@ def test_add_node_with_grid_layout(selenium):
         # 尝试所有可能的选择器
         selectors = [
             "[data-dash-id*='node']",
-            ".node",
             ".node-container",
             "[id^='node-']"
         ]

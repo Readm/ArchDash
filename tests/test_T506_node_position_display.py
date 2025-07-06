@@ -25,7 +25,7 @@ def test_node_position_display(selenium):
         # 使用更健壮的节点查找方法
         node = wait_for_element(selenium, By.CSS_SELECTOR, "[data-dash-id*='node']")
         if not node:
-            node = wait_for_element(selenium, By.CSS_SELECTOR, ".node")
+            node = wait_for_element(selenium, By.CSS_SELECTOR, ".node-container")
         assert node.is_displayed(), "节点应该可见"
         assert node.location['x'] >= 0 and node.location['y'] >= 0, "节点应该有有效的位置"
         

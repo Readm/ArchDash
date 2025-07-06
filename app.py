@@ -255,6 +255,21 @@ def update_canvas(node_data=None):
     print(f"🔍 graph.nodes长度: {len(graph.nodes)}")
     print(f"🔍 当前布局列数: {graph.layout_manager.cols}")
     
+    # 添加会话调试信息
+    from flask import has_request_context
+    if has_request_context():
+        from session_graph import _get_session_id, SESSION_GRAPHS
+        session_id = _get_session_id()
+        print(f"🔍 当前会话ID: {session_id}")
+        print(f"🔍 所有会话: {list(SESSION_GRAPHS.keys())}")
+        if session_id in SESSION_GRAPHS:
+            session_graph = SESSION_GRAPHS[session_id]
+            print(f"🔍 当前会话图节点数: {len(session_graph.nodes)}")
+        else:
+            print(f"🔍 警告：当前会话ID不在SESSION_GRAPHS中!")
+    else:
+        print(f"🔍 无请求上下文，使用默认图")
+    
     if not graph.nodes:
         empty_state_content = html.Div([
             html.Div([
@@ -283,7 +298,7 @@ def update_canvas(node_data=None):
                     ])
                 ], className="text-center p-5"),
             ], className="d-flex justify-content-center align-items-center", style={"minHeight": "400px"})
-        ])
+        ], **{"data-testid": "empty-state", "data-state": "empty", "data-ready": "true"})
         
         # 创建画布内容，只包含空状态提示
         canvas_with_arrows = html.Div([
@@ -303,7 +318,7 @@ def update_canvas(node_data=None):
                 },
                 id="arrows-overlay"
             )
-        ], style={"position": "relative"})
+        ], style={"position": "relative"}, **{"data-testid": "canvas-with-arrows", "data-state": "empty", "data-ready": "true"})
         
         print("🎨 空状态内容已创建并返回")
         
@@ -354,7 +369,8 @@ def update_canvas(node_data=None):
                                             "flex": "none"
                                         },
                                         className="param-pin",
-                                        id=f"pin-{node_id}-{param_idx}"
+                                        id=f"pin-{node_id}-{param_idx}",
+                                        **{"data-testid": f"param-pin-{node_id}-{param_idx}"}
                                     ),
                                     # 参数名输入框，带有类型提示
                                     dbc.Tooltip(
@@ -368,7 +384,8 @@ def update_canvas(node_data=None):
                                         value=param.name,
                                         debounce=True,  # 只在失去焦点或按回车时触发callback
                                         style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "1px 3px"},
-                                        className="param-input"
+                                        className="param-input param-name-input",
+                                        **{"data-testid": f"param-name-input-{node_id}-{param_idx}", "data-param-type": param.param_type if hasattr(param, 'param_type') else 'unknown'}
                                     )
                                 ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
                                 style={"paddingRight": "2px", "width": "45%"}
@@ -382,20 +399,21 @@ def update_canvas(node_data=None):
                                         trigger="focus"
                                     ),
                                     html.Div([
-                                                                            dcc.Input(
-                                        id={"type": "param-value", "node": node_id, "index": param_idx},
-                                        value=str(param.value),
-                                        debounce=True,  # 只在失去焦点或按回车时触发callback
-                                        style={
-                                            "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
-                                            "border": "1px solid transparent", 
-                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
-                                            "borderRadius": "3px", 
-                                            "padding": "1px 3px",
-                                            "transition": "background-color 2s ease-out"
-                                        },
-                                        className="param-input"
-                                    ),
+                                        dcc.Input(
+                                            id={"type": "param-value", "node": node_id, "index": param_idx},
+                                            value=str(param.value),
+                                            debounce=True,  # 只在失去焦点或按回车时触发callback
+                                            style={
+                                                "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                                "border": "1px solid transparent", 
+                                                "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
+                                                "borderRadius": "3px", 
+                                                "padding": "1px 3px",
+                                                "transition": "background-color 2s ease-out"
+                                            },
+                                            className="param-input param-value-input",
+                                            **{"data-testid": f"param-value-input-{node_id}-{param_idx}", "data-param-type": param.param_type if hasattr(param, 'param_type') else 'unknown'}
+                                        ),
                                         html.Span(
                                             param.unit,
                                             style={
@@ -403,7 +421,8 @@ def update_canvas(node_data=None):
                                                 "fontSize": "0.85em",
                                                 "color": "#666",
                                                 "whiteSpace": "nowrap"
-                                            }
+                                            },
+                                            **{"data-testid": f"param-unit-{node_id}-{param_idx}"}
                                         ) if param.unit else None
                                     ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
                                     # Unlink图标 - 只有有依赖计算且unlinked=True时显示
@@ -423,7 +442,8 @@ def update_canvas(node_data=None):
                                             "textAlign": "center",
                                             "userSelect": "none"
                                         },
-                                        title="重新连接 (点击恢复自动计算)"
+                                        title="重新连接 (点击恢复自动计算)",
+                                        **{"data-testid": f"unlink-icon-{node_id}-{param_idx}"}
                                     ) if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else None
                                 ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
                                 style={"width": "40%", "paddingLeft": "2px", "paddingRight": "2px"}
@@ -431,30 +451,31 @@ def update_canvas(node_data=None):
                             html.Td(
                                 dbc.DropdownMenu(
                                     children=[
-                                        dbc.DropdownMenuItem("编辑参数", id={"type": "edit-param", "node": node_id, "index": param_idx}, className="text-primary"),
-                                        dbc.DropdownMenuItem(divider=True),
-                                        dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": param_idx}, className="text-danger"),
-                                        dbc.DropdownMenuItem(divider=True),
-                                        dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": param_idx}, disabled=param_idx==0),
-                                        dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": param_idx}, disabled=param_idx==len(node.parameters)-1),
+                                                                dbc.DropdownMenuItem("编辑参数", id={"type": "edit-param", "node": node_id, "index": param_idx}, className="text-primary"),
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("删除参数", id={"type": "delete-param", "node": node_id, "index": param_idx}, className="text-danger"),
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("上移", id={"type": "move-param-up", "node": node_id, "index": param_idx}, disabled=param_idx==0),
+                        dbc.DropdownMenuItem("下移", id={"type": "move-param-down", "node": node_id, "index": param_idx}, disabled=param_idx==len(node.parameters)-1),
                                     ],
                                     toggle_class_name="param-menu-btn",
                                     label="",
                                     size="sm",
-                                    direction="left"
+                                    direction="left",
+                                    **{"data-testid": f"param-menu-{node_id}-{param_idx}"}
                                 ),
                                 style={"width": "15%", "textAlign": "right", "paddingLeft": "2px"}
                             )
-                        ])
+                        ], **{"data-testid": f"param-row-{node_id}-{param_idx}", "data-param-name": param.name})
                     )
             
-            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "2px"}) if param_rows else None
+            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "2px"}, **{"data-testid": f"param-table-{node_id}", "data-param-count": len(node.parameters)}) if param_rows else None
             
             node_div = html.Div(
                 [
                     html.Div([
                         html.Div([
-                            html.Span(f"{node_name}", className="node-name")
+                            html.Span(f"{node_name}", className="node-name", **{"data-testid": f"node-name-{node_id}"})
                         ]),
                         html.Div([
                             # 添加参数按钮（标题栏）
@@ -483,20 +504,21 @@ def update_canvas(node_data=None):
                                     "color": "#6c757d",
                                     "marginRight": "6px"
                                 },
-                                title="添加参数"
+                                title="添加参数",
+                                **{"data-testid": f"add-param-btn-{node_id}"}
                             ),
                             dbc.DropdownMenu(
                                 children=[
-                                    dbc.DropdownMenuItem("编辑节点", id={"type": "edit-node", "node": node_id}, className="text-warning"),
-                                    dbc.DropdownMenuItem(divider=True),
-                                    dbc.DropdownMenuItem("上移", id={"type": "move-node-up", "node": node_id}, className="text-primary"),
-                                    dbc.DropdownMenuItem("下移", id={"type": "move-node-down", "node": node_id}, className="text-primary"),
-                                    dbc.DropdownMenuItem(divider=True),
-                                    dbc.DropdownMenuItem("左移", id={"type": "move-node-left", "node": node_id}, className="text-info"),
-                                    dbc.DropdownMenuItem("右移", id={"type": "move-node-right", "node": node_id}, className="text-info"),
-                                    dbc.DropdownMenuItem(divider=True),
-                                    dbc.DropdownMenuItem("添加参数", id={"type": "add-param", "node": node_id}, className="text-success"),
-                                    dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
+                                                            dbc.DropdownMenuItem("编辑节点", id={"type": "edit-node", "node": node_id}, className="text-warning"),
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("上移", id={"type": "move-node-up", "node": node_id}, className="text-primary"),
+                        dbc.DropdownMenuItem("下移", id={"type": "move-node-down", "node": node_id}, className="text-primary"),
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("左移", id={"type": "move-node-left", "node": node_id}, className="text-info"),
+                        dbc.DropdownMenuItem("右移", id={"type": "move-node-right", "node": node_id}, className="text-info"),
+                        dbc.DropdownMenuItem(divider=True),
+                        dbc.DropdownMenuItem("添加参数", id={"type": "add-param", "node": node_id}, className="text-success"),
+                        dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
                                 ],
                                 toggle_class_name="node-menu-btn",
                                 toggle_style={
@@ -514,7 +536,8 @@ def update_canvas(node_data=None):
                                 },
                                 label="",
                                 size="sm",
-                                direction="left"
+                                direction="left",
+                                **{"data-testid": f"node-menu-{node_id}"}
                             )
                         ], style={"display": "flex", "alignItems": "center"})
                     ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
@@ -523,7 +546,14 @@ def update_canvas(node_data=None):
                 ],
                 className="p-2 node-container node-entrance fade-in",
                 id=f"node-{node_id}",
-                **{"data-row": row, "data-col": col, "data-dash-id": json.dumps({"type": "node", "index": node_id})}
+                **{
+                    "data-row": row, 
+                    "data-col": col, 
+                    "data-dash-id": json.dumps({"type": "node", "index": node_id}),
+                    "data-testid": f"node-{node_id}",
+                    "data-node-name": node_name,
+                    "data-node-ready": "true"  # 标记节点已准备好进行测试
+                }
             )
             col_content.append(node_div)
         
@@ -553,7 +583,13 @@ def update_canvas(node_data=None):
             },
             id="arrows-overlay"
         )
-    ], style={"position": "relative"})
+    ], style={"position": "relative"}, **{
+        "data-testid": "canvas-with-arrows", 
+        "data-state": "with-nodes", 
+        "data-ready": "true",
+        "data-node-count": len(graph.nodes),
+        "data-column-count": graph.layout_manager.cols
+    })
     
     return canvas_with_arrows
 
@@ -3007,6 +3043,21 @@ def create_new_node(save_clicks, node_name, node_description):
         raise dash.exceptions.PreventUpdate
     
     try:
+        # 添加会话调试信息
+        from flask import has_request_context
+        if has_request_context():
+            from session_graph import _get_session_id, SESSION_GRAPHS
+            session_id = _get_session_id()
+            print(f"🔧 节点创建回调 - 当前会话ID: {session_id}")
+            print(f"🔧 所有会话: {list(SESSION_GRAPHS.keys())}")
+            if session_id in SESSION_GRAPHS:
+                session_graph = SESSION_GRAPHS[session_id]
+                print(f"🔧 当前会话图节点数: {len(session_graph.nodes)}")
+            else:
+                print(f"🔧 警告：当前会话ID不在SESSION_GRAPHS中!")
+        else:
+            print(f"🔧 无请求上下文，使用默认图")
+        
         # 验证输入
         if not node_name or not node_name.strip():
             return True, dash.no_update, "错误: 节点名称不能为空"
@@ -3032,6 +3083,10 @@ def create_new_node(save_clicks, node_name, node_description):
         
         # 使用布局管理器放置节点
         position = graph.layout_manager.place_node(node.id)
+        
+        # 再次检查节点是否已添加
+        print(f"🔧 节点创建后检查 - graph.nodes长度: {len(graph.nodes)}")
+        print(f"🔧 新节点ID: {node.id}, 名称: {node.name}")
         
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{node_name}' 已创建并添加到位置 ({position.row}, {position.col})"
