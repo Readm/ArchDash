@@ -1004,6 +1004,8 @@ def handle_unlink_toggle(unlink_clicks, node_data):
     Output("param-edit-calculation", "value"),
     Output("dependency-selector-container", "children"),
     Output("param-edit-data", "data"),
+    Output("param-edit-preview", "children", allow_duplicate=True),
+    Output("param-edit-preview", "color", allow_duplicate=True),
     Input({"type": "edit-param", "node": ALL, "index": ALL}, "n_clicks"),
     State("param-edit-modal", "is_open"),
     prevent_initial_call=True
@@ -1060,7 +1062,9 @@ def open_param_edit_modal(edit_clicks, is_open):
             f"{param.confidence:.1%}",  # 显示百分比格式的置信度
             param.calculation_func or "",
             dependency_checkboxes,
-            {"node_id": node_id, "param_index": param_index}
+            {"node_id": node_id, "param_index": param_index},
+            "",  # 重置测试结果显示为空
+            "secondary"  # 重置测试结果颜色为默认
         )
     
     raise dash.exceptions.PreventUpdate
