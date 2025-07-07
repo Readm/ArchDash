@@ -392,6 +392,7 @@ self.confidence = dependencies[0].confidence * 0.95
     )
     
     return {
+        "graph": graph,
         "nodes_created": nodes_created,
         "total_params": total_params,
         "calculated_params": calculated_params
