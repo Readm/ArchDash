@@ -27,7 +27,7 @@ def test_example_callback():
         example_related_callbacks = []
         for callback_id in callbacks.keys():
             callback_str = str(callback_id)
-            if ("load-example-graph-button" in callback_str or 
+            if ("load-example-button" in callback_str or 
                 "load_example_soc_graph" in callback_str or
                 "example" in callback_str.lower()):
                 example_related_callbacks.append(callback_str)

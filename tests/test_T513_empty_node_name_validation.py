@@ -21,7 +21,7 @@ def test_empty_node_name_validation(selenium):
         clean_state(selenium)
         
         # 尝试创建空名称节点
-        add_node_btn = wait_for_clickable(selenium, By.ID, "add-node-from-graph-button")
+        add_node_btn = wait_for_clickable(selenium, By.CSS_SELECTOR, "[data-testid='add-node-button']")
         add_node_btn.click()
         
         modal = wait_for_element(selenium, By.ID, "node-add-modal")
