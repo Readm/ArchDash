@@ -319,6 +319,17 @@ def chrome_options():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=800,600")  # 设置更小的窗口尺寸
+    # 添加更多稳定性选项
+    options.add_argument("--disable-web-security")
+    options.add_argument("--disable-features=VizDisplayCompositor")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    # 设置页面加载策略
+    options.page_load_strategy = 'eager'
+    
     # Try system Chrome first, fallback to downloaded Chrome
     import os
     system_chrome_paths = [
