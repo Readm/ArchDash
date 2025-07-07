@@ -313,16 +313,34 @@ def check_flask_health(flask_app):
 def chrome_options():
     """配置Chrome选项"""
     options = Options()
-    # 移除headless模式
+    # 启用headless模式以支持WSL2环境
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=800,600")  # 设置更小的窗口尺寸
+    # Try system Chrome first, fallback to downloaded Chrome
+    import os
+    system_chrome_paths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable", 
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/snap/bin/chromium",
+        "/home/readm/chrome_install/opt/google/chrome/chrome"
+    ]
+    
+    for chrome_path in system_chrome_paths:
+        if os.path.exists(chrome_path):
+            options.binary_location = chrome_path
+            break
     return options
 
 @pytest.fixture(scope="session")
 def chrome_service():
     """配置Chrome服务"""
+    # 使用本地安装的Chrome
+    chrome_binary = "/home/readm/chrome_install/opt/google/chrome/chrome"
     service = Service()
     return service
 
