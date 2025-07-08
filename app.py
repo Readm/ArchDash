@@ -170,11 +170,13 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
         
         for x_val in x_range:
             try:
-                # 设置X参数值（相关性分析中的手动设置）
-                x_param.value = float(x_val)
+                # 使用数据流更新机制设置X参数值，确保级联更新
+                update_result = graph.set_parameter_value(x_param, float(x_val))
                 
-                # 如果Y参数有计算函数，触发重新计算并获取新值
-                y_val = y_param.value # 默认值
+                # 获取Y参数的当前值（可能已经通过级联更新改变）
+                y_val = y_param.value
+                
+                # 如果Y参数有计算函数，触发重新计算
                 if y_param.calculation_func:
                     y_val = y_param.calculate()
                 
@@ -907,7 +909,7 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     if operation_type == "delete-param":
         # 检查参数是否被其他参数依赖
         param_to_delete = node.parameters[param_index]
-        has_dependents, dependent_list = check_parameter_has_dependents(param_to_delete)
+        has_dependents, dependent_list = check_parameter_has_dependents(param_to_delete, graph)
         
         if has_dependents:
             # 构建依赖信息的错误消息
