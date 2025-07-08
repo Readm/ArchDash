@@ -2608,12 +2608,13 @@ def update_remove_button_status(canvas_children):
     return not can_remove
 
 # 添加依赖检查工具函数
-def check_parameter_has_dependents(param_obj, graph_instance):
+def check_parameter_has_dependents(param_obj, graph_instance, exclude_same_node=False):
     """检查参数是否被其他参数依赖
 
     Args:
         param_obj: 要检查的参数对象
         graph_instance: 要在其中检查的 CalculationGraph 实例
+        exclude_same_node: 是否排除同一节点内的依赖关系
 
     Returns:
         tuple: (has_dependents: bool, dependent_list: list)
@@ -2621,6 +2622,14 @@ def check_parameter_has_dependents(param_obj, graph_instance):
             dependent_list: 依赖此参数的参数列表，格式为[{"node_name": str, "param_name": str, "param_obj": Parameter}, ...]
     """
     dependent_list = []
+    
+    # 找到被检查参数所在的节点ID（如果需要排除同节点依赖）
+    param_node_id = None
+    if exclude_same_node:
+        for node_id, node in graph_instance.nodes.items():
+            if param_obj in node.parameters:
+                param_node_id = node_id
+                break
 
     # 遍历所有节点和参数，查找依赖关系
     for node_id, node in graph_instance.nodes.items():
@@ -2628,6 +2637,10 @@ def check_parameter_has_dependents(param_obj, graph_instance):
 
         for param in node.parameters:
             if param_obj in param.dependencies:
+                # 如果需要排除同节点依赖且当前参数与被检查参数在同一节点，则跳过
+                if exclude_same_node and node_id == param_node_id:
+                    continue
+                    
                 dependent_list.append({
                     "node_name": node_name,
                     "param_name": param.name,
@@ -2637,7 +2650,7 @@ def check_parameter_has_dependents(param_obj, graph_instance):
     return len(dependent_list) > 0, dependent_list
 
 def check_node_has_dependents(node_id, graph_instance):
-    """检查节点的所有参数是否被其他参数依赖
+    """检查节点的所有参数是否被其他节点的参数依赖
 
     Args:
         node_id: 要检查的节点ID
@@ -2645,10 +2658,10 @@ def check_node_has_dependents(node_id, graph_instance):
 
     Returns:
         tuple: (has_dependents: bool, dependent_info: dict)
-            has_dependents: 是否有其他参数依赖此节点的参数
+            has_dependents: 是否有其他节点的参数依赖此节点的参数
             dependent_info: 依赖信息字典，格式为 {
                 "dependent_params": [{"node_name": str, "param_name": str, "depends_on": str}, ...],
-                "affected_node_params": [str, ...]  # 本节点中被依赖的参数名列表
+                "affected_node_params": [str, ...]  # 本节点中被其他节点依赖的参数名列表
             }
     """
     if node_id not in graph_instance.nodes:
@@ -2658,9 +2671,9 @@ def check_node_has_dependents(node_id, graph_instance):
     dependent_params = []
     affected_node_params = []
 
-    # 检查该节点的每个参数是否被其他参数依赖
+    # 检查该节点的每个参数是否被其他节点的参数依赖（排除同节点内的依赖）
     for param in node.parameters:
-        has_deps, dep_list = check_parameter_has_dependents(param, graph_instance)
+        has_deps, dep_list = check_parameter_has_dependents(param, graph_instance, exclude_same_node=True)
         if has_deps:
             affected_node_params.append(param.name)
             for dep_info in dep_list:
