@@ -645,7 +645,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
 
         elif operation_type == "delete-node":
             # 检查节点的参数是否被其他参数依赖
-            has_dependents, dependent_info = check_node_has_dependents(node_id)
+            has_dependents, dependent_info = check_node_has_dependents(node_id, graph)
 
             if has_dependents:
                 # 构建详细的错误消息
