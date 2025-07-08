@@ -65,18 +65,11 @@ result = value"""
 
     code_lines.extend([
         "",
-        "# 置信度处理示例：",
-        "# 可以根据依赖参数的置信度动态调整当前参数的置信度",
-        "# min_confidence = min(dep.confidence for dep in dependencies)",
-        "# self.confidence = min_confidence * 0.9  # 根据依赖降低置信度",
-        "",
-        "# 或者设置固定置信度：",
+        "# 设置固定置信度：",
         "# self.confidence = 0.8  # 80% 置信度",
         "",
-        "# 在这里编写计算逻辑",
+        "# 编写计算逻辑",
         "result = value  # 修改这里",
-        "",
-        "# 注意：置信度会影响参数在依赖关系显示中的颜色标识"
     ])
 
     return "\n".join(code_lines)

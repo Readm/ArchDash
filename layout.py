@@ -303,7 +303,7 @@ app_layout = dbc.Container([
                                             size="sm"
                                         ),
                                         dbc.Button(
-                                            [html.Span("导出")], 
+                                            [html.Span("导出csv")], 
                                             id="export-plot-data-btn", 
                                             color="info", 
                                             size="sm"
