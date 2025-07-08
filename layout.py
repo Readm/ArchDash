@@ -65,19 +65,7 @@ app_layout = dbc.Container([
                         id="canvas-container", 
                         className="position-relative",
                         style={"minHeight": "500px"},
-                        children=[
-                            # 初始空白布局
-                            html.Div(
-                                className="canvas-grid",
-                                style={
-                                    "display": "grid",
-                                    "gridTemplateColumns": "repeat(4, 1fr)",
-                                    "gap": "1rem",
-                                    "padding": "1rem",
-                                    "minHeight": "500px"
-                                }
-                            )
-                        ],
+                        children=[],  # 初始为空，由initialize_canvas回调填充
                         **{"data-testid": "canvas-container"}
                     ),
                 ], className="p-1")

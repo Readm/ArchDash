@@ -24,6 +24,16 @@ graph: CalculationGraph = GraphProxy()
 layout_manager = CanvasLayoutManager(initial_cols=4, initial_rows=12)
 graph.set_layout_manager(layout_manager)
 
+# 初始化画布显示
+@callback(
+    Output("canvas-container", "children", allow_duplicate=True),
+    Input("node-data", "data"),  # 使用node-data作为触发器，页面加载时总是会触发
+    prevent_initial_call='initial_duplicate'
+)
+def initialize_canvas(node_data):
+    """页面加载时初始化画布显示"""
+    return update_canvas()
+
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
     """获取所有可用的参数，排除当前参数自身"""
