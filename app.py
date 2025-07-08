@@ -3094,26 +3094,24 @@ def clear_calculation_graph(n_clicks):
 @callback(
     Output("param-select-modal", "is_open"),
     Output("current-param-type", "data"),
-    Output("temp-selected-param", "data", allow_duplicate=True),
     Input("x-param-select-btn", "n_clicks"),
     Input("y-param-select-btn", "n_clicks"),
     Input("param-select-cancel", "n_clicks"),
-    Input("param-select-confirm", "n_clicks"),
     State("param-select-modal", "is_open"),
     prevent_initial_call=True
 )
-def toggle_param_select_modal(x_clicks, y_clicks, cancel_clicks, confirm_clicks, is_open):
+def toggle_param_select_modal(x_clicks, y_clicks, cancel_clicks, is_open):
     """控制参数选择弹窗的打开和关闭"""
     button_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
     if button_id == "x-param-select-btn":
-        return True, "x", None
+        return True, "x"
     elif button_id == "y-param-select-btn":
-        return True, "y", None
-    elif button_id in ["param-select-cancel", "param-select-confirm"]:
-        return False, dash.no_update, None
+        return True, "y"
+    elif button_id == "param-select-cancel":
+        return False, dash.no_update
 
-    return is_open, dash.no_update, dash.no_update
+    return is_open, dash.no_update
 
 # 更新参数类型显示
 @callback(
@@ -3135,13 +3133,12 @@ def update_param_type_display(current_type):
     Output("param-list-container", "children"),
     Input("param-search", "value"),
     Input("canvas-container", "children"),
-    Input("temp-selected-param", "data"),
     State("selected-x-param", "data"),
     State("selected-y-param", "data"),
     State("current-param-type", "data"),
     prevent_initial_call=False
 )
-def update_param_list(search_value, canvas_children, temp_selected, current_x, current_y, param_type):
+def update_param_list(search_value, canvas_children, current_x, current_y, param_type):
     """更新参数列表显示"""
     try:
         params = get_plotting_parameters()
@@ -3166,26 +3163,19 @@ def update_param_list(search_value, canvas_children, temp_selected, current_x, c
         # 创建参数选择项
         param_items = []
         for param in params:
-            # 判断是否为当前选中、临时选中或已确认选中的参数
-            is_temp_selected = temp_selected == param['value']
+            # 判断是否为当前选中的参数
             is_currently_selected = currently_selected == param['value']
 
-            # 设置卡片样式
-            card_color = None
-            button_color = "primary"
-            button_outline = True
-
-            if is_temp_selected:
-                card_color = "warning"
-                button_color = "warning"
-                button_outline = False
-                button_text = "已选择"
-            elif is_currently_selected:
+            # 设置卡片样式 - 简化，只显示当前选择状态
+            if is_currently_selected:
                 card_color = "success"
                 button_color = "success" 
                 button_outline = False
                 button_text = "当前选择"
             else:
+                card_color = None
+                button_color = "primary"
+                button_outline = True
                 button_text = "选择"
 
             param_items.append(
@@ -3223,12 +3213,19 @@ def update_param_list(search_value, canvas_children, temp_selected, current_x, c
 
 # 处理参数选择
 @callback(
-    Output("temp-selected-param", "data"),
+    Output("selected-x-param", "data"),
+    Output("selected-y-param", "data"),
+    Output("x-param-display", "value"),
+    Output("y-param-display", "value"),
+    Output("param-select-modal", "is_open", allow_duplicate=True),
     Input({"type": "param-item-btn", "index": ALL}, "n_clicks"),
+    State("current-param-type", "data"),
+    State("selected-x-param", "data"),
+    State("selected-y-param", "data"),
     prevent_initial_call=True
 )
-def handle_param_selection(clicks_list):
-    """处理参数选择"""
+def handle_param_selection(clicks_list, param_type, current_x, current_y):
+    """处理参数选择 - 直接选择参数并关闭模态框"""
     if not any(clicks_list):
         raise dash.exceptions.PreventUpdate
 
@@ -3236,42 +3233,26 @@ def handle_param_selection(clicks_list):
     if button_id:
         import json
         button_info = json.loads(button_id)
-        return button_info['index']
+        selected_param_value = button_info['index']
+        
+        try:
+            params = get_plotting_parameters()
+            selected_param = next((p for p in params if p['value'] == selected_param_value), None)
 
-    return dash.no_update
+            if not selected_param:
+                raise dash.exceptions.PreventUpdate
 
-# 确认参数选择
-@callback(
-    Output("selected-x-param", "data"),
-    Output("selected-y-param", "data"),
-    Output("x-param-display", "value"),
-    Output("y-param-display", "value"),
-    Input("param-select-confirm", "n_clicks"),
-    State("temp-selected-param", "data"),
-    State("current-param-type", "data"),
-    State("selected-x-param", "data"),
-    State("selected-y-param", "data"),
-    prevent_initial_call=True
-)
-def confirm_param_selection(confirm_clicks, temp_param, param_type, current_x, current_y):
-    """确认参数选择并更新显示"""
-    if not confirm_clicks or not temp_param:
-        raise dash.exceptions.PreventUpdate
+            # 直接更新参数选择并关闭模态框
+            if param_type == "x":
+                return selected_param_value, current_y, selected_param['label'], dash.no_update, False
+            else:
+                return current_x, selected_param_value, dash.no_update, selected_param['label'], False
 
-    try:
-        params = get_plotting_parameters()
-        selected_param = next((p for p in params if p['value'] == temp_param), None)
-
-        if not selected_param:
+        except Exception:
             raise dash.exceptions.PreventUpdate
 
-        if param_type == "x":
-            return temp_param, current_y, selected_param['label'], dash.no_update
-        else:
-            return current_x, temp_param, dash.no_update, selected_param['label']
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-    except Exception:
-        raise dash.exceptions.PreventUpdate
 
 if __name__ == "__main__":
     import argparse

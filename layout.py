@@ -394,7 +394,6 @@ app_layout = dbc.Container([
     dcc.Store(id="selected-x-param", data=None),  # 存储选中的X轴参数
     dcc.Store(id="selected-y-param", data=None),  # 存储选中的Y轴参数
     dcc.Store(id="current-param-type", data="x"),  # 存储当前选择的参数类型
-    dcc.Store(id="temp-selected-param", data=None),  # 存储临时选中的参数
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
     dcc.Download(id="download-graph"),  # 用于下载计算图文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
@@ -653,8 +652,7 @@ app_layout = dbc.Container([
             ])
         ]),
         dbc.ModalFooter([
-            dbc.Button("取消", id="param-select-cancel", color="secondary"),
-            dbc.Button("确认选择", id="param-select-confirm", color="primary")
+            dbc.Button("取消", id="param-select-cancel", color="secondary")
         ])
     ], id="param-select-modal", size="lg", is_open=False),
 ], fluid=True)
