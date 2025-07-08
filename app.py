@@ -28,10 +28,10 @@ graph.set_layout_manager(layout_manager)
 # 初始化画布显示
 @callback(
     Output("canvas-container", "children", allow_duplicate=True),
-    Input("node-data", "data"),  # 使用node-data作为触发器，页面加载时总是会触发
+    Input("dependencies-collapse-state", "data"),  # 使用一个稳定的Store作为触发器
     prevent_initial_call='initial_duplicate'
 )
-def initialize_canvas(node_data):
+def initialize_canvas(collapse_state):
     """页面加载时初始化画布显示"""
     return update_canvas()
 
@@ -1384,15 +1384,6 @@ def update_arrow_connections_data(canvas_children, node_data):
         print(f"⚠️ 更新箭头连接数据失败: {e}")
         return []
 
-# 空的Python回调，实际绘制由客户端回调处理
-@callback(
-    Output("arrows-overlay-dynamic", "children"),
-    Input("arrow-connections-data", "data"),
-    prevent_initial_call=True
-)
-def trigger_arrow_update_on_data_change(connections_data):
-    """当箭头连接数据变化时触发更新，实际绘制由客户端回调处理"""
-    return []
 
 # Pin悬停箭头显示系统已移动到 clientside_callbacks.py
 
