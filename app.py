@@ -213,6 +213,8 @@ def create_empty_plot():
         title_text="请选择参数以生成图表",
         template="plotly_white",
         showlegend=True,
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=280,
         xaxis=dict(showgrid=False, title=""),
         yaxis=dict(showgrid=False, title=""),
         legend=dict(
@@ -1721,10 +1723,10 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         raise dash.exceptions.PreventUpdate
 
     if not x_param or not y_param:
-        return create_empty_plot(), "❌ 请选择X轴和Y轴参数"
+        return create_empty_plot(), "❌ 请选择X轴和Y轴参数", cumulative_data
 
     if x_param == y_param:
-        return create_empty_plot(), "❌ X轴和Y轴参数不能相同"
+        return create_empty_plot(), "❌ X轴和Y轴参数不能相同", cumulative_data
 
     # 验证输入值
     try:
@@ -1733,27 +1735,27 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         x_step = float(x_step) if x_step is not None else 1
 
         if x_step <= 0:
-            return create_empty_plot(), "❌ 步长必须大于0"
+            return create_empty_plot(), "❌ 步长必须大于0", cumulative_data
 
         if x_start >= x_end:
-            return create_empty_plot(), "❌ 起始值必须小于结束值"
+            return create_empty_plot(), "❌ 起始值必须小于结束值", cumulative_data
 
     except (ValueError, TypeError):
-        return create_empty_plot(), "❌ 请输入有效的数值"
+        return create_empty_plot(), "❌ 请输入有效的数值", cumulative_data
 
     # 从参数值中解析节点ID和参数名
     try:
         x_node_id, x_param_name = x_param.split('|')
         y_node_id, y_param_name = y_param.split('|')
     except ValueError:
-        return create_empty_plot(), "❌ 参数格式错误，请重新选择"
+        return create_empty_plot(), "❌ 参数格式错误，请重新选择", cumulative_data
 
     # 从graph中获取节点和参数对象
     x_node = graph.nodes.get(x_node_id)
     y_node = graph.nodes.get(y_node_id)
 
     if not x_node or not y_node:
-        return create_empty_plot(), "❌ 参数所属节点不存在，请重新选择"
+        return create_empty_plot(), "❌ 参数所属节点不存在，请重新选择", cumulative_data
 
     # 构建参数信息字典
     x_param_info = {
@@ -1854,14 +1856,31 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         template="plotly_white",
         showlegend=True,  # 始终显示图例
         margin=dict(l=40, r=40, t=60, b=40),
-        height=350,
+        height=280,
         legend=dict(
             orientation="v",
             yanchor="top",
             y=1,
             xanchor="left",
             x=1.02
-        )
+        ),
+        annotations=[
+            dict(
+                text="powered by ArchDash",
+                xref="paper",
+                yref="paper",
+                x=1.0,
+                y=0.02,
+                xanchor="right",
+                yanchor="bottom",
+                showarrow=False,
+                font=dict(
+                    family="Arial",
+                    size=10,
+                    color="rgba(150, 150, 150, 0.7)"
+                )
+            )
+        ]
     )
 
     # 添加网格线和样式优化
