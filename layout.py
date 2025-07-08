@@ -179,23 +179,39 @@ app_layout = dbc.Container([
                             dbc.Row([
                                 dbc.Col([
                                     dbc.Label("X轴参数:", className="mb-1"),
-                                    dcc.Dropdown(
-                                        id="x-param-selector", 
-                                        placeholder="选择X轴参数",
-                                        clearable=True,
-                                        className="mb-1",
-                                        style={"zIndex": "9999"}
-                                    )
+                                    dbc.InputGroup([
+                                        dbc.Input(
+                                            id="x-param-display",
+                                            placeholder="点击选择X轴参数",
+                                            readonly=True,
+                                            className="mb-1"
+                                        ),
+                                        dbc.Button(
+                                            "选择",
+                                            id="x-param-select-btn",
+                                            color="primary",
+                                            size="sm",
+                                            outline=True
+                                        )
+                                    ])
                                 ], width=6),
                                 dbc.Col([
                                     dbc.Label("Y轴参数:", className="mb-1"),
-                                    dcc.Dropdown(
-                                        id="y-param-selector", 
-                                        placeholder="选择Y轴参数",
-                                        clearable=True,
-                                        className="mb-1",
-                                        style={"zIndex": "9999"}
-                                    )
+                                    dbc.InputGroup([
+                                        dbc.Input(
+                                            id="y-param-display",
+                                            placeholder="点击选择Y轴参数",
+                                            readonly=True,
+                                            className="mb-1"
+                                        ),
+                                        dbc.Button(
+                                            "选择",
+                                            id="y-param-select-btn",
+                                            color="primary",
+                                            size="sm",
+                                            outline=True
+                                        )
+                                    ])
                                 ], width=6),
                             ], className="mb-2"),
                             
@@ -375,6 +391,10 @@ app_layout = dbc.Container([
     dcc.Store(id="arrow-connections-data", data=[]),  # 存储箭头连接数据
     dcc.Store(id="dependencies-collapse-state", data={"is_open": False}),  # 存储依赖关系面板折叠状态
     dcc.Store(id="cumulative-plot-data", data=[]),  # 存储累计绘图数据
+    dcc.Store(id="selected-x-param", data=None),  # 存储选中的X轴参数
+    dcc.Store(id="selected-y-param", data=None),  # 存储选中的Y轴参数
+    dcc.Store(id="current-param-type", data="x"),  # 存储当前选择的参数类型
+    dcc.Store(id="temp-selected-param", data=None),  # 存储临时选中的参数
     dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
     dcc.Download(id="download-graph"),  # 用于下载计算图文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
@@ -592,6 +612,51 @@ app_layout = dbc.Container([
             dbc.Button("关闭", id="close-enlarged-plot", color="secondary")
         ])
     ], id="enlarged-plot-modal", size="xl", is_open=False),
+    
+    # 参数选择弹窗
+    dbc.Modal([
+        dbc.ModalHeader([
+            html.H4("📊 选择绘图参数", className="modal-title")
+        ]),
+        dbc.ModalBody([
+            html.Div([
+                dbc.Row([
+                    dbc.Col([
+                        html.H6(id="param-type-display", className="mb-3", style={"color": "#0d6efd", "fontWeight": "bold"})
+                    ])
+                ]),
+                dbc.Row([
+                    dbc.Col([
+                        html.H6("搜索参数:", className="mb-2"),
+                        dbc.Input(
+                            id="param-search",
+                            placeholder="输入参数名称进行搜索...",
+                            className="mb-3"
+                        )
+                    ])
+                ]),
+                dbc.Row([
+                    dbc.Col([
+                        html.H6("可用参数:", className="mb-2"),
+                        html.Div(
+                            id="param-list-container",
+                            style={
+                                "height": "400px",
+                                "overflowY": "auto",
+                                "border": "1px solid #dee2e6",
+                                "borderRadius": "0.375rem",
+                                "padding": "10px"
+                            }
+                        )
+                    ])
+                ])
+            ])
+        ]),
+        dbc.ModalFooter([
+            dbc.Button("取消", id="param-select-cancel", color="secondary"),
+            dbc.Button("确认选择", id="param-select-confirm", color="primary")
+        ])
+    ], id="param-select-modal", size="lg", is_open=False),
 ], fluid=True)
 
 app_index_string = '''

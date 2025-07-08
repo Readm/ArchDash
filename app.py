@@ -1758,33 +1758,15 @@ app.clientside_callback(
 
 # =============== 绘图相关回调函数 ===============
 
-# 更新参数选择器选项
-@callback(
-    Output("x-param-selector", "options"),
-    Output("y-param-selector", "options"),
-    Input("canvas-container", "children"),
-    prevent_initial_call=True
-)
-def update_param_selectors(canvas_children):
-    """动态更新参数选择器的选项"""
-    params = get_plotting_parameters()
-    # 为Dropdown组件创建简化的选项列表（只包含label和value）
-    dropdown_options = [
-        {
-            'label': param['label'],
-            'value': param['value']
-        }
-        for param in params
-    ]
-    return dropdown_options, dropdown_options
+# 旧的参数选择器回调已移除，现在使用弹窗选择方式
 
 # 初始化空图表
 @callback(
     Output("sensitivity-plot", "figure"),
-    Input("x-param-selector", "id"),  # 使用ID作为触发器，只在初始化时运行
+    Input("canvas-container", "id"),  # 使用canvas容器ID作为触发器
     prevent_initial_call=False
 )
-def initialize_plot(selector_id):
+def initialize_plot(container_id):
     """初始化空图表"""
     return create_empty_plot()
 
@@ -1796,8 +1778,8 @@ def initialize_plot(selector_id):
     Output("output-result", "children", allow_duplicate=True),
     Output("cumulative-plot-data", "data", allow_duplicate=True),
     Input("generate-plot-btn", "n_clicks"),
-    State("x-param-selector", "value"),
-    State("y-param-selector", "value"),
+    State("selected-x-param", "data"),
+    State("selected-y-param", "data"),
     State("x-start-value", "value"),
     State("x-end-value", "value"),
     State("x-step-value", "value"),
@@ -1968,8 +1950,10 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
 # 清除图表
 @callback(
     Output("sensitivity-plot", "figure", allow_duplicate=True),
-    Output("x-param-selector", "value"),
-    Output("y-param-selector", "value"),
+    Output("selected-x-param", "data", allow_duplicate=True),
+    Output("selected-y-param", "data", allow_duplicate=True),
+    Output("x-param-display", "value", allow_duplicate=True),
+    Output("y-param-display", "value", allow_duplicate=True),
     Output("cumulative-plot-data", "data", allow_duplicate=True),
     Input("clear-plot-btn", "n_clicks"),
     prevent_initial_call=True
@@ -1979,15 +1963,15 @@ def clear_plot(n_clicks):
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     
-    return create_empty_plot(), None, None, []
+    return create_empty_plot(), None, None, "", "", []
 
 # 导出绘图数据
 @callback(
     Output("download-plot-data", "data"),
     Input("export-plot-data-btn", "n_clicks"),
     State("sensitivity-plot", "figure"),
-    State("x-param-selector", "value"),
-    State("y-param-selector", "value"),
+    State("selected-x-param", "data"),
+    State("selected-y-param", "data"),
     prevent_initial_call=True
 )
 def export_plot_data(n_clicks, figure, x_param, y_param):
@@ -2066,7 +2050,7 @@ def export_plot_data(n_clicks, figure, x_param, y_param):
 # 自动更新系列名称输入框的默认值
 @callback(
     Output("series-name-input", "value"),
-    Input("y-param-selector", "value"),
+    Input("selected-y-param", "data"),
     prevent_initial_call=True
 )
 def auto_update_series_name(y_param):
@@ -2094,7 +2078,7 @@ def auto_update_series_name(y_param):
 @callback(
     Output("x-start-value", "value"),
     Output("x-end-value", "value"),
-    Input("x-param-selector", "value"),
+    Input("selected-x-param", "data"),
     prevent_initial_call=True
 )
 def auto_update_range(x_param):
@@ -3207,6 +3191,193 @@ def clear_calculation_graph(n_clicks):
         
     except Exception as e:
         return dash.no_update, f"❌ 清空失败: {str(e)}"
+
+
+# 参数选择弹窗相关回调函数
+
+# 打开参数选择弹窗
+@callback(
+    Output("param-select-modal", "is_open"),
+    Output("current-param-type", "data"),
+    Output("temp-selected-param", "data", allow_duplicate=True),
+    Input("x-param-select-btn", "n_clicks"),
+    Input("y-param-select-btn", "n_clicks"),
+    Input("param-select-cancel", "n_clicks"),
+    Input("param-select-confirm", "n_clicks"),
+    State("param-select-modal", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_param_select_modal(x_clicks, y_clicks, cancel_clicks, confirm_clicks, is_open):
+    """控制参数选择弹窗的打开和关闭"""
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+    
+    if button_id == "x-param-select-btn":
+        return True, "x", None
+    elif button_id == "y-param-select-btn":
+        return True, "y", None
+    elif button_id in ["param-select-cancel", "param-select-confirm"]:
+        return False, dash.no_update, None
+    
+    return is_open, dash.no_update, dash.no_update
+
+# 更新参数类型显示
+@callback(
+    Output("param-type-display", "children"),
+    Input("current-param-type", "data"),
+    prevent_initial_call=False
+)
+def update_param_type_display(current_type):
+    """更新参数类型显示文本"""
+    if current_type == "x":
+        return "🔸 选择 X 轴参数"
+    elif current_type == "y":
+        return "🔹 选择 Y 轴参数"
+    else:
+        return "📊 选择绘图参数"
+
+# 更新参数列表
+@callback(
+    Output("param-list-container", "children"),
+    Input("param-search", "value"),
+    Input("canvas-container", "children"),
+    Input("temp-selected-param", "data"),
+    State("selected-x-param", "data"),
+    State("selected-y-param", "data"),
+    State("current-param-type", "data"),
+    prevent_initial_call=False
+)
+def update_param_list(search_value, canvas_children, temp_selected, current_x, current_y, param_type):
+    """更新参数列表显示"""
+    try:
+        params = get_plotting_parameters()
+        
+        # 过滤搜索结果
+        if search_value:
+            search_lower = search_value.lower()
+            params = [p for p in params if search_lower in p['label'].lower()]
+        
+        if not params:
+            return [
+                dbc.Alert(
+                    "未找到匹配的参数",
+                    color="info",
+                    className="text-center"
+                )
+            ]
+        
+        # 确定当前应该高亮的参数
+        currently_selected = current_x if param_type == "x" else current_y
+        
+        # 创建参数选择项
+        param_items = []
+        for param in params:
+            # 判断是否为当前选中、临时选中或已确认选中的参数
+            is_temp_selected = temp_selected == param['value']
+            is_currently_selected = currently_selected == param['value']
+            
+            # 设置卡片样式
+            card_color = None
+            button_color = "primary"
+            button_outline = True
+            
+            if is_temp_selected:
+                card_color = "warning"
+                button_color = "warning"
+                button_outline = False
+                button_text = "已选择"
+            elif is_currently_selected:
+                card_color = "success"
+                button_color = "success" 
+                button_outline = False
+                button_text = "当前选择"
+            else:
+                button_text = "选择"
+            
+            param_items.append(
+                dbc.Card([
+                    dbc.CardBody([
+                        dbc.Row([
+                            dbc.Col([
+                                html.H6(param['label'], className="mb-0", style={"fontSize": "0.95rem"}),
+                                html.Small(f"值: {param['current_value']} {param['unit']}", className="text-muted")
+                            ], width=8, className="d-flex flex-column justify-content-center"),
+                            dbc.Col([
+                                dbc.Button(
+                                    button_text,
+                                    id={"type": "param-item-btn", "index": param['value']},
+                                    color=button_color,
+                                    size="sm",
+                                    outline=button_outline,
+                                    className="w-100"
+                                )
+                            ], width=4, className="d-flex align-items-center")
+                        ], className="align-items-center")
+                    ], className="py-2")
+                ], color=card_color, className="mb-2", style={"cursor": "pointer"})
+            )
+        
+        return param_items
+        
+    except Exception as e:
+        return [
+            dbc.Alert(
+                f"加载参数失败: {str(e)}",
+                color="danger"
+            )
+        ]
+
+# 处理参数选择
+@callback(
+    Output("temp-selected-param", "data"),
+    Input({"type": "param-item-btn", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True
+)
+def handle_param_selection(clicks_list):
+    """处理参数选择"""
+    if not any(clicks_list):
+        raise dash.exceptions.PreventUpdate
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if button_id:
+        import json
+        button_info = json.loads(button_id)
+        return button_info['index']
+    
+    return dash.no_update
+
+# 确认参数选择
+@callback(
+    Output("selected-x-param", "data"),
+    Output("selected-y-param", "data"),
+    Output("x-param-display", "value"),
+    Output("y-param-display", "value"),
+    Input("param-select-confirm", "n_clicks"),
+    State("temp-selected-param", "data"),
+    State("current-param-type", "data"),
+    State("selected-x-param", "data"),
+    State("selected-y-param", "data"),
+    prevent_initial_call=True
+)
+def confirm_param_selection(confirm_clicks, temp_param, param_type, current_x, current_y):
+    """确认参数选择并更新显示"""
+    if not confirm_clicks or not temp_param:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        params = get_plotting_parameters()
+        selected_param = next((p for p in params if p['value'] == temp_param), None)
+        
+        if not selected_param:
+            raise dash.exceptions.PreventUpdate
+        
+        if param_type == "x":
+            return temp_param, current_y, selected_param['label'], dash.no_update
+        else:
+            return current_x, temp_param, dash.no_update, selected_param['label']
+            
+    except Exception:
+        raise dash.exceptions.PreventUpdate
+
 
 if __name__ == "__main__":
     import argparse
