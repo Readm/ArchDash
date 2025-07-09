@@ -745,7 +745,6 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-events", "data", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
     Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
     Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
     State("node-data", "data"),
@@ -754,7 +753,7 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
 )
 def update_parameter(param_names, param_values, node_data, current_events):
     if not ctx.triggered_id:
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update
 
     triggered_id = ctx.triggered_id
     if isinstance(triggered_id, dict):
@@ -769,14 +768,14 @@ def update_parameter(param_names, param_values, node_data, current_events):
 
         if new_value is None or new_value == "":
             print(f"⚠️ 警告：未能获取到有效值，跳过更新")
-            return node_data, dash.no_update, dash.no_update, dash.no_update
+            return node_data, dash.no_update, dash.no_update
 
         node = graph.nodes.get(node_id)
         if not node:
-            return node_data, dash.no_update, dash.no_update, dash.no_update
+            return node_data, dash.no_update, dash.no_update
 
         if param_index >= len(node.parameters):
-            return node_data, dash.no_update, dash.no_update, dash.no_update
+            return node_data, dash.no_update, dash.no_update
 
         current_param = node.parameters[param_index]
 
@@ -791,7 +790,7 @@ def update_parameter(param_names, param_values, node_data, current_events):
                 update_message = f"参数名已更新为: {new_value}"
             else:
                 print(f"📌 参数名无变化，跳过更新: {new_value}")
-                return node_data, dash.no_update, dash.no_update, dash.no_update
+                return node_data, dash.no_update, dash.no_update
         elif param_type == "param-value":
             if not hasattr(current_param, 'param_type'):
                 print(f"❌ 参数 {current_param.name} 缺少类型信息")
@@ -831,7 +830,7 @@ def update_parameter(param_names, param_values, node_data, current_events):
             # 检查参数值是否真的有变化
             if new_value == current_param.value:
                 print(f"📌 参数值无变化，跳过更新: {current_param.name} = {new_value}")
-                return node_data, dash.no_update, dash.no_update, dash.no_update
+                return node_data, dash.no_update, dash.no_update
 
             print(f"🔄 参数值更新: {current_param.name}: {current_param.value} → {new_value}")
 
@@ -877,18 +876,17 @@ def update_parameter(param_names, param_values, node_data, current_events):
 
         if should_update_canvas:
             canvas_event = create_canvas_event("param_updated", {"node_id": node_id, "param_index": param_index, "new_value": new_value})
-            return node_data, add_canvas_event(current_events, canvas_event), update_message, False  # 启用计时器
+            return node_data, add_canvas_event(current_events, canvas_event), update_message
         else:
-            return node_data, current_events, update_message, False  # 启用计时器
+            return node_data, current_events, update_message
 
-    return node_data, dash.no_update, dash.no_update, dash.no_update
+    return node_data, dash.no_update, dash.no_update
 
 # 添加参数操作回调 - 完全独立于节点菜单
 @callback(
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-events", "data", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
     Input({"type": "delete-param", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-up", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-down", "node": ALL, "index": ALL}, "n_clicks"),
@@ -900,12 +898,12 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     ctx = dash.callback_context  # 获取回调上下文
     if not ctx.triggered_id:
         canvas_event = create_canvas_event("no_trigger", {})
-        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
         canvas_event = create_canvas_event("invalid_trigger", {})
-        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
@@ -914,20 +912,20 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
         canvas_event = create_canvas_event("no_value", {})
-        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     if not node_id or param_index is None:
         canvas_event = create_canvas_event("invalid_params", {})
-        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     node = graph.nodes.get(node_id)
     if not node:
         canvas_event = create_canvas_event("invalid_node", {})
-        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     if param_index >= len(node.parameters):
         canvas_event = create_canvas_event("invalid_param_index", {})
-        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     node_name = node.name
     param_name = node.parameters[param_index].name
@@ -944,12 +942,12 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
 
             error_message = f"❌ 无法删除参数 {node_name}.{param_name}，因为以下参数依赖于它：\n{', '.join(dependent_info)}"
             canvas_event = create_canvas_event("delete_param_error", {"node_id": node_id, "param_index": param_index, "error": error_message})
-            return node_data, add_canvas_event(current_events, canvas_event), error_message, dash.no_update
+            return node_data, add_canvas_event(current_events, canvas_event), error_message
 
         deleted_param = node.parameters.pop(param_index)
         success_message = f"✅ 参数 {node_name}.{param_name} 已删除"
         canvas_event = create_canvas_event("param_deleted", {"node_id": node_id, "param_index": param_index})
-        return node_data, add_canvas_event(current_events, canvas_event), success_message, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), success_message
 
     elif operation_type == "move-param-up":
         if param_index > 0:
@@ -962,14 +960,13 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
                 node.parameters[param_index + 1], node.parameters[param_index]
 
     canvas_event = create_canvas_event("param_moved", {"node_id": node_id, "param_index": param_index, "operation": operation_type})
-    return node_data, add_canvas_event(current_events, canvas_event), dash.no_update, dash.no_update
+    return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
 # 处理unlink图标点击的回调函数
 @callback(
     Output("node-data", "data", allow_duplicate=True),
     Output("canvas-events", "data", allow_duplicate=True),
     Output("output-result", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
     Input({"type": "unlink-icon", "node": ALL, "index": ALL}, "n_clicks"),
     State("node-data", "data"),
     State("canvas-events", "data"),
@@ -978,40 +975,40 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
 def handle_unlink_toggle(unlink_clicks, node_data, current_events):
     """处理unlink图标点击，重新连接参数并计算"""
     if not ctx.triggered_id:
-        return node_data, current_events, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, current_events, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
 
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, current_events, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     if not node_id or param_index is None:
-        return node_data, current_events, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     node = graph.nodes.get(node_id)
     if not node or param_index >= len(node.parameters):
-        return node_data, current_events, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     param = node.parameters[param_index]
     node_name = node.name
 
     if not param.calculation_func or not param.dependencies:
-        return node_data, current_events, f"⚠️ 参数 {node_name}.{param.name} 无计算依赖", dash.no_update
+        return node_data, current_events, f"⚠️ 参数 {node_name}.{param.name} 无计算依赖"
 
     try:
         new_value = param.relink_and_calculate()
         result_message = f"🔗 参数 {node_name}.{param.name} 已重新连接并计算，新值: {new_value}"
         canvas_event = create_canvas_event("param_relinked", {"node_id": node_id, "param_index": param_index, "new_value": new_value})
-        return node_data, add_canvas_event(current_events, canvas_event), result_message, dash.no_update
+        return node_data, add_canvas_event(current_events, canvas_event), result_message
 
     except Exception as e:
-        return node_data, current_events, f"❌ 重新连接失败: {str(e)}", dash.no_update
+        return node_data, current_events, f"❌ 重新连接失败: {str(e)}"
 
 # 打开参数编辑模态窗口
 @callback(
@@ -1323,23 +1320,7 @@ def save_parameter_changes(save_clicks, param_name, param_type, param_unit, para
     except Exception as e:
         return True, dash.no_update, f"保存失败: {str(e)}"
 
-# 添加定时清理高亮的回调
-@callback(
-    Output("canvas-container", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
-    Input("clear-highlight-timer", "n_intervals"),
-    prevent_initial_call=True
-)
-def clear_parameter_highlights(n_intervals):
-    """定时清除参数高亮"""
-    try:
-        if graph.recently_updated_params:
-            graph.recently_updated_params.clear()
-            return update_canvas(), True  # 清除高亮并禁用计时器
-        return dash.no_update, dash.no_update
-    except Exception as e:
-        print(f"Error in clear_parameter_highlights: {e}")
-        return dash.no_update, True  # 发生错误时禁用计时器
+# 高亮功能简化：保持永久高亮，无需定时清除
 
 @callback(
     Output("download-graph", "data"),
@@ -2878,6 +2859,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='启动计算图应用')
     parser.add_argument('--port', type=int, default=8050, help='服务端口号(默认:8050)')
+    parser.add_argument('--debug', action='store_true', help='启用调试模式(会有定时重载检查)')
     args = parser.parse_args()
 
-    app.run(debug=True, host="0.0.0.0", port=args.port)
+    app.run(debug=args.debug, host="0.0.0.0", port=args.port)

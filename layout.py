@@ -371,7 +371,6 @@ app_layout = dbc.Container([
     dcc.Store(id="selected-y-param", data=None),  # 存储选中的Y轴参数
     dcc.Store(id="current-param-type", data="x"),  # 存储当前选择的参数类型
     dcc.Store(id="canvas-events", data=[]),  # 存储画布更新事件
-    dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
     dcc.Download(id="download-graph"),  # 用于下载计算图文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
 # 移除旧的context menu，使用新的dropdown menu
