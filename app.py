@@ -1232,10 +1232,10 @@ def save_parameter_changes(save_clicks, param_name, param_type, param_unit, para
         # 更新画布显示
         updated_canvas = update_canvas()
 
-        return False, updated_canvas, success_msg, dash.no_update
+        return False, updated_canvas, success_msg
 
     except Exception as e:
-        return True, dash.no_update, f"保存失败: {str(e)}", dash.no_update
+        return True, dash.no_update, f"保存失败: {str(e)}"
 
 # 添加定时清理高亮的回调
 @callback(
