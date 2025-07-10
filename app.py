@@ -14,6 +14,7 @@ from layout import *
 from examples import *
 import traceback
 from clientside_callbacks import register_all_clientside_callbacks
+from constants import AppConstants, ValidationConstants, PerformanceConstants
 import time
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
@@ -23,7 +24,10 @@ app.server.secret_key = os.environ.get("SECRET_KEY", str(uuid.uuid4()))
 graph: CalculationGraph = GraphProxy()
 
 # 创建布局管理器
-layout_manager = CanvasLayoutManager(initial_cols=4, initial_rows=12)
+layout_manager = CanvasLayoutManager(
+    initial_cols=AppConstants.DEFAULT_INITIAL_COLUMNS, 
+    initial_rows=AppConstants.DEFAULT_INITIAL_ROWS
+)
 graph.set_layout_manager(layout_manager)
 
 # 画布事件处理辅助函数
@@ -42,7 +46,7 @@ def add_canvas_event(current_events, new_event):
         if current_events is None:
             events = []
         elif isinstance(current_events, list):
-            events = current_events[-9:]  # 保持最近9个事件
+            events = current_events[-AppConstants.MAX_RECENT_EVENTS:]  # 保持最近事件
         else:
             # 如果不是list，创建新的list
             print(f"Warning: current_events is not a list, type: {type(current_events)}, value: {current_events}")
@@ -86,7 +90,7 @@ def add_app_message(current_messages, new_message):
             messages_data = current_messages
         
         # 保持最近20条消息
-        messages = messages_data.get("messages", [])[-19:]
+        messages = messages_data.get("messages", [])[-AppConstants.MAX_RECENT_MESSAGES:]
         
         # 添加新消息
         if isinstance(new_message, list):
@@ -277,7 +281,7 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
 
         x_range = np.arange(x_start, x_end + x_step, x_step)
 
-        if len(x_range) > 1000:
+        if len(x_range) > AppConstants.MAX_DATA_POINTS:
             return {
                 'success': False, 
                 'message': f'数据点过多 ({len(x_range)} 点)，请减少范围或增大步长 (最大1000点)'
@@ -337,8 +341,13 @@ def create_empty_plot():
         title_text="请选择参数以生成图表",
         template="plotly_white",
         showlegend=True,
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=280,
+        margin=dict(
+            l=AppConstants.CHART_MARGIN_LEFT, 
+            r=AppConstants.CHART_MARGIN_RIGHT, 
+            t=AppConstants.CHART_MARGIN_TOP, 
+            b=AppConstants.CHART_MARGIN_BOTTOM
+        ),
+        height=AppConstants.CHART_DEFAULT_HEIGHT,
         xaxis=dict(showgrid=False, title=""),
         yaxis=dict(showgrid=False, title=""),
         legend=dict(
@@ -356,7 +365,7 @@ def auto_remove_empty_last_column():
     """检查并自动删除空的最后一列，但至少保留3列"""
     return graph.layout_manager.auto_remove_empty_last_columns()
 
-def ensure_minimum_columns(min_cols: int = 3):
+def ensure_minimum_columns(min_cols: int = AppConstants.MIN_LAYOUT_COLUMNS):
     """确保布局至少有 min_cols 列"""
     return graph.layout_manager.ensure_minimum_columns(min_cols)
 
@@ -477,7 +486,7 @@ def update_canvas(node_data=None):
                                         value=str(param.value),
                                         debounce=True,  # 只在失去焦点或按回车时触发callback
                                         style={
-                                            "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                            "width": f"calc(100% - {AppConstants.PARAM_INPUT_UNLINK_OFFSET}px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
                                             "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent"
                                         },
                                         className="param-input param-value-input"
@@ -561,7 +570,7 @@ def update_canvas(node_data=None):
             col_content.append(node_div)
 
         # 计算列宽 - 优化布局，确保至少3列时有合理的宽度分布
-        total_cols = max(3, graph.layout_manager.cols)  # 至少按3列计算宽度
+        total_cols = max(AppConstants.MIN_LAYOUT_COLUMNS, graph.layout_manager.cols)  # 至少按最小列数计算宽度
         col_width = max(2, 12 // total_cols)  # 每列至少占2个Bootstrap列宽
         canvas_content.append(dbc.Col(col_content, width=col_width))
 
@@ -686,7 +695,13 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "add-param":
-            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数", param_type="float")
+            param = Parameter(
+                name="new_param", 
+                value=AppConstants.DEFAULT_PARAMETER_VALUE, 
+                unit="", 
+                description=f"新参数", 
+                param_type="float"
+            )
 
             # 添加参数到节点
             graph.add_parameter_to_node(node_id, param)
@@ -697,7 +712,13 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
 
         elif operation_type == "add-param-header":
             # 标题栏加号按钮：添加参数功能，与下拉菜单中的"添加参数"功能相同
-            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数", param_type="float")
+            param = Parameter(
+                name="new_param", 
+                value=AppConstants.DEFAULT_PARAMETER_VALUE, 
+                unit="", 
+                description=f"新参数", 
+                param_type="float"
+            )
 
             # 添加参数到节点
             graph.add_parameter_to_node(node_id, param)
@@ -1478,7 +1499,10 @@ def load_calculation_graph(contents, filename, current_messages):
 
         # 清空现有数据
         # 创建新的布局管理器并重新构建计算图
-        new_layout = CanvasLayoutManager(initial_cols=3, initial_rows=10)
+        new_layout = CanvasLayoutManager(
+            initial_cols=AppConstants.MIN_LAYOUT_COLUMNS, 
+            initial_rows=AppConstants.DEFAULT_INITIAL_ROWS
+        )
         new_graph = CalculationGraph.from_dict(data, new_layout)
 
         # 写入当前 session
@@ -1694,8 +1718,13 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         hovermode='x unified',
         template="plotly_white",
         showlegend=True,  # 始终显示图例
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=280,
+        margin=dict(
+            l=AppConstants.CHART_MARGIN_LEFT, 
+            r=AppConstants.CHART_MARGIN_RIGHT, 
+            t=AppConstants.CHART_MARGIN_TOP, 
+            b=AppConstants.CHART_MARGIN_BOTTOM
+        ),
+        height=AppConstants.CHART_DEFAULT_HEIGHT,
         legend=dict(
             orientation="v",
             yanchor="top",
@@ -1892,19 +1921,19 @@ def auto_update_range(x_param):
 
         current_value = float(x_param_obj.value)
 
-        start_value = max(0, current_value * 0.5)
-        end_value = current_value * 1.5
+        start_value = max(AppConstants.SENSITIVITY_DEFAULT_START, current_value * AppConstants.SENSITIVITY_START_MULTIPLIER)
+        end_value = current_value * AppConstants.SENSITIVITY_END_MULTIPLIER
 
         # 如果当前值为0，设置默认范围
         if current_value == 0:
-            start_value = 0
-            end_value = 100
+            start_value = AppConstants.SENSITIVITY_DEFAULT_START
+            end_value = AppConstants.SENSITIVITY_DEFAULT_END
 
         return start_value, end_value
 
     except (ValueError, TypeError):
         # 如果转换失败，返回默认值
-        return 0, 100
+        return AppConstants.SENSITIVITY_DEFAULT_START, AppConstants.SENSITIVITY_DEFAULT_END
 
 def get_all_parameter_dependencies():
     """获取计算图中所有参数的依赖关系，包括计算过程和历史"""
@@ -2043,7 +2072,7 @@ def format_dependencies_display(dependencies_info):
             param_card_items = []
 
             # 参数基本信息（增强版）
-            confidence_color = "success" if param_info['param_confidence'] >= 0.8 else "warning" if param_info['param_confidence'] >= 0.5 else "danger"
+            confidence_color = "success" if param_info['param_confidence'] >= AppConstants.CONFIDENCE_HIGH_THRESHOLD else "warning" if param_info['param_confidence'] >= AppConstants.CONFIDENCE_MEDIUM_THRESHOLD else "danger"
             param_card_items.append(
                 html.Div([
                     html.Div([
@@ -2754,7 +2783,10 @@ def clear_calculation_graph(n_clicks, current_messages):
         # 清空全局数据模型
         # 重新创建空的计算图和布局管理器
         new_graph = CalculationGraph()
-        new_graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))
+        new_graph.set_layout_manager(CanvasLayoutManager(
+            initial_cols=AppConstants.MIN_LAYOUT_COLUMNS, 
+            initial_rows=AppConstants.DEFAULT_INITIAL_ROWS
+        ))
         set_graph(new_graph)
         graph = get_graph()
 
