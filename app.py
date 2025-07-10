@@ -3029,6 +3029,54 @@ def handle_param_selection(clicks_list, param_type, current_x, current_y):
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 
+# 教程模态窗口回调函数
+@callback(
+    Output("tutorial-modal", "is_open"),
+    [Input("help-tutorial-button", "n_clicks"),
+     Input("tutorial-close", "n_clicks")],
+    State("tutorial-modal", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_tutorial_modal(help_clicks, close_clicks, is_open):
+    """切换教程模态窗口的显示状态"""
+    if help_clicks or close_clicks:
+        return not is_open
+    return is_open
+
+@callback(
+    Output("tutorial-modal", "is_open", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
+    Input("tutorial-load-example", "n_clicks"),
+    State("app-messages", "data"),
+    prevent_initial_call=True
+)
+def tutorial_load_example(n_clicks, current_messages):
+    """教程中的加载示例按钮"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 创建示例计算图
+        result = create_example_soc_graph()
+        
+        # 更新画布显示
+        updated_canvas = update_canvas()
+        
+        success_message = (
+            f"已从教程加载多核SoC示例计算图："
+            f"{result['nodes_created']}个节点，"
+            f"{result['total_params']}个参数，"
+            f"其中{result['calculated_params']}个计算参数"
+        )
+        
+        success_msg = create_message("tutorial_load_success", success_message, "success")
+        return False, updated_canvas, add_app_message(current_messages, success_msg)
+        
+    except Exception as e:
+        error_msg = create_message("tutorial_load_error", f"从教程加载示例失败: {str(e)}", "error")
+        return False, dash.no_update, add_app_message(current_messages, error_msg)
+
 # 注册所有客户端回调函数
 register_all_clientside_callbacks(app)
 
