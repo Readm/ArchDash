@@ -369,6 +369,45 @@ h1 {
 
 .dropdown-toggle {
   z-index: 2;
+  /* 修复hover时的文本移动和尺寸变化问题 */
+  box-sizing: border-box !important;
+  min-width: fit-content;
+  white-space: nowrap;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* 防止下拉按钮hover时内容偏移 */
+.dropdown-toggle:hover {
+  transform: none !important;
+}
+
+/* 确保下拉按钮文本在hover时不移动 */
+.dropdown-toggle span,
+.dropdown-toggle::after {
+  position: relative;
+  z-index: 3;
+}
+
+/* 禁用下拉按钮的::before伪元素hover效果 */
+.dropdown-toggle::before {
+  display: none !important;
+}
+
+/* 通用按钮hover修复 - 防止Bootstrap默认的hover变形 */
+.btn.dropdown-toggle {
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.btn.dropdown-toggle:hover,
+.btn.dropdown-toggle:focus,
+.btn.dropdown-toggle:active {
+  transform: none !important;
+  font-size: inherit !important;
+  padding: 0.4rem 1rem !important;
+  min-width: fit-content !important;
 }
 
 .dropdown-menu.show {
