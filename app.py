@@ -117,11 +117,11 @@ def format_message_display(messages_data):
     
     # 根据级别设置样式
     if level == "error":
-        return html.Div(content, style={"color": "red"})
+        return html.Div(content, className="message-error")
     elif level == "success":
-        return html.Div(content, style={"color": "green"})
+        return html.Div(content, className="message-success")
     elif level == "warning":
-        return html.Div(content, style={"color": "orange"})
+        return html.Div(content, className="message-warning")
     else:
         return html.Div(content)
 
@@ -163,7 +163,7 @@ def unified_message_display(messages_data):
         error_details = traceback.format_exc()
         print(f"Error in unified_message_display: {e}")
         print(f"Traceback:\n{error_details}")
-        return html.Div(f"消息显示错误: {str(e)}", style={"color": "red"})
+        return html.Div(f"消息显示错误: {str(e)}", className="message-error")
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -378,48 +378,40 @@ def update_canvas(node_data=None):
         empty_state_content = html.Div([
             html.Div([
                 html.Div([
-                    html.I(className="fas fa-project-diagram", style={"fontSize": "4rem", "color": "#dee2e6", "marginBottom": "1rem"}),
+                    html.I(className="fas fa-project-diagram empty-state-icon"),
                     html.P([
                         "开始构建计算图：",
                     ], className="text-muted mb-4"),
                     html.Div([
                         html.Div([
-                            html.Span( style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span(className="empty-state-emoji"),
                             "点击右上角 ",
                             html.Strong("🎯", className="text-warning"),
                             " 按钮载入SoC示例计算图"
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
-                            html.Span(style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span(className="empty-state-emoji"),
                             "点击右上角 ",
                             html.Strong("➕", className="text-primary"),
                             " 按钮添加新节点，并添加参数"
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
-                            html.Span("📁", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span("📁", className="empty-state-emoji"),
                             "或从文件加载已有的计算图"
                         ], className="p-3 border rounded bg-light")
                     ])
                 ], className="text-center p-5"),
-            ], className="d-flex justify-content-center align-items-center", style={"minHeight": "400px"})
+            ], className="d-flex justify-content-center align-items-center empty-state-container")
         ])
 
         canvas_with_arrows = html.Div([
             empty_state_content,
             html.Div(
                 [],
-                style={
-                    "position": "absolute",
-                    "top": "0",
-                    "left": "0", 
-                    "width": "100%",
-                    "height": "100%",
-                    "pointerEvents": "none",
-                    "zIndex": "10"
-                },
+                className="arrows-overlay",
                 id="arrows-overlay"
             )
-        ], style={"position": "relative"})
+        ], className="relative-container")
 
         print("🎨 空状态内容已创建并返回")
 
@@ -453,18 +445,7 @@ def update_canvas(node_data=None):
                             html.Td(
                                 html.Div([
                                     html.Div(
-                                        style={
-                                            "width": "8px",
-                                            "height": "8px",
-                                            "borderRadius": "50%",
-                                            "backgroundColor": "#007bff",
-                                            "border": "2px solid #fff",
-                                            "boxShadow": "0 0 0 1px #007bff",
-                                            "marginRight": "4px",
-                                            "marginTop": "6px",
-                                            "flex": "none"
-                                        },
-                                        className="param-pin",
+                                        className="param-pin param-pin-style",
                                         id=f"pin-{node_id}-{param_idx}"
                                     ),
                                     dbc.Tooltip(
@@ -477,11 +458,10 @@ def update_canvas(node_data=None):
                                         id={"type": "param-name", "node": node_id, "index": param_idx},
                                         value=param.name,
                                         debounce=True,  # 只在失去焦点或按回车时触发callback
-                                        style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "1px 3px"},
-                                        className="param-input"
+                                        className="param-input param-name-input"
                                     )
-                                ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
-                                style={"paddingRight": "2px", "width": "45%"}
+                                ], className="param-row-container"),
+                                className="param-name-cell"
                             ),
                             html.Td(
                                 html.Div([
@@ -498,44 +478,23 @@ def update_canvas(node_data=None):
                                         debounce=True,  # 只在失去焦点或按回车时触发callback
                                         style={
                                             "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
-                                            "border": "1px solid transparent", 
-                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
-                                            "borderRadius": "3px", 
-                                            "padding": "1px 3px",
-                                            "transition": "background-color 2s ease-out"
+                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent"
                                         },
-                                        className="param-input"
+                                        className="param-input param-value-input"
                                     ),
                                         html.Span(
                                             param.unit,
-                                            style={
-                                                "marginLeft": "4px",
-                                                "fontSize": "0.85em",
-                                                "color": "#666",
-                                                "whiteSpace": "nowrap"
-                                            }
+                                            className="param-unit"
                                         ) if param.unit else None
-                                    ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
+                                    ], className="param-value-container"),
                                     html.Div(
                                         "🔓",
                                         id={"type": "unlink-icon", "node": node_id, "index": param_idx},
-                                        className="unlink-icon",
-                                        style={
-                                            "cursor": "pointer",
-                                            "fontSize": "12px",
-                                            "opacity": "1",
-                                            "marginLeft": "2px",
-                                            "padding": "2px",
-                                            "borderRadius": "3px",
-                                            "display": "inline-block",
-                                            "minWidth": "18px",
-                                            "textAlign": "center",
-                                            "userSelect": "none"
-                                        },
+                                        className="unlink-icon unlink-icon-style",
                                         title="重新连接 (点击恢复自动计算)"
                                     ) if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else None
-                                ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
-                                style={"width": "40%", "paddingLeft": "2px", "paddingRight": "2px"}
+                                ], className="param-value-container"),
+                                className="param-value-cell"
                             ),
                             html.Td(
                                 dbc.DropdownMenu(
@@ -552,12 +511,12 @@ def update_canvas(node_data=None):
                                     size="sm",
                                     direction="start"
                                 ),
-                                style={"width": "15%", "textAlign": "right", "paddingLeft": "2px"}
+                                className="param-dropdown-cell"
                             )
                         ])
                     )
 
-            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "2px"}) if param_rows else None
+            param_table = html.Table(param_rows, className="param-table") if param_rows else None
 
             node_div = html.Div(
                 [
@@ -567,30 +526,9 @@ def update_canvas(node_data=None):
                         ]),
                         html.Div([
                             html.Button(
-                                html.Span(
-                                    "➕",
-                                    style={
-                                        "fontSize": "14px",
-                                        "fontWeight": "normal",
-                                        "lineHeight": "1"
-                                    }
-                                ),
+                                html.Span("➕"),
                                 id={"type": "add-param-header", "node": node_id},
                                 className="btn add-param-btn",
-                                style={
-                                    "padding": "4px",
-                                    "borderRadius": "50%",
-                                    "border": "none",
-                                    "backgroundColor": "transparent",
-                                    "minWidth": "24px",
-                                    "height": "24px",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "transition": "all 0.3s ease",
-                                    "color": "#6c757d",
-                                    "marginRight": "6px"
-                                },
                                 title="添加参数"
                             ),
                             dbc.DropdownMenu(
@@ -607,25 +545,12 @@ def update_canvas(node_data=None):
                                     dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
                                 ],
                                 toggle_class_name="node-menu-btn",
-                                toggle_style={
-                                    "border": "none",
-                                    "background": "transparent",
-                                    "padding": "4px",
-                                    "fontSize": "12px",
-                                    "color": "#6c757d",
-                                    "height": "24px",
-                                    "minWidth": "24px",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "borderRadius": "3px"
-                                },
                                 label="",
                                 size="sm",
                                 direction="start"
                             )
-                        ], style={"display": "flex", "alignItems": "center"})
-                    ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
+                        ], className="node-header-controls")
+                    ], className="node-header"),
                     param_table,
                     html.Div(id=f"node-content-{node_id}", className="node-content")
                 ],
@@ -646,18 +571,10 @@ def update_canvas(node_data=None):
         dbc.Row(canvas_content),
         html.Div(
             arrows,
-            style={
-                "position": "absolute",
-                "top": "0",
-                "left": "0", 
-                "width": "100%",
-                "height": "100%",
-                "pointerEvents": "none",  # 允许鼠标事件穿透到下层元素
-                "zIndex": "10"
-            },
+            className="arrows-overlay",
             id="arrows-overlay"
         )
-    ], style={"position": "relative"})
+    ], className="relative-container")
 
     return canvas_with_arrows
 
@@ -665,15 +582,7 @@ def create_arrows():
     return [
         html.Div(
             id="arrows-overlay-dynamic",
-            style={
-                "position": "absolute",
-                "top": "0",
-                "left": "0",
-                "width": "100%",
-                "height": "100%",
-                "pointerEvents": "none",
-                "zIndex": "10"
-            }
+            className="arrows-overlay-dynamic"
         )
     ]
 
@@ -1321,7 +1230,7 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
                 html.P(f"计算错误: {str(e)}", className="mb-1"),
                 html.Details([
                     html.Summary("查看详细回溯"),
-                    html.Pre(traceback_info, style={"fontSize": "0.7em", "color": "darkred"})
+                    html.Pre(traceback_info, className="code-display")
                 ])
             ]), "danger"
         finally:
@@ -1336,7 +1245,7 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
             html.P(f"测试功能内部错误: {str(e)}", className="mb-1"),
             html.Details([
                 html.Summary("查看详细回溯"),
-                html.Pre(full_traceback, style={"fontSize": "0.7em", "color": "darkred"})
+                html.Pre(full_traceback, className="code-display")
             ])
         ]), "danger"
 
@@ -2159,7 +2068,7 @@ def format_dependencies_display(dependencies_info):
                     dbc.Accordion([
                         dbc.AccordionItem([
                             html.Pre(param_info['calculation_func'] or "无计算函数", 
-                                   style={"fontSize": "0.8em", "backgroundColor": "#f8f9fa", "padding": "10px"})
+                                   className="code-block")
                         ], title="📝 计算函数代码")
                     ], start_collapsed=True, className="mb-2")
                 )
@@ -2250,8 +2159,7 @@ def format_dependencies_display(dependencies_info):
                 )
 
             node_card_content.append(
-                html.Div(param_card_items, className="border-start border-4 border-primary ps-3 mb-4", 
-                        style={"backgroundColor": "#f8f9fa", "borderRadius": "0 5px 5px 0", "padding": "15px"})
+                html.Div(param_card_items, className="border-start border-4 border-primary ps-3 mb-4 param-card-container")
             )
 
         display_components.append(
@@ -2958,7 +2866,7 @@ def update_param_list(search_value, canvas_children, current_x, current_y, param
                     dbc.CardBody([
                         dbc.Row([
                             dbc.Col([
-                                html.H6(param['label'], className="mb-0", style={"fontSize": "0.95rem"}),
+                                html.H6(param['label'], className="mb-0 param-card-label"),
                                 html.Small(f"值: {param['current_value']} {param['unit']}", className="text-muted")
                             ], width=8, className="d-flex flex-column justify-content-center"),
                             dbc.Col([
@@ -2973,7 +2881,7 @@ def update_param_list(search_value, canvas_children, current_x, current_y, param
                             ], width=4, className="d-flex align-items-center")
                         ], className="align-items-center")
                     ], className="py-2")
-                ], color=card_color, className="mb-2", style={"cursor": "pointer"})
+                ], color=card_color, className="mb-2 param-card-clickable")
             )
 
         return param_items

@@ -427,24 +427,26 @@ h1 {
 /* 通用按钮hover修复 - 防止Bootstrap默认的hover变形 */
 .btn.dropdown-toggle {
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
-  /* 强制固定尺寸 - 更紧凑的高度 */
-  font-size: 0.75rem !important;
-  padding: 0.25rem 0.75rem !important;
+  /* 强制固定尺寸 - 更紧凑的高度，减小30% */
+  font-size: 0.525rem !important;
+  padding: 0.175rem 0.525rem !important;
   border-width: 1px !important;
   line-height: 1.2 !important;
-  min-height: calc(1.2em + 0.5rem + 2px) !important;
+  min-height: calc(1.2em + 0.35rem + 2px) !important;
+  box-shadow: var(--shadow-light) !important;
 }
 
 .btn.dropdown-toggle:hover,
 .btn.dropdown-toggle:focus,
 .btn.dropdown-toggle:active {
   transform: none !important;
-  font-size: 0.75rem !important;
-  padding: 0.25rem 0.75rem !important;
+  font-size: 0.525rem !important;
+  padding: 0.175rem 0.525rem !important;
   min-width: fit-content !important;
   border-width: 1px !important;
   line-height: 1.2 !important;
-  min-height: calc(1.2em + 0.5rem + 2px) !important;
+  min-height: calc(1.2em + 0.35rem + 2px) !important;
+  box-shadow: var(--shadow-hover) !important;
   /* 禁用任何可能的尺寸变化 */
   width: auto !important;
   height: auto !important;
@@ -459,6 +461,237 @@ h1 {
   border-top-color: currentColor;
   transform: none !important;
 }
+
+/* 节点菜单按钮样式 - 减小30% */
+.node-menu-btn {
+  border: none !important;
+  background: transparent !important;
+  padding: 3px !important;
+  font-size: 8px !important;
+  color: #6c757d !important;
+  height: 17px !important;
+  min-width: 17px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 3px !important;
+  box-shadow: var(--shadow-light) !important;
+  transition: all 0.3s ease !important;
+}
+
+.node-menu-btn:hover {
+  box-shadow: var(--shadow-hover) !important;
+  background: rgba(108, 117, 125, 0.1) !important;
+}
+
+/* 添加参数按钮样式 */
+.add-param-btn {
+  padding: 4px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background-color: transparent !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.3s ease !important;
+  color: #6c757d !important;
+  margin-right: 6px !important;
+}
+
+.add-param-btn span {
+  font-size: 14px !important;
+  font-weight: normal !important;
+  line-height: 1 !important;
+}
+
+/* 节点头部样式 */
+.node-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+.node-header-controls {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* 参数表格样式 */
+.param-table {
+  width: 100% !important;
+  font-size: 0.85em !important;
+  margin-top: 2px !important;
+}
+
+/* 参数行容器样式 */
+.param-row-container {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+/* 参数名称输入框样式 */
+.param-name-input {
+  flex: 1 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  font-weight: bold !important;
+  border-radius: 3px !important;
+  padding: 1px 3px !important;
+}
+
+/* 参数值容器样式 */
+.param-value-container {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+/* 参数值输入框样式（会被动态设置背景色） */
+.param-value-input {
+  border: 1px solid transparent !important;
+  border-radius: 3px !important;
+  padding: 1px 3px !important;
+  transition: background-color 2s ease-out !important;
+}
+
+/* 参数单位样式 */
+.param-unit {
+  margin-left: 4px !important;
+  font-size: 0.85em !important;
+  color: #666 !important;
+  white-space: nowrap !important;
+}
+
+/* Unlink图标样式 */
+.unlink-icon-style {
+  cursor: pointer !important;
+  font-size: 12px !important;
+  opacity: 1 !important;
+  margin-left: 2px !important;
+  padding: 2px !important;
+  border-radius: 3px !important;
+  display: inline-block !important;
+  min-width: 18px !important;
+  text-align: center !important;
+  user-select: none !important;
+}
+
+/* 参数表格单元格样式 */
+.param-name-cell {
+  padding-right: 2px !important;
+  width: 45% !important;
+}
+
+.param-value-cell {
+  width: 40% !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+
+.param-dropdown-cell {
+  width: 15% !important;
+  text-align: right !important;
+  padding-left: 2px !important;
+}
+
+/* 消息显示样式 */
+.message-error {
+  color: red !important;
+}
+
+.message-success {
+  color: green !important;
+}
+
+.message-warning {
+  color: orange !important;
+}
+
+/* 空状态样式 */
+.empty-state-icon {
+  font-size: 4rem !important;
+  color: #dee2e6 !important;
+  margin-bottom: 1rem !important;
+}
+
+.empty-state-emoji {
+  font-size: 1.5rem !important;
+  margin-right: 0.5rem !important;
+}
+
+.empty-state-container {
+  min-height: 400px !important;
+}
+
+/* 相对定位容器 */
+.relative-container {
+  position: relative !important;
+}
+
+/* 箭头覆盖层样式 */
+.arrows-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 10 !important;
+}
+
+.arrows-overlay-dynamic {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 10 !important;
+}
+
+/* 参数Pin点样式 */
+.param-pin-style {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background-color: #007bff !important;
+  border: 2px solid #fff !important;
+  box-shadow: 0 0 0 1px #007bff !important;
+  margin-right: 4px !important;
+  margin-top: 6px !important;
+  flex: none !important;
+}
+
+/* 代码显示样式 */
+.code-display {
+  font-size: 0.7em !important;
+  color: darkred !important;
+}
+
+.code-block {
+  font-size: 0.8em !important;
+  background-color: #f8f9fa !important;
+  padding: 10px !important;
+}
+
+/* 参数卡片样式 */
+.param-card-container {
+  background-color: #f8f9fa !important;
+  border-radius: 0 5px 5px 0 !important;
+  padding: 15px !important;
+}
+
+.param-card-label {
+  font-size: 0.95rem !important;
+}
+
+.param-card-clickable {
+  cursor: pointer !important;
+}
+
 
 .dropdown-menu.show {
   display: block;
