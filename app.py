@@ -14,6 +14,8 @@ from layout import *
 from examples import *
 import traceback
 from clientside_callbacks import register_all_clientside_callbacks
+from constants import AppConstants, ValidationConstants, PerformanceConstants
+import time
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
@@ -22,18 +24,150 @@ app.server.secret_key = os.environ.get("SECRET_KEY", str(uuid.uuid4()))
 graph: CalculationGraph = GraphProxy()
 
 # 创建布局管理器
-layout_manager = CanvasLayoutManager(initial_cols=4, initial_rows=12)
+layout_manager = CanvasLayoutManager(
+    initial_cols=AppConstants.DEFAULT_INITIAL_COLUMNS, 
+    initial_rows=AppConstants.DEFAULT_INITIAL_ROWS
+)
 graph.set_layout_manager(layout_manager)
 
-# 初始化画布显示
+# 画布事件处理辅助函数
+def create_canvas_event(event_type, data=None):
+    """创建画布更新事件"""
+    return {
+        "type": event_type,
+        "timestamp": time.time(),
+        "data": data or {}
+    }
+
+def add_canvas_event(current_events, new_event):
+    """添加新事件到事件列表，支持批量事件"""
+    try:
+        # 确保current_events是list类型
+        if current_events is None:
+            events = []
+        elif isinstance(current_events, list):
+            events = current_events[-AppConstants.MAX_RECENT_EVENTS:]  # 保持最近事件
+        else:
+            # 如果不是list，创建新的list
+            print(f"Warning: current_events is not a list, type: {type(current_events)}, value: {current_events}")
+            events = []
+        
+        # 支持批量添加事件
+        if isinstance(new_event, list):
+            events.extend(new_event)
+            print(f"Debug: Added {len(new_event)} batch events, total events: {len(events)}")
+        else:
+            events.append(new_event)
+            print(f"Debug: Added event {new_event['type']}, total events: {len(events)}")
+        
+        return events
+    except Exception as e:
+        print(f"Error in add_canvas_event: {e}")
+        print(f"current_events type: {type(current_events)}")
+        print(f"current_events value: {current_events}")
+        # 出错时创建新的事件列表
+        if isinstance(new_event, list):
+            return new_event
+        else:
+            return [new_event]
+
+# 消息管理辅助函数
+def create_message(message_type, content, level="info"):
+    """创建标准化消息对象"""
+    return {
+        "type": message_type,
+        "content": content,
+        "level": level,  # info, success, warning, error
+        "timestamp": time.time()
+    }
+
+def add_app_message(current_messages, new_message):
+    """添加新消息到消息系统"""
+    try:
+        if current_messages is None:
+            messages_data = {"messages": [], "timestamp": 0}
+        else:
+            messages_data = current_messages
+        
+        # 保持最近20条消息
+        messages = messages_data.get("messages", [])[-AppConstants.MAX_RECENT_MESSAGES:]
+        
+        # 添加新消息
+        if isinstance(new_message, list):
+            messages.extend(new_message)
+        else:
+            messages.append(new_message)
+        
+        return {
+            "messages": messages,
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        print(f"Error in add_app_message: {e}")
+        return {
+            "messages": [new_message] if not isinstance(new_message, list) else new_message,
+            "timestamp": time.time()
+        }
+
+def format_message_display(messages_data):
+    """格式化消息为显示组件"""
+    if not messages_data or not messages_data.get("messages"):
+        return ""
+    
+    # 显示最新消息
+    latest_message = messages_data["messages"][-1]
+    content = latest_message.get("content", "")
+    level = latest_message.get("level", "info")
+    
+    # 根据级别设置样式
+    if level == "error":
+        return html.Div(content, className="message-error")
+    elif level == "success":
+        return html.Div(content, className="message-success")
+    elif level == "warning":
+        return html.Div(content, className="message-warning")
+    else:
+        return html.Div(content)
+
+# 统一的画布更新处理器
 @callback(
-    Output("canvas-container", "children", allow_duplicate=True),
-    Input("dependencies-collapse-state", "data"),  # 使用一个稳定的Store作为触发器
-    prevent_initial_call='initial_duplicate'
+    Output("canvas-container", "children"),
+    Input("canvas-events", "data"),
+    prevent_initial_call=False
 )
-def initialize_canvas(collapse_state):
-    """页面加载时初始化画布显示"""
-    return update_canvas()
+def unified_canvas_update(events):
+    """统一的画布更新处理器"""
+    try:
+        # 初始化时或无事件时，进行全量更新
+        if not events:
+            return update_canvas()
+        
+        # 获取最新事件
+        latest_event = events[-1]
+        event_type = latest_event.get("type")
+        
+        # 目前所有事件都使用全量更新，后续可以优化为增量更新
+        return update_canvas()
+    except Exception as e:
+        print(f"Error in unified_canvas_update: {e}")
+        return update_canvas()
+
+# 统一的消息渲染处理器
+@callback(
+    Output("output-result", "children"),
+    Input("app-messages", "data"),
+    prevent_initial_call=False
+)
+def unified_message_display(messages_data):
+    """统一的消息显示处理器"""
+    try:
+        return format_message_display(messages_data)
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in unified_message_display: {e}")
+        print(f"Traceback:\n{error_details}")
+        return html.Div(f"消息显示错误: {str(e)}", className="message-error")
 
 # 辅助函数
 def get_all_available_parameters(current_node_id, current_param_name):
@@ -147,7 +281,7 @@ def perform_sensitivity_analysis(x_param_info, y_param_info, x_start, x_end, x_s
 
         x_range = np.arange(x_start, x_end + x_step, x_step)
 
-        if len(x_range) > 1000:
+        if len(x_range) > AppConstants.MAX_DATA_POINTS:
             return {
                 'success': False, 
                 'message': f'数据点过多 ({len(x_range)} 点)，请减少范围或增大步长 (最大1000点)'
@@ -207,8 +341,13 @@ def create_empty_plot():
         title_text="请选择参数以生成图表",
         template="plotly_white",
         showlegend=True,
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=280,
+        margin=dict(
+            l=AppConstants.CHART_MARGIN_LEFT, 
+            r=AppConstants.CHART_MARGIN_RIGHT, 
+            t=AppConstants.CHART_MARGIN_TOP, 
+            b=AppConstants.CHART_MARGIN_BOTTOM
+        ),
+        height=AppConstants.CHART_DEFAULT_HEIGHT,
         xaxis=dict(showgrid=False, title=""),
         yaxis=dict(showgrid=False, title=""),
         legend=dict(
@@ -226,7 +365,7 @@ def auto_remove_empty_last_column():
     """检查并自动删除空的最后一列，但至少保留3列"""
     return graph.layout_manager.auto_remove_empty_last_columns()
 
-def ensure_minimum_columns(min_cols: int = 3):
+def ensure_minimum_columns(min_cols: int = AppConstants.MIN_LAYOUT_COLUMNS):
     """确保布局至少有 min_cols 列"""
     return graph.layout_manager.ensure_minimum_columns(min_cols)
 
@@ -248,48 +387,40 @@ def update_canvas(node_data=None):
         empty_state_content = html.Div([
             html.Div([
                 html.Div([
-                    html.I(className="fas fa-project-diagram", style={"fontSize": "4rem", "color": "#dee2e6", "marginBottom": "1rem"}),
+                    html.I(className="fas fa-project-diagram empty-state-icon"),
                     html.P([
                         "开始构建计算图：",
                     ], className="text-muted mb-4"),
                     html.Div([
                         html.Div([
-                            html.Span( style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span(className="empty-state-emoji"),
                             "点击右上角 ",
                             html.Strong("🎯", className="text-warning"),
                             " 按钮载入SoC示例计算图"
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
-                            html.Span(style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span(className="empty-state-emoji"),
                             "点击右上角 ",
                             html.Strong("➕", className="text-primary"),
                             " 按钮添加新节点，并添加参数"
                         ], className="mb-3 p-3 border rounded bg-light"),
                         html.Div([
-                            html.Span("📁", style={"fontSize": "1.5rem", "marginRight": "0.5rem"}),
+                            html.Span("📁", className="empty-state-emoji"),
                             "或从文件加载已有的计算图"
                         ], className="p-3 border rounded bg-light")
                     ])
                 ], className="text-center p-5"),
-            ], className="d-flex justify-content-center align-items-center", style={"minHeight": "400px"})
+            ], className="d-flex justify-content-center align-items-center empty-state-container")
         ])
 
         canvas_with_arrows = html.Div([
             empty_state_content,
             html.Div(
                 [],
-                style={
-                    "position": "absolute",
-                    "top": "0",
-                    "left": "0", 
-                    "width": "100%",
-                    "height": "100%",
-                    "pointerEvents": "none",
-                    "zIndex": "10"
-                },
+                className="arrows-overlay",
                 id="arrows-overlay"
             )
-        ], style={"position": "relative"})
+        ], className="relative-container")
 
         print("🎨 空状态内容已创建并返回")
 
@@ -323,18 +454,7 @@ def update_canvas(node_data=None):
                             html.Td(
                                 html.Div([
                                     html.Div(
-                                        style={
-                                            "width": "8px",
-                                            "height": "8px",
-                                            "borderRadius": "50%",
-                                            "backgroundColor": "#007bff",
-                                            "border": "2px solid #fff",
-                                            "boxShadow": "0 0 0 1px #007bff",
-                                            "marginRight": "4px",
-                                            "marginTop": "6px",
-                                            "flex": "none"
-                                        },
-                                        className="param-pin",
+                                        className="param-pin param-pin-style",
                                         id=f"pin-{node_id}-{param_idx}"
                                     ),
                                     dbc.Tooltip(
@@ -347,11 +467,10 @@ def update_canvas(node_data=None):
                                         id={"type": "param-name", "node": node_id, "index": param_idx},
                                         value=param.name,
                                         debounce=True,  # 只在失去焦点或按回车时触发callback
-                                        style={"flex": "1", "border": "1px solid transparent", "background": "transparent", "fontWeight": "bold", "borderRadius": "3px", "padding": "1px 3px"},
-                                        className="param-input"
+                                        className="param-input param-name-input"
                                     )
-                                ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
-                                style={"paddingRight": "2px", "width": "45%"}
+                                ], className="param-row-container"),
+                                className="param-name-cell"
                             ),
                             html.Td(
                                 html.Div([
@@ -367,45 +486,24 @@ def update_canvas(node_data=None):
                                         value=str(param.value),
                                         debounce=True,  # 只在失去焦点或按回车时触发callback
                                         style={
-                                            "width": "calc(100% - 25px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
-                                            "border": "1px solid transparent", 
-                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent",
-                                            "borderRadius": "3px", 
-                                            "padding": "1px 3px",
-                                            "transition": "background-color 2s ease-out"
+                                            "width": f"calc(100% - {AppConstants.PARAM_INPUT_UNLINK_OFFSET}px)" if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else "100%", 
+                                            "background": "lightgreen" if f"{node_id}-{param_idx}" in graph.recently_updated_params else "transparent"
                                         },
-                                        className="param-input"
+                                        className="param-input param-value-input"
                                     ),
                                         html.Span(
                                             param.unit,
-                                            style={
-                                                "marginLeft": "4px",
-                                                "fontSize": "0.85em",
-                                                "color": "#666",
-                                                "whiteSpace": "nowrap"
-                                            }
+                                            className="param-unit"
                                         ) if param.unit else None
-                                    ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
+                                    ], className="param-value-container"),
                                     html.Div(
                                         "🔓",
                                         id={"type": "unlink-icon", "node": node_id, "index": param_idx},
-                                        className="unlink-icon",
-                                        style={
-                                            "cursor": "pointer",
-                                            "fontSize": "12px",
-                                            "opacity": "1",
-                                            "marginLeft": "2px",
-                                            "padding": "2px",
-                                            "borderRadius": "3px",
-                                            "display": "inline-block",
-                                            "minWidth": "18px",
-                                            "textAlign": "center",
-                                            "userSelect": "none"
-                                        },
+                                        className="unlink-icon unlink-icon-style",
                                         title="重新连接 (点击恢复自动计算)"
                                     ) if (param.calculation_func and param.dependencies and getattr(param, 'unlinked', False)) else None
-                                ], style={"display": "flex", "alignItems": "center", "width": "100%"}),
-                                style={"width": "40%", "paddingLeft": "2px", "paddingRight": "2px"}
+                                ], className="param-value-container"),
+                                className="param-value-cell"
                             ),
                             html.Td(
                                 dbc.DropdownMenu(
@@ -420,14 +518,14 @@ def update_canvas(node_data=None):
                                     toggle_class_name="param-menu-btn",
                                     label="",
                                     size="sm",
-                                    direction="left"
+                                    direction="start"
                                 ),
-                                style={"width": "15%", "textAlign": "right", "paddingLeft": "2px"}
+                                className="param-dropdown-cell"
                             )
                         ])
                     )
 
-            param_table = html.Table(param_rows, style={"width": "100%", "fontSize": "0.85em", "marginTop": "2px"}) if param_rows else None
+            param_table = html.Table(param_rows, className="param-table") if param_rows else None
 
             node_div = html.Div(
                 [
@@ -437,30 +535,9 @@ def update_canvas(node_data=None):
                         ]),
                         html.Div([
                             html.Button(
-                                html.Span(
-                                    "➕",
-                                    style={
-                                        "fontSize": "14px",
-                                        "fontWeight": "normal",
-                                        "lineHeight": "1"
-                                    }
-                                ),
+                                html.Span("➕"),
                                 id={"type": "add-param-header", "node": node_id},
                                 className="btn add-param-btn",
-                                style={
-                                    "padding": "4px",
-                                    "borderRadius": "50%",
-                                    "border": "none",
-                                    "backgroundColor": "transparent",
-                                    "minWidth": "24px",
-                                    "height": "24px",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "transition": "all 0.3s ease",
-                                    "color": "#6c757d",
-                                    "marginRight": "6px"
-                                },
                                 title="添加参数"
                             ),
                             dbc.DropdownMenu(
@@ -477,25 +554,12 @@ def update_canvas(node_data=None):
                                     dbc.DropdownMenuItem("删除节点", id={"type": "delete-node", "node": node_id}, className="text-danger"),
                                 ],
                                 toggle_class_name="node-menu-btn",
-                                toggle_style={
-                                    "border": "none",
-                                    "background": "transparent",
-                                    "padding": "4px",
-                                    "fontSize": "12px",
-                                    "color": "#6c757d",
-                                    "height": "24px",
-                                    "minWidth": "24px",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "borderRadius": "3px"
-                                },
                                 label="",
                                 size="sm",
-                                direction="left"
+                                direction="start"
                             )
-                        ], style={"display": "flex", "alignItems": "center"})
-                    ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"}),
+                        ], className="node-header-controls")
+                    ], className="node-header"),
                     param_table,
                     html.Div(id=f"node-content-{node_id}", className="node-content")
                 ],
@@ -506,7 +570,7 @@ def update_canvas(node_data=None):
             col_content.append(node_div)
 
         # 计算列宽 - 优化布局，确保至少3列时有合理的宽度分布
-        total_cols = max(3, graph.layout_manager.cols)  # 至少按3列计算宽度
+        total_cols = max(AppConstants.MIN_LAYOUT_COLUMNS, graph.layout_manager.cols)  # 至少按最小列数计算宽度
         col_width = max(2, 12 // total_cols)  # 每列至少占2个Bootstrap列宽
         canvas_content.append(dbc.Col(col_content, width=col_width))
 
@@ -516,18 +580,10 @@ def update_canvas(node_data=None):
         dbc.Row(canvas_content),
         html.Div(
             arrows,
-            style={
-                "position": "absolute",
-                "top": "0",
-                "left": "0", 
-                "width": "100%",
-                "height": "100%",
-                "pointerEvents": "none",  # 允许鼠标事件穿透到下层元素
-                "zIndex": "10"
-            },
+            className="arrows-overlay",
             id="arrows-overlay"
         )
-    ], style={"position": "relative"})
+    ], className="relative-container")
 
     return canvas_with_arrows
 
@@ -535,15 +591,7 @@ def create_arrows():
     return [
         html.Div(
             id="arrows-overlay-dynamic",
-            style={
-                "position": "absolute",
-                "top": "0",
-                "left": "0",
-                "width": "100%",
-                "height": "100%",
-                "pointerEvents": "none",
-                "zIndex": "10"
-            }
+            className="arrows-overlay-dynamic"
         )
     ]
 
@@ -552,9 +600,9 @@ app.index_string = app_index_string
 
 # 新的节点操作回调函数 - 使用布局管理器
 @callback(
-    Output("output-result", "children"),
     Output("node-data", "data"),
-    Output("canvas-container", "children"),
+    Output("canvas-events", "data"),
+    Output("app-messages", "data", allow_duplicate=True),
     Input({"type": "move-node-up", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-down", "node": ALL}, "n_clicks"),
     Input({"type": "move-node-left", "node": ALL}, "n_clicks"),
@@ -563,28 +611,34 @@ app.index_string = app_index_string
     Input({"type": "add-param-header", "node": ALL}, "n_clicks"),
     Input({"type": "delete-node", "node": ALL}, "n_clicks"),
     State("node-data", "data"),
+    State("canvas-events", "data"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
 def handle_node_operations(move_up_clicks, move_down_clicks, 
                           move_left_clicks, move_right_clicks, 
                           add_param_clicks, add_param_header_clicks, delete_node_clicks,
-                          node_data):
+                          node_data, current_events, current_messages):
+    try:
+        if isinstance(ctx.triggered_id, dict):
+            operation_type = ctx.triggered_id.get("type")
+            node_id = ctx.triggered_id.get("node")
 
-    if isinstance(ctx.triggered_id, dict):
-        operation_type = ctx.triggered_id.get("type")
-        node_id = ctx.triggered_id.get("node")
+            trigger_value = ctx.triggered[0]["value"]
+            if not trigger_value or trigger_value == 0:
+                return dash.no_update, dash.no_update, dash.no_update
 
-        trigger_value = ctx.triggered[0]["value"]
-        if not trigger_value or trigger_value == 0:
-            return dash.no_update, dash.no_update, dash.no_update
+            if not node_id:
+                canvas_event = create_canvas_event("error", {"message": "无效操作"})
+                message = create_message("error", "无效操作", "error")
+                return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
-        if not node_id:
-            return "无效操作", node_data, update_canvas()
-
-        node = graph.nodes.get(node_id)
-        if not node:
-            return "无效节点", node_data, update_canvas()
-        node_name = node.name
+            node = graph.nodes.get(node_id)
+            if not node:
+                canvas_event = create_canvas_event("error", {"message": "无效节点"})
+                message = create_message("error", "无效节点", "error")
+                return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
+            node_name = node.name
 
         if operation_type == "move-node-up":
             success = graph.layout_manager.move_node_up(node_id)
@@ -594,7 +648,9 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
                     result_message += f"，{auto_remove_result}"
-            return result_message, node_data, update_canvas()
+            canvas_event = create_canvas_event("node_moved", {"node_id": node_id, "direction": operation_type})
+            message = create_message("node_operation", result_message, "success" if "已" in result_message else "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "move-node-down":
             success = graph.layout_manager.move_node_down(node_id)
@@ -604,7 +660,9 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
                     result_message += f"，{auto_remove_result}"
-            return result_message, node_data, update_canvas()
+            canvas_event = create_canvas_event("node_moved", {"node_id": node_id, "direction": operation_type})
+            message = create_message("node_operation", result_message, "success" if "已" in result_message else "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "move-node-left":
             success = graph.layout_manager.move_node_left(node_id)
@@ -614,7 +672,9 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
                     result_message += f"，{auto_remove_result}"
-            return result_message, node_data, update_canvas()
+            canvas_event = create_canvas_event("node_moved", {"node_id": node_id, "direction": operation_type})
+            message = create_message("node_operation", result_message, "success" if "已" in result_message else "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "move-node-right":
             # 右移前先检查是否需要自动扩展列
@@ -630,24 +690,42 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                 auto_remove_result = auto_remove_empty_last_column()
                 if auto_remove_result:
                     result_message += f"，{auto_remove_result}"
-            return result_message, node_data, update_canvas()
+            canvas_event = create_canvas_event("node_moved", {"node_id": node_id, "direction": operation_type})
+            message = create_message("node_operation", result_message, "success" if "已" in result_message else "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "add-param":
-            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数", param_type="float")
+            param = Parameter(
+                name="new_param", 
+                value=AppConstants.DEFAULT_PARAMETER_VALUE, 
+                unit="", 
+                description=f"新参数", 
+                param_type="float"
+            )
 
             # 添加参数到节点
             graph.add_parameter_to_node(node_id, param)
 
-            return f"参数已添加到节点 {node_name}", node_data, update_canvas()
+            canvas_event = create_canvas_event("param_added", {"node_id": node_id})
+            message = create_message("param_operation", f"参数已添加到节点 {node_name}", "success")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "add-param-header":
             # 标题栏加号按钮：添加参数功能，与下拉菜单中的"添加参数"功能相同
-            param = Parameter(name="new_param", value=0.0, unit="", description=f"新参数", param_type="float")
+            param = Parameter(
+                name="new_param", 
+                value=AppConstants.DEFAULT_PARAMETER_VALUE, 
+                unit="", 
+                description=f"新参数", 
+                param_type="float"
+            )
 
             # 添加参数到节点
             graph.add_parameter_to_node(node_id, param)
 
-            return f"参数已添加到节点 {node_name}", node_data, update_canvas()
+            canvas_event = create_canvas_event("param_added", {"node_id": node_id})
+            message = create_message("param_operation", f"参数已添加到节点 {node_name}", "success")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         elif operation_type == "delete-node":
             # 检查节点的参数是否被其他参数依赖
@@ -666,7 +744,9 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
                     dep_info_list = [f"{dep['node_name']}.{dep['param_name']}" for dep in deps_for_param]
                     error_message += f"• {affected_param} 被依赖于：{', '.join(dep_info_list)}\n"
 
-                return error_message, node_data, update_canvas()
+                canvas_event = create_canvas_event("error", {"message": error_message})
+                message = create_message("error", error_message, "error")
+                return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
             # 从布局管理器移除节点
             graph.layout_manager.remove_node(node_id)
@@ -681,25 +761,34 @@ def handle_node_operations(move_up_clicks, move_down_clicks,
             if auto_remove_result:
                 result_message += f"，{auto_remove_result}"
 
-            return result_message, node_data, update_canvas()
+            canvas_event = create_canvas_event("node_moved", {"node_id": node_id, "direction": operation_type})
+            message = create_message("node_operation", result_message, "success" if "已" in result_message else "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
-    return dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update
+    
+    except Exception as e:
+        print(f"Error in handle_node_operations: {e}")
+        canvas_event = create_canvas_event("error", {"message": f"操作出错: {str(e)}"})
+        message = create_message("error", f"❌ 操作出错: {str(e)}", "error")
+        return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
 
 # 添加参数更新回调 - 使用debounce确保只在输入完成后更新
 @callback(
     Output("node-data", "data", allow_duplicate=True),
-    Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
+    Output("canvas-events", "data", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input({"type": "param-name", "node": ALL, "index": ALL}, "value"),
     Input({"type": "param-value", "node": ALL, "index": ALL}, "value"),
     State("node-data", "data"),
+    State("canvas-events", "data"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def update_parameter(param_names, param_values, node_data):
+def update_parameter(param_names, param_values, node_data, current_events, current_messages):
     if not ctx.triggered_id:
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, dash.no_update, dash.no_update
 
     triggered_id = ctx.triggered_id
     if isinstance(triggered_id, dict):
@@ -714,14 +803,14 @@ def update_parameter(param_names, param_values, node_data):
 
         if new_value is None or new_value == "":
             print(f"⚠️ 警告：未能获取到有效值，跳过更新")
-            return node_data, dash.no_update, dash.no_update, dash.no_update
+            return node_data, dash.no_update, dash.no_update
 
         node = graph.nodes.get(node_id)
         if not node:
-            return node_data, dash.no_update, dash.no_update, dash.no_update
+            return node_data, dash.no_update, dash.no_update
 
         if param_index >= len(node.parameters):
-            return node_data, dash.no_update, dash.no_update, dash.no_update
+            return node_data, dash.no_update, dash.no_update
 
         current_param = node.parameters[param_index]
 
@@ -736,11 +825,12 @@ def update_parameter(param_names, param_values, node_data):
                 update_message = f"参数名已更新为: {new_value}"
             else:
                 print(f"📌 参数名无变化，跳过更新: {new_value}")
-                return node_data, dash.no_update, dash.no_update, dash.no_update
+                return node_data, dash.no_update, dash.no_update
         elif param_type == "param-value":
             if not hasattr(current_param, 'param_type'):
                 print(f"❌ 参数 {current_param.name} 缺少类型信息")
-                return node_data, dash.no_update, f"❌ 参数 '{current_param.name}' 缺少类型信息，无法更新", dash.no_update
+                message = create_message("error", f"❌ 参数 '{current_param.name}' 缺少类型信息，无法更新", "error")
+                return node_data, dash.no_update, add_app_message(current_messages, message)
 
             param_data_type = current_param.param_type
 
@@ -757,7 +847,8 @@ def update_parameter(param_names, param_values, node_data):
                         new_value = int(new_value)
                     else:
                         print(f"❌ 不支持的参数类型: {param_data_type}")
-                        return node_data, dash.no_update, f"❌ 不支持的参数类型: {param_data_type}", dash.no_update
+                        message = create_message("error", f"❌ 不支持的参数类型: {param_data_type}", "error")
+                        return node_data, dash.no_update, add_app_message(current_messages, message)
                 else:
                     # 空值处理
                     if param_data_type == "string":
@@ -770,71 +861,90 @@ def update_parameter(param_names, param_values, node_data):
                     new_value = str(new_value) if new_value is not None else ""
                 else:
                     print(f"⚠️ 参数值类型转换失败: {new_value} -> {param_data_type}")
-                    return node_data, dash.no_update, f"❌ 参数值 '{new_value}' 无法转换为 {param_data_type} 类型", dash.no_update
+                    canvas_event = create_canvas_event("param_error", {"message": f"参数值转换失败: {new_value}"})
+                    message = create_message("error", f"❌ 参数值 '{new_value}' 无法转换为 {param_data_type} 类型", "error")
+                    return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
             # 检查参数值是否真的有变化
             if new_value == current_param.value:
                 print(f"📌 参数值无变化，跳过更新: {current_param.name} = {new_value}")
-                return node_data, dash.no_update, dash.no_update, dash.no_update
+                return node_data, dash.no_update, dash.no_update
 
             print(f"🔄 参数值更新: {current_param.name}: {current_param.value} → {new_value}")
 
+            # 无论是否有计算函数，都要触发级联更新
+            graph.recently_updated_params.clear()
+            
             if current_param.calculation_func and current_param.dependencies:
+                # 对于有计算函数的参数，先手动设置值，然后触发级联更新
                 current_param.set_manual_value(new_value)
+                # 手动触发级联更新到依赖这个参数的其他参数
+                cascaded_updates = graph.propagate_updates(current_param)
+                update_result = {
+                    'primary_change': {'param': current_param, 'old_value': current_param.value, 'new_value': new_value},
+                    'cascaded_updates': cascaded_updates,
+                    'total_updated_params': 1 + len(cascaded_updates)
+                }
                 update_message = f"🔓 参数 {current_param.name} 已手动设置为 {new_value}（已断开自动计算）"
-                should_update_canvas = True
-                graph.recently_updated_params.add(f"{node_id}-{param_index}")
             else:
-                graph.recently_updated_params.clear()
-
+                # 对于普通参数，使用标准的级联更新流程
                 update_result = graph.set_parameter_value(current_param, new_value)
-                should_update_canvas = True
+                update_message = f"🔄 参数 {current_param.name} 已更新为 {new_value}"
 
-                graph.recently_updated_params.add(f"{node_id}-{param_index}")
+            should_update_canvas = True
+            graph.recently_updated_params.add(f"{node_id}-{param_index}")
 
-                for update_info in update_result.get('cascaded_updates', []):
-                    updated_param = update_info['param']
-                    for check_node_id, check_node in graph.nodes.items():
-                        for check_idx, check_param in enumerate(check_node.parameters):
-                            if check_param is updated_param:
-                                graph.recently_updated_params.add(f"{check_node_id}-{check_idx}")
-                                break
+            # 处理级联更新
+            for update_info in update_result.get('cascaded_updates', []):
+                updated_param = update_info['param']
+                for check_node_id, check_node in graph.nodes.items():
+                    for check_idx, check_param in enumerate(check_node.parameters):
+                        if check_param is updated_param:
+                            graph.recently_updated_params.add(f"{check_node_id}-{check_idx}")
+                            break
 
-                cascaded_info = ""
-                if update_result['cascaded_updates']:
-                    affected_params = [f"{update['param'].name}({update['old_value']}→{update['new_value']})" 
-                                     for update in update_result['cascaded_updates']]
-                    cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
+            # 添加级联更新信息到消息
+            cascaded_info = ""
+            if update_result.get('cascaded_updates'):
+                affected_params = [f"{update['param'].name}({update['old_value']}→{update['new_value']})" 
+                                 for update in update_result['cascaded_updates']]
+                cascaded_info = f"，同时更新了 {len(affected_params)} 个关联参数: {', '.join(affected_params)}"
 
-                update_message = f"🔄 参数 {current_param.name} 已更新为 {new_value}{cascaded_info}"
+            update_message += cascaded_info
 
         if should_update_canvas:
-            return node_data, update_canvas(), update_message, False  # 启用计时器
+            canvas_event = create_canvas_event("param_updated", {"node_id": node_id, "param_index": param_index, "new_value": new_value})
+            message = create_message("param_update", update_message, "success")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
         else:
-            return node_data, dash.no_update, update_message, False  # 启用计时器
+            message = create_message("param_update", update_message, "success")
+            return node_data, current_events, add_app_message(current_messages, message)
 
-    return node_data, dash.no_update, dash.no_update, dash.no_update
+    return node_data, dash.no_update, dash.no_update
 
 # 添加参数操作回调 - 完全独立于节点菜单
 @callback(
     Output("node-data", "data", allow_duplicate=True),
-    Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
+    Output("canvas-events", "data", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input({"type": "delete-param", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-up", "node": ALL, "index": ALL}, "n_clicks"),
     Input({"type": "move-param-down", "node": ALL, "index": ALL}, "n_clicks"),
     State("node-data", "data"),
+    State("canvas-events", "data"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data):
+def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks, node_data, current_events, current_messages):
     ctx = dash.callback_context  # 获取回调上下文
     if not ctx.triggered_id:
-        return node_data, update_canvas(), dash.no_update, dash.no_update
+        canvas_event = create_canvas_event("no_trigger", {})
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, update_canvas(), dash.no_update, dash.no_update
+        canvas_event = create_canvas_event("invalid_trigger", {})
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
@@ -842,17 +952,21 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
 
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, update_canvas(), dash.no_update, dash.no_update
+        canvas_event = create_canvas_event("no_value", {})
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     if not node_id or param_index is None:
-        return node_data, update_canvas(), dash.no_update, dash.no_update
+        canvas_event = create_canvas_event("invalid_params", {})
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     node = graph.nodes.get(node_id)
     if not node:
-        return node_data, update_canvas(), dash.no_update, dash.no_update
+        canvas_event = create_canvas_event("invalid_node", {})
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     if param_index >= len(node.parameters):
-        return node_data, update_canvas(), dash.no_update, dash.no_update
+        canvas_event = create_canvas_event("invalid_param_index", {})
+        return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
     node_name = node.name
     param_name = node.parameters[param_index].name
@@ -868,72 +982,99 @@ def handle_parameter_operations(delete_clicks, move_up_clicks, move_down_clicks,
                 dependent_info.append(f"{dep['node_name']}.{dep['param_name']}")
 
             error_message = f"❌ 无法删除参数 {node_name}.{param_name}，因为以下参数依赖于它：\n{', '.join(dependent_info)}"
-            return node_data, update_canvas(), error_message, dash.no_update
+            canvas_event = create_canvas_event("delete_param_error", {"node_id": node_id, "param_index": param_index, "error": error_message})
+            message = create_message("error", error_message, "error")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
         deleted_param = node.parameters.pop(param_index)
         success_message = f"✅ 参数 {node_name}.{param_name} 已删除"
-
-        return node_data, update_canvas(), success_message, dash.no_update
+        canvas_event = create_canvas_event("param_deleted", {"node_id": node_id, "param_index": param_index})
+        message = create_message("param_operation", success_message, "success")
+        return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
     elif operation_type == "move-param-up":
         if param_index > 0:
             node.parameters[param_index], node.parameters[param_index - 1] = \
                 node.parameters[param_index - 1], node.parameters[param_index]
+            success_message = f"✅ 参数 {node_name}.{param_name} 已上移"
+            canvas_event = create_canvas_event("param_moved", {"node_id": node_id, "param_index": param_index, "operation": operation_type})
+            message = create_message("param_operation", success_message, "success")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
+        else:
+            error_message = f"⚠️ 参数 {node_name}.{param_name} 已在最顶端，无法上移"
+            canvas_event = create_canvas_event("param_move_error", {"node_id": node_id, "param_index": param_index, "operation": operation_type})
+            message = create_message("warning", error_message, "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
     elif operation_type == "move-param-down":
         if param_index < len(node.parameters) - 1:
             node.parameters[param_index], node.parameters[param_index + 1] = \
                 node.parameters[param_index + 1], node.parameters[param_index]
+            success_message = f"✅ 参数 {node_name}.{param_name} 已下移"
+            canvas_event = create_canvas_event("param_moved", {"node_id": node_id, "param_index": param_index, "operation": operation_type})
+            message = create_message("param_operation", success_message, "success")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
+        else:
+            error_message = f"⚠️ 参数 {node_name}.{param_name} 已在最底端，无法下移"
+            canvas_event = create_canvas_event("param_move_error", {"node_id": node_id, "param_index": param_index, "operation": operation_type})
+            message = create_message("warning", error_message, "warning")
+            return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
-    return node_data, update_canvas(), dash.no_update, dash.no_update
+    # 默认情况（不应该到达这里）
+    canvas_event = create_canvas_event("param_operation_unknown", {"node_id": node_id, "param_index": param_index, "operation": operation_type})
+    return node_data, add_canvas_event(current_events, canvas_event), dash.no_update
 
 # 处理unlink图标点击的回调函数
 @callback(
     Output("node-data", "data", allow_duplicate=True),
-    Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
+    Output("canvas-events", "data", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input({"type": "unlink-icon", "node": ALL, "index": ALL}, "n_clicks"),
     State("node-data", "data"),
+    State("canvas-events", "data"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def handle_unlink_toggle(unlink_clicks, node_data):
+def handle_unlink_toggle(unlink_clicks, node_data, current_events, current_messages):
     """处理unlink图标点击，重新连接参数并计算"""
     if not ctx.triggered_id:
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     triggered_id = ctx.triggered_id
     if not isinstance(triggered_id, dict):
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     node_id = triggered_id.get("node")
     param_index = triggered_id.get("index")
 
     trigger_value = ctx.triggered[0]["value"]
     if not trigger_value or trigger_value == 0:
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     if not node_id or param_index is None:
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     node = graph.nodes.get(node_id)
     if not node or param_index >= len(node.parameters):
-        return node_data, dash.no_update, dash.no_update, dash.no_update
+        return node_data, current_events, dash.no_update
 
     param = node.parameters[param_index]
     node_name = node.name
 
     if not param.calculation_func or not param.dependencies:
-        return node_data, dash.no_update, f"⚠️ 参数 {node_name}.{param.name} 无计算依赖"
+        message = create_message("warning", f"⚠️ 参数 {node_name}.{param.name} 无计算依赖", "warning")
+        return node_data, current_events, add_app_message(current_messages, message)
 
     try:
         new_value = param.relink_and_calculate()
-        result_message = f"🔗 参数 {node_name}.{param.name} 已重新连接，新值: {new_value}"
-
-        return node_data, update_canvas(), result_message, dash.no_update
+        result_message = f"🔗 参数 {node_name}.{param.name} 已重新连接并计算，新值: {new_value}"
+        canvas_event = create_canvas_event("param_relinked", {"node_id": node_id, "param_index": param_index, "new_value": new_value})
+        message = create_message("param_relink", result_message, "success")
+        return node_data, add_canvas_event(current_events, canvas_event), add_app_message(current_messages, message)
 
     except Exception as e:
-        return node_data, dash.no_update, f"❌ 重新连接失败: {str(e)}", dash.no_update
+        message = create_message("error", f"❌ 重新连接失败: {str(e)}", "error")
+        return node_data, current_events, add_app_message(current_messages, message)
 
 # 打开参数编辑模态窗口
 @callback(
@@ -1015,9 +1156,13 @@ def open_param_edit_modal(edit_clicks, is_open):
     prevent_initial_call=True
 )
 def close_param_edit_modal(cancel_clicks):
-    if cancel_clicks:
-        return False
-    raise dash.exceptions.PreventUpdate
+    try:
+        if cancel_clicks:
+            return False
+        raise dash.exceptions.PreventUpdate
+    except Exception as e:
+        print(f"Error in close_param_edit_modal: {e}")
+        return False  # 确保模态框关闭
 
 # Reset按钮：生成代码模板
 @callback(
@@ -1029,19 +1174,23 @@ def close_param_edit_modal(cancel_clicks):
     prevent_initial_call=True
 )
 def reset_calculation_code(reset_clicks, checkbox_values, checkbox_ids, edit_data):
-    if not reset_clicks:
-        raise dash.exceptions.PreventUpdate
+    try:
+        if not reset_clicks:
+            raise dash.exceptions.PreventUpdate
 
-    selected_dependencies = []
-    if checkbox_values and checkbox_ids:
-        for value, checkbox_id in zip(checkbox_values, checkbox_ids):
-            if value:  # 如果复选框被选中
-                param_name = checkbox_id["param"]
-                selected_dependencies.append({"param_name": param_name.split(".")[-1]})
+        selected_dependencies = []
+        if checkbox_values and checkbox_ids:
+            for value, checkbox_id in zip(checkbox_values, checkbox_ids):
+                if value:  # 如果复选框被选中
+                    param_name = checkbox_id["param"]
+                    selected_dependencies.append({"param_name": param_name.split(".")[-1]})
 
-    # 生成代码模板
-    template_code = generate_code_template(selected_dependencies)
-    return template_code
+        # 生成代码模板
+        template_code = generate_code_template(selected_dependencies)
+        return template_code
+    except Exception as e:
+        print(f"Error in reset_calculation_code: {e}")
+        return "# 生成代码模板时出错"
 
 # 测试计算功能
 @callback(
@@ -1102,7 +1251,7 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
                 html.P(f"计算错误: {str(e)}", className="mb-1"),
                 html.Details([
                     html.Summary("查看详细回溯"),
-                    html.Pre(traceback_info, style={"fontSize": "0.7em", "color": "darkred"})
+                    html.Pre(traceback_info, className="code-display")
                 ])
             ]), "danger"
         finally:
@@ -1117,14 +1266,14 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
             html.P(f"测试功能内部错误: {str(e)}", className="mb-1"),
             html.Details([
                 html.Summary("查看详细回溯"),
-                html.Pre(full_traceback, style={"fontSize": "0.7em", "color": "darkred"})
+                html.Pre(full_traceback, className="code-display")
             ])
         ]), "danger"
 
 @callback(
     Output("param-edit-modal", "is_open", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("param-edit-save", "n_clicks"),
     State("param-edit-name", "value"),
     State("param-edit-type", "value"),
@@ -1135,28 +1284,32 @@ def test_calculation(test_clicks, calculation_code, checkbox_values, checkbox_id
     State({"type": "dependency-checkbox", "param": ALL}, "id"),
     State("param-edit-data", "data"),
     State("node-data", "data"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
 def save_parameter_changes(save_clicks, param_name, param_type, param_unit, param_description, 
                           calculation_code, checkbox_values, checkbox_ids, 
-                          edit_data, node_data):
+                          edit_data, node_data, current_messages):
     if not save_clicks:
         raise dash.exceptions.PreventUpdate
 
     try:
         # 验证输入
         if not param_name or not param_name.strip():
-            return True, dash.no_update, "错误: 参数名称不能为空"
+            error_msg = create_message("param_save_error", "参数名称不能为空", "error")
+            return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         node_id = edit_data["node_id"]
         param_index = edit_data["param_index"]
 
         if node_id not in graph.nodes:
-            return True, dash.no_update, "错误: 节点不存在"
+            error_msg = create_message("param_save_error", "节点不存在", "error")
+            return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         node = graph.nodes[node_id]
         if param_index >= len(node.parameters):
-            return True, dash.no_update, "错误: 参数不存在"
+            error_msg = create_message("param_save_error", "参数不存在", "error")
+            return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         param = node.parameters[param_index]
 
@@ -1194,7 +1347,8 @@ def save_parameter_changes(save_clicks, param_name, param_type, param_unit, para
         # 检查所有选中的依赖是否会造成循环依赖
         for dep_param in selected_deps:
             if has_circular_dependency(param, dep_param):
-                return True, dash.no_update, f"错误: 添加依赖 {dep_param.name} 会造成循环依赖"
+                error_msg = create_message("param_save_error", f"添加依赖 {dep_param.name} 会造成循环依赖", "error")
+                return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         # 更新参数基本信息
         param.name = param_name.strip()
@@ -1231,33 +1385,24 @@ def save_parameter_changes(save_clicks, param_name, param_type, param_unit, para
 
         # 更新画布显示
         updated_canvas = update_canvas()
-
-        return False, updated_canvas, success_msg
+        
+        success_message = create_message("param_save_success", success_msg, "success")
+        return False, updated_canvas, add_app_message(current_messages, success_message)
 
     except Exception as e:
-        return True, dash.no_update, f"保存失败: {str(e)}"
+        error_msg = create_message("param_save_error", f"保存失败: {str(e)}", "error")
+        return True, dash.no_update, add_app_message(current_messages, error_msg)
 
-# 添加定时清理高亮的回调
-@callback(
-    Output("canvas-container", "children", allow_duplicate=True),
-    Output("clear-highlight-timer", "disabled", allow_duplicate=True),
-    Input("clear-highlight-timer", "n_intervals"),
-    prevent_initial_call=True
-)
-def clear_parameter_highlights(n_intervals):
-    """定时清除参数高亮"""
-    if graph.recently_updated_params:
-        graph.recently_updated_params.clear()
-        return update_canvas(), True  # 清除高亮并禁用计时器
-    return dash.no_update, dash.no_update
+# 高亮功能简化：保持永久高亮，无需定时清除
 
 @callback(
     Output("download-graph", "data"),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("save-graph-button", "n_clicks"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def save_calculation_graph(n_clicks):
+def save_calculation_graph(n_clicks, current_messages):
     """保存计算图到文件"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
@@ -1274,23 +1419,26 @@ def save_calculation_graph(n_clicks):
         json_str = json.dumps(graph_data, indent=2, ensure_ascii=False)
 
         # 返回下载数据
+        success_msg = create_message("save_graph_success", f"计算图已保存为 {filename}", "success")
         return dict(
             content=json_str,
             filename=filename,
             type="application/json"
-        ), f"✅ 计算图已保存为 {filename}"
+        ), add_app_message(current_messages, success_msg)
 
     except Exception as e:
-        return dash.no_update, f"❌ 保存失败: {str(e)}"
+        error_msg = create_message("save_graph_error", f"保存失败: {str(e)}", "error")
+        return dash.no_update, add_app_message(current_messages, error_msg)
 
 # 加载示例计算图
 @app.callback(
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("load-example-graph-button", "n_clicks"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def load_example_soc_graph_callback(n_clicks):
+def load_example_soc_graph_callback(n_clicks, current_messages):
     """加载多核SoC示例计算图的回调函数"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
@@ -1303,26 +1451,29 @@ def load_example_soc_graph_callback(n_clicks):
         updated_canvas = update_canvas()
 
         success_message = (
-            f"✅ 已加载多核SoC示例计算图："
+            f"已加载多核SoC示例计算图："
             f"{result['nodes_created']}个节点，"
             f"{result['total_params']}个参数，"
             f"其中{result['calculated_params']}个计算参数"
         )
-
-        return updated_canvas, success_message
+        
+        success_msg = create_message("load_example_success", success_message, "success")
+        return updated_canvas, add_app_message(current_messages, success_msg)
 
     except Exception as e:
-        return dash.no_update, f"❌ 加载示例失败: {str(e)}"
+        error_msg = create_message("load_example_error", f"加载示例失败: {str(e)}", "error")
+        return dash.no_update, add_app_message(current_messages, error_msg)
 
 # 加载计算图
 @app.callback(
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("upload-graph", "contents"),
     State("upload-graph", "filename"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def load_calculation_graph(contents, filename):
+def load_calculation_graph(contents, filename, current_messages):
     """从上传的文件加载计算图"""
     if contents is None:
         raise dash.exceptions.PreventUpdate
@@ -1338,24 +1489,25 @@ def load_calculation_graph(contents, filename):
         try:
             data = json.loads(decoded.decode('utf-8'))
         except json.JSONDecodeError as e:
-            return dash.no_update, f"❌ 文件格式错误: {str(e)}"
+            error_msg = create_message("upload_graph_error", f"文件格式错误: {str(e)}", "error")
+            return dash.no_update, add_app_message(current_messages, error_msg)
 
         # 验证数据格式
         if "nodes" not in data:
-            return dash.no_update, "❌ 无效的计算图文件格式"
+            error_msg = create_message("upload_graph_error", "无效的计算图文件格式", "error")
+            return dash.no_update, add_app_message(current_messages, error_msg)
 
         # 清空现有数据
-        # global graph  # 已废弃
-
         # 创建新的布局管理器并重新构建计算图
-        new_layout = CanvasLayoutManager(initial_cols=3, initial_rows=10)
+        new_layout = CanvasLayoutManager(
+            initial_cols=AppConstants.MIN_LAYOUT_COLUMNS, 
+            initial_rows=AppConstants.DEFAULT_INITIAL_ROWS
+        )
         new_graph = CalculationGraph.from_dict(data, new_layout)
 
         # 写入当前 session
         set_graph(new_graph)
         graph = get_graph()
-
-        # 重新初始化列管理器 - 已集成于 CalculationGraph，无需额外操作
 
         # 更新画布显示
         updated_canvas = update_canvas()
@@ -1363,10 +1515,13 @@ def load_calculation_graph(contents, filename):
         loaded_nodes = len(new_graph.nodes)
         total_params = sum(len(node.parameters) for node in new_graph.nodes.values())
 
-        return updated_canvas, f"✅ 成功加载计算图 '{filename}'：{loaded_nodes}个节点，{total_params}个参数"
+        success_message = f"成功加载计算图 '{filename}'：{loaded_nodes}个节点，{total_params}个参数"
+        success_msg = create_message("upload_graph_success", success_message, "success")
+        return updated_canvas, add_app_message(current_messages, success_msg)
 
     except Exception as e:
-        return dash.no_update, f"❌ 加载失败: {str(e)}"
+        error_msg = create_message("upload_graph_error", f"加载失败: {str(e)}", "error")
+        return dash.no_update, add_app_message(current_messages, error_msg)
 
 # 更新箭头连接数据
 @callback(
@@ -1403,7 +1558,7 @@ def initialize_plot(container_id):
 # 生成敏感性分析图表
 @callback(
     Output("sensitivity-plot", "figure", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Output("cumulative-plot-data", "data", allow_duplicate=True),
     Input("generate-plot-btn", "n_clicks"),
     State("selected-x-param", "data"),
@@ -1414,18 +1569,21 @@ def initialize_plot(container_id):
     State("cumulative-plot-checkbox", "value"),
     State("cumulative-plot-data", "data"),
     State("series-name-input", "value"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step, cumulative_checkbox, cumulative_data, series_name):
+def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step, cumulative_checkbox, cumulative_data, series_name, current_messages):
     """生成参数敏感性分析图表"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
 
     if not x_param or not y_param:
-        return create_empty_plot(), "❌ 请选择X轴和Y轴参数", cumulative_data
+        error_msg = create_message("plot_error", "请选择X轴和Y轴参数", "warning")
+        return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     if x_param == y_param:
-        return create_empty_plot(), "❌ X轴和Y轴参数不能相同", cumulative_data
+        error_msg = create_message("plot_error", "X轴和Y轴参数不能相同", "warning")
+        return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     # 验证输入值
     try:
@@ -1434,27 +1592,32 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         x_step = float(x_step) if x_step is not None else 1
 
         if x_step <= 0:
-            return create_empty_plot(), "❌ 步长必须大于0", cumulative_data
+            error_msg = create_message("plot_error", "步长必须大于0", "warning")
+            return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
         if x_start >= x_end:
-            return create_empty_plot(), "❌ 起始值必须小于结束值", cumulative_data
+            error_msg = create_message("plot_error", "起始值必须小于结束值", "warning")
+            return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     except (ValueError, TypeError):
-        return create_empty_plot(), "❌ 请输入有效的数值", cumulative_data
+        error_msg = create_message("plot_error", "请输入有效的数值", "warning")
+        return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     # 从参数值中解析节点ID和参数名
     try:
         x_node_id, x_param_name = x_param.split('|')
         y_node_id, y_param_name = y_param.split('|')
     except ValueError:
-        return create_empty_plot(), "❌ 参数格式错误，请重新选择", cumulative_data
+        error_msg = create_message("plot_error", "参数格式错误，请重新选择", "warning")
+        return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     # 从graph中获取节点和参数对象
     x_node = graph.nodes.get(x_node_id)
     y_node = graph.nodes.get(y_node_id)
 
     if not x_node or not y_node:
-        return create_empty_plot(), "❌ 参数所属节点不存在，请重新选择", cumulative_data
+        error_msg = create_message("plot_error", "参数所属节点不存在，请重新选择", "warning")
+        return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     # 构建参数信息字典
     x_param_info = {
@@ -1476,7 +1639,8 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
     )
 
     if not result['success']:
-        return create_empty_plot(), f"❌ {result['message']}", cumulative_data
+        error_msg = create_message("plot_error", result['message'], "error")
+        return create_empty_plot(), add_app_message(current_messages, error_msg), cumulative_data
 
     # 检查是否启用累计绘图
     is_cumulative = "cumulative" in (cumulative_checkbox or [])
@@ -1554,8 +1718,13 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
         hovermode='x unified',
         template="plotly_white",
         showlegend=True,  # 始终显示图例
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=280,
+        margin=dict(
+            l=AppConstants.CHART_MARGIN_LEFT, 
+            r=AppConstants.CHART_MARGIN_RIGHT, 
+            t=AppConstants.CHART_MARGIN_TOP, 
+            b=AppConstants.CHART_MARGIN_BOTTOM
+        ),
+        height=AppConstants.CHART_DEFAULT_HEIGHT,
         legend=dict(
             orientation="v",
             yanchor="top",
@@ -1586,11 +1755,12 @@ def generate_sensitivity_plot(n_clicks, x_param, y_param, x_start, x_end, x_step
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.3)')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.3)')
 
-    message = f"✅ {result['message']}"
+    message = result['message']
     if is_cumulative:
         message += f" (累计: {len(new_cumulative_data)} 条曲线)"
-
-    return fig, message, new_cumulative_data
+    
+    success_msg = create_message("plot_success", message, "success")
+    return fig, add_app_message(current_messages, success_msg), new_cumulative_data
 
 # 清除图表
 @callback(
@@ -1751,19 +1921,19 @@ def auto_update_range(x_param):
 
         current_value = float(x_param_obj.value)
 
-        start_value = max(0, current_value * 0.5)
-        end_value = current_value * 1.5
+        start_value = max(AppConstants.SENSITIVITY_DEFAULT_START, current_value * AppConstants.SENSITIVITY_START_MULTIPLIER)
+        end_value = current_value * AppConstants.SENSITIVITY_END_MULTIPLIER
 
         # 如果当前值为0，设置默认范围
         if current_value == 0:
-            start_value = 0
-            end_value = 100
+            start_value = AppConstants.SENSITIVITY_DEFAULT_START
+            end_value = AppConstants.SENSITIVITY_DEFAULT_END
 
         return start_value, end_value
 
     except (ValueError, TypeError):
         # 如果转换失败，返回默认值
-        return 0, 100
+        return AppConstants.SENSITIVITY_DEFAULT_START, AppConstants.SENSITIVITY_DEFAULT_END
 
 def get_all_parameter_dependencies():
     """获取计算图中所有参数的依赖关系，包括计算过程和历史"""
@@ -1902,7 +2072,7 @@ def format_dependencies_display(dependencies_info):
             param_card_items = []
 
             # 参数基本信息（增强版）
-            confidence_color = "success" if param_info['param_confidence'] >= 0.8 else "warning" if param_info['param_confidence'] >= 0.5 else "danger"
+            confidence_color = "success" if param_info['param_confidence'] >= AppConstants.CONFIDENCE_HIGH_THRESHOLD else "warning" if param_info['param_confidence'] >= AppConstants.CONFIDENCE_MEDIUM_THRESHOLD else "danger"
             param_card_items.append(
                 html.Div([
                     html.Div([
@@ -1927,7 +2097,7 @@ def format_dependencies_display(dependencies_info):
                     dbc.Accordion([
                         dbc.AccordionItem([
                             html.Pre(param_info['calculation_func'] or "无计算函数", 
-                                   style={"fontSize": "0.8em", "backgroundColor": "#f8f9fa", "padding": "10px"})
+                                   className="code-block")
                         ], title="📝 计算函数代码")
                     ], start_collapsed=True, className="mb-2")
                 )
@@ -2018,8 +2188,7 @@ def format_dependencies_display(dependencies_info):
                 )
 
             node_card_content.append(
-                html.Div(param_card_items, className="border-start border-4 border-primary ps-3 mb-4", 
-                        style={"backgroundColor": "#f8f9fa", "borderRadius": "0 5px 5px 0", "padding": "15px"})
+                html.Div(param_card_items, className="border-start border-4 border-primary ps-3 mb-4 param-card-container")
             )
 
         display_components.append(
@@ -2036,83 +2205,7 @@ def format_dependencies_display(dependencies_info):
 
     return display_components
 
-def create_calculation_flow_visualization(dependencies_info):
-    """创建计算流程可视化组件"""
-    if not dependencies_info:
-        return html.Div()
 
-    # 找出有计算函数的参数
-    calc_params = [p for p in dependencies_info if p['has_calculation']]
-
-    if not calc_params:
-        return dbc.Alert("当前没有计算参数", color="info")
-
-    flow_components = []
-
-    for param_info in calc_params:
-        # 创建计算流程图
-        flow_steps = []
-
-        # 输入步骤
-        if param_info['dependencies']:
-            input_step = html.Div([
-                html.H6("📥 输入参数", className="text-primary"),
-                html.Ul([
-                    html.Li(f"{dep['node_name']}.{dep['param_name']} = {dep['param_value']} {dep['param_unit']}")
-                    for dep in param_info['dependencies']
-                ])
-            ], className="border p-3 mb-3 rounded bg-light")
-            flow_steps.append(input_step)
-
-        # 计算步骤
-        calc_step = html.Div([
-            html.H6("⚙️ 计算过程", className="text-warning"),
-            dbc.Accordion([
-                dbc.AccordionItem([
-                    html.Pre(param_info['calculation_func'], 
-                           style={"fontSize": "0.85em", "background": "#f1f3f4"})
-                ], title="查看计算函数")
-            ], start_collapsed=True),
-
-        ], className="border p-3 mb-3 rounded bg-warning bg-opacity-10")
-        flow_steps.append(calc_step)
-
-        # 输出步骤
-        output_step = html.Div([
-            html.H6("📤 输出结果", className="text-success"),
-            html.P([
-                html.Strong(f"{param_info['param_name']} = "),
-                html.Code(f"{param_info['param_value']} {param_info['param_unit']}")
-            ]),
-            html.Small(f"置信度: {param_info['param_confidence']:.1%}", className="text-muted")
-        ], className="border p-3 mb-3 rounded bg-success bg-opacity-10")
-        flow_steps.append(output_step)
-
-        # 影响步骤
-        if param_info['dependents']:
-            impact_step = html.Div([
-                html.H6("🎯 影响范围", className="text-info"),
-                html.Ul([
-                    html.Li(f"{dep['node_name']}.{dep['param_name']}")
-                    for dep in param_info['dependents']
-                ])
-            ], className="border p-3 mb-3 rounded bg-info bg-opacity-10")
-            flow_steps.append(impact_step)
-
-        # 组装完整的流程卡片
-        flow_card = dbc.Card([
-            dbc.CardHeader([
-                html.H5([
-                    "🔄 ", f"{param_info['node_name']}.{param_info['param_name']}",
-                    " 计算流程"
-                ])
-            ]),
-            dbc.CardBody(flow_steps)
-        ], className="mb-4")
-
-        flow_components.append(flow_card)
-
-    return html.Div(flow_components)
 
 # =============== 增强的依赖关系和计算流程显示回调函数 ===============
 
@@ -2135,34 +2228,16 @@ def initialize_dependencies_display(canvas_children):
             ], color="warning")
         ]
 
-# 初始化计算流程显示
-@callback(
-    Output("calculation-flow-display", "children"),
-    Input("canvas-container", "children"),
-    prevent_initial_call=False
-)
-def initialize_calculation_flow_display(canvas_children):
-    """初始化计算流程显示"""
-    try:
-        dependencies_info = get_all_parameter_dependencies()
-        return create_calculation_flow_visualization(dependencies_info)
-    except Exception as e:
-        return [
-            dbc.Alert([
-                html.H6("⚠️ 加载计算流程失败", className="mb-2"),
-                html.P(f"错误信息: {str(e)}", className="mb-0")
-            ], color="warning")
-        ]
 
-# 手动刷新依赖关系和计算流程
+
+# 手动刷新依赖关系显示
 @callback(
     Output("dependencies-display", "children", allow_duplicate=True),
-    Output("calculation-flow-display", "children", allow_duplicate=True),
     Input("refresh-dependencies-btn", "n_clicks"),
     prevent_initial_call=True
 )
-def refresh_all_displays(n_clicks):
-    """手动刷新所有显示面板"""
+def refresh_dependencies_display(n_clicks):
+    """手动刷新依赖关系显示面板"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
 
@@ -2172,10 +2247,7 @@ def refresh_all_displays(n_clicks):
         # 刷新依赖关系显示
         deps_display = format_dependencies_display(dependencies_info)
 
-        # 刷新计算流程显示
-        flow_display = create_calculation_flow_visualization(dependencies_info)
-
-        return deps_display, flow_display
+        return deps_display
 
     except Exception as e:
         error_alert = [
@@ -2184,27 +2256,23 @@ def refresh_all_displays(n_clicks):
                 html.P(f"错误信息: {str(e)}", className="mb-0")
             ], color="danger")
         ]
-        return error_alert, error_alert
+        return error_alert
 
-# 当节点/参数发生变化时自动更新所有显示
+# 当节点/参数发生变化时自动更新依赖关系显示
 @callback(
     Output("dependencies-display", "children", allow_duplicate=True),
-    Output("calculation-flow-display", "children", allow_duplicate=True),
     Input("node-data", "data"),
     prevent_initial_call=True
 )
-def auto_update_all_displays_on_change(node_data):
-    """当节点或参数发生变化时自动更新所有显示"""
+def auto_update_dependencies_display_on_change(node_data):
+    """当节点或参数发生变化时自动更新依赖关系显示"""
     try:
         dependencies_info = get_all_parameter_dependencies()
 
         # 更新依赖关系显示
         deps_display = format_dependencies_display(dependencies_info)
 
-        # 更新计算流程显示
-        flow_display = create_calculation_flow_visualization(dependencies_info)
-
-        return deps_display, flow_display
+        return deps_display
 
     except Exception as e:
         error_alert = [
@@ -2213,7 +2281,7 @@ def auto_update_all_displays_on_change(node_data):
                 html.P(f"错误信息: {str(e)}", className="mb-0")
             ], color="warning")
         ]
-        return error_alert, error_alert
+        return error_alert
 
 def get_arrow_connections_data():
     """获取用于绘制箭头的连接数据"""
@@ -2427,26 +2495,29 @@ def close_node_edit_modal(cancel_clicks):
 @callback(
     Output("node-edit-modal", "is_open", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("node-edit-save", "n_clicks"),
     State("node-edit-name", "value"),
     State("node-edit-description", "value"),
     State("node-edit-data", "data"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def save_node_changes(save_clicks, node_name, node_description, edit_data):
+def save_node_changes(save_clicks, node_name, node_description, edit_data, current_messages):
     if not save_clicks:
         raise dash.exceptions.PreventUpdate
 
     try:
         # 验证输入
         if not node_name or not node_name.strip():
-            return True, dash.no_update, "错误: 节点名称不能为空"
+            error_msg = create_message("node_save_error", "节点名称不能为空", "error")
+            return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         node_id = edit_data["node_id"]
 
         if node_id not in graph.nodes:
-            return True, dash.no_update, "错误: 节点不存在"
+            error_msg = create_message("node_save_error", "节点不存在", "error")
+            return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         node = graph.nodes[node_id]
         old_name = node.name
@@ -2454,7 +2525,8 @@ def save_node_changes(save_clicks, node_name, node_description, edit_data):
         # 检查节点名称是否与其他节点重复（排除当前节点）
         for other_node_id, other_node in graph.nodes.items():
             if other_node_id != node_id and other_node.name == node_name.strip():
-                return True, dash.no_update, f"错误: 节点名称 '{node_name.strip()}' 已存在，请使用不同的名称"
+                error_msg = create_message("node_save_error", f"节点名称 '{node_name.strip()}' 已存在，请使用不同的名称", "error")
+                return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         # 更新节点信息
         node.name = node_name.strip()
@@ -2462,10 +2534,12 @@ def save_node_changes(save_clicks, node_name, node_description, edit_data):
 
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{old_name}' 已更新为 '{node.name}'"
-        return False, update_canvas(), success_message
+        success_msg = create_message("node_save_success", success_message, "success")
+        return False, update_canvas(), add_app_message(current_messages, success_msg)
 
     except Exception as e:
-        return True, dash.no_update, f"错误: {str(e)}"
+        error_msg = create_message("node_save_error", f"错误: {str(e)}", "error")
+        return True, dash.no_update, add_app_message(current_messages, error_msg)
 
 # 添加节点模态窗口相关回调函数
 
@@ -2496,27 +2570,30 @@ def toggle_node_add_modal(add_clicks, cancel_clicks, is_open):
 @callback(
     Output("node-add-modal", "is_open", allow_duplicate=True),
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("node-add-save", "n_clicks"),
     State("node-add-name", "value"),
     State("node-add-description", "value"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def create_new_node(save_clicks, node_name, node_description):
+def create_new_node(save_clicks, node_name, node_description, current_messages):
     if not save_clicks:
         raise dash.exceptions.PreventUpdate
 
     try:
         # 验证输入
         if not node_name or not node_name.strip():
-            return True, dash.no_update, "错误: 节点名称不能为空"
+            error_msg = create_message("node_create_error", "节点名称不能为空", "error")
+            return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         node_name = node_name.strip()
 
         # 检查节点名称是否与其他节点重复
         for existing_node in graph.nodes.values():
             if existing_node.name == node_name:
-                return True, dash.no_update, f"错误: 节点名称 '{node_name}' 已存在，请使用不同的名称"
+                error_msg = create_message("node_create_error", f"节点名称 '{node_name}' 已存在，请使用不同的名称", "error")
+                return True, dash.no_update, add_app_message(current_messages, error_msg)
 
         # 创建新节点
         from models import Node
@@ -2535,22 +2612,25 @@ def create_new_node(save_clicks, node_name, node_description):
 
         # 关闭模态窗口并更新界面
         success_message = f"节点 '{node_name}' 已创建并添加到位置 ({position.row}, {position.col})"
-        return False, update_canvas(), success_message
+        success_msg = create_message("node_create_success", success_message, "success")
+        return False, update_canvas(), add_app_message(current_messages, success_msg)
 
     except Exception as e:
-        return True, dash.no_update, f"错误: {str(e)}"
+        error_msg = create_message("node_create_error", f"错误: {str(e)}", "error")
+        return True, dash.no_update, add_app_message(current_messages, error_msg)
 
 # 列管理回调函数
 @callback(
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Output("remove-column-btn", "disabled"),
     Input("add-column-btn", "n_clicks"),
     Input("remove-column-btn", "n_clicks"),
     State("canvas-container", "children"),  # 添加状态以获取当前列信息
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def handle_column_management(add_clicks, remove_clicks, canvas_children):
+def handle_column_management(add_clicks, remove_clicks, canvas_children, current_messages):
     """处理手动添加/删除列操作"""
     ctx = dash.callback_context
     if not ctx.triggered:
@@ -2565,24 +2645,29 @@ def handle_column_management(add_clicks, remove_clicks, canvas_children):
     if button_id == "add-column-btn" and add_clicks:
         can_add, add_msg = graph.layout_manager.can_add_column()
         if not can_add:
-            return dash.no_update, f"❌ {add_msg}", not can_remove
+            error_msg = create_message("column_add_error", add_msg, "error")
+            return dash.no_update, add_app_message(current_messages, error_msg), not can_remove
 
         graph.layout_manager.add_column()
-        return update_canvas(), f"✅ 已添加新列 (当前 {graph.layout_manager.cols} 列)", False
+        success_msg = create_message("column_add_success", f"已添加新列 (当前 {graph.layout_manager.cols} 列)", "success")
+        return update_canvas(), add_app_message(current_messages, success_msg), False
 
     if button_id == "remove-column-btn" and remove_clicks:
         if not can_remove:
-            return dash.no_update, f"❌ {remove_msg}", True
+            error_msg = create_message("column_remove_error", remove_msg, "error")
+            return dash.no_update, add_app_message(current_messages, error_msg), True
 
         success = graph.layout_manager.remove_column()
         if success:
-            msg = f"✅ 已删除最后一列 (当前 {graph.layout_manager.cols} 列)"
+            msg = f"已删除最后一列 (当前 {graph.layout_manager.cols} 列)"
+            msg_obj = create_message("column_remove_success", msg, "success")
         else:
-            msg = "❌ 无法删除最后一列，可能不为空"
+            msg = "无法删除最后一列，可能不为空"
+            msg_obj = create_message("column_remove_error", msg, "error")
 
         # 再次检查是否还能继续删除
         can_remove_after, _ = graph.layout_manager.can_remove_column()
-        return update_canvas(), msg, not can_remove_after
+        return update_canvas(), add_app_message(current_messages, msg_obj), not can_remove_after
 
     raise dash.exceptions.PreventUpdate
 
@@ -2684,22 +2769,24 @@ def check_node_has_dependents(node_id, graph_instance):
 # 清空计算图功能
 @callback(
     Output("canvas-container", "children", allow_duplicate=True),
-    Output("output-result", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
     Input("clear-graph-btn", "n_clicks"),
+    State("app-messages", "data"),
     prevent_initial_call=True
 )
-def clear_calculation_graph(n_clicks):
+def clear_calculation_graph(n_clicks, current_messages):
     """清空当前的计算图，重置为空白状态"""
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
 
     try:
         # 清空全局数据模型
-        # global graph  # 已废弃
-
         # 重新创建空的计算图和布局管理器
         new_graph = CalculationGraph()
-        new_graph.set_layout_manager(CanvasLayoutManager(initial_cols=3, initial_rows=10))
+        new_graph.set_layout_manager(CanvasLayoutManager(
+            initial_cols=AppConstants.MIN_LAYOUT_COLUMNS, 
+            initial_rows=AppConstants.DEFAULT_INITIAL_ROWS
+        ))
         set_graph(new_graph)
         graph = get_graph()
 
@@ -2709,10 +2796,12 @@ def clear_calculation_graph(n_clicks):
         # 更新画布显示
         updated_canvas = update_canvas()
 
-        return updated_canvas, "✅ 计算图已清空，可以重新开始构建"
+        success_msg = create_message("clear_graph_success", "计算图已清空，可以重新开始构建", "success")
+        return updated_canvas, add_app_message(current_messages, success_msg)
 
     except Exception as e:
-        return dash.no_update, f"❌ 清空失败: {str(e)}"
+        error_msg = create_message("clear_graph_error", f"清空失败: {str(e)}", "error")
+        return dash.no_update, add_app_message(current_messages, error_msg)
 
 # 参数选择弹窗相关回调函数
 
@@ -2809,7 +2898,7 @@ def update_param_list(search_value, canvas_children, current_x, current_y, param
                     dbc.CardBody([
                         dbc.Row([
                             dbc.Col([
-                                html.H6(param['label'], className="mb-0", style={"fontSize": "0.95rem"}),
+                                html.H6(param['label'], className="mb-0 param-card-label"),
                                 html.Small(f"值: {param['current_value']} {param['unit']}", className="text-muted")
                             ], width=8, className="d-flex flex-column justify-content-center"),
                             dbc.Col([
@@ -2824,7 +2913,7 @@ def update_param_list(search_value, canvas_children, current_x, current_y, param
                             ], width=4, className="d-flex align-items-center")
                         ], className="align-items-center")
                     ], className="py-2")
-                ], color=card_color, className="mb-2", style={"cursor": "pointer"})
+                ], color=card_color, className="mb-2 param-card-clickable")
             )
 
         return param_items
@@ -2880,6 +2969,54 @@ def handle_param_selection(clicks_list, param_type, current_x, current_y):
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 
+# 教程模态窗口回调函数
+@callback(
+    Output("tutorial-modal", "is_open"),
+    [Input("help-tutorial-button", "n_clicks"),
+     Input("tutorial-close", "n_clicks")],
+    State("tutorial-modal", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_tutorial_modal(help_clicks, close_clicks, is_open):
+    """切换教程模态窗口的显示状态"""
+    if help_clicks or close_clicks:
+        return not is_open
+    return is_open
+
+@callback(
+    Output("tutorial-modal", "is_open", allow_duplicate=True),
+    Output("canvas-container", "children", allow_duplicate=True),
+    Output("app-messages", "data", allow_duplicate=True),
+    Input("tutorial-load-example", "n_clicks"),
+    State("app-messages", "data"),
+    prevent_initial_call=True
+)
+def tutorial_load_example(n_clicks, current_messages):
+    """教程中的加载示例按钮"""
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    
+    try:
+        # 创建示例计算图
+        result = create_example_soc_graph()
+        
+        # 更新画布显示
+        updated_canvas = update_canvas()
+        
+        success_message = (
+            f"已从教程加载多核SoC示例计算图："
+            f"{result['nodes_created']}个节点，"
+            f"{result['total_params']}个参数，"
+            f"其中{result['calculated_params']}个计算参数"
+        )
+        
+        success_msg = create_message("tutorial_load_success", success_message, "success")
+        return False, updated_canvas, add_app_message(current_messages, success_msg)
+        
+    except Exception as e:
+        error_msg = create_message("tutorial_load_error", f"从教程加载示例失败: {str(e)}", "error")
+        return False, dash.no_update, add_app_message(current_messages, error_msg)
+
 # 注册所有客户端回调函数
 register_all_clientside_callbacks(app)
 
@@ -2889,6 +3026,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='启动计算图应用')
     parser.add_argument('--port', type=int, default=8050, help='服务端口号(默认:8050)')
+    parser.add_argument('--debug', action='store_true', help='启用调试模式(会有定时重载检查)')
     args = parser.parse_args()
 
-    app.run(debug=True, host="0.0.0.0", port=args.port)
+    app.run(debug=args.debug, host="0.0.0.0", port=args.port)

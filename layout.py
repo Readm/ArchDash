@@ -117,6 +117,15 @@ app_layout = dbc.Container([
                             title="加载示例计算图",
                             **{"data-testid": "load-example-button"}
                         ),
+                        # 帮助按钮
+                        html.Button(
+                            "❓", 
+                            id="help-tutorial-button", 
+                            className="btn btn-info btn-sm",
+                            title="使用教程",
+                            style={"marginLeft": "8px"},
+                            **{"data-testid": "help-tutorial-button"}
+                        ),
                         # 分隔符2
                         html.Div(
                             style={
@@ -351,24 +360,12 @@ app_layout = dbc.Container([
                 ], className="dependencies-header py-2"),
                 dbc.Collapse([
                     dbc.CardBody([
-                        # 使用标签页显示不同的视图
-                        dbc.Tabs([
-                            dbc.Tab([
-                                html.Div(
-                                    id="dependencies-display",
-                                    style={"height": "350px", "overflowY": "auto"},
-                                    children=[html.P("📊 加载依赖关系中...", className="text-muted text-center")]
-                                )
-                            ], label="依赖关系", tab_id="dependencies-tab"),
-                            dbc.Tab([
-                                html.Div(
-                                    id="calculation-flow-display",
-                                    style={"height": "350px", "overflowY": "auto"},
-                                    children=[html.P("🔄 加载计算流程中...", className="text-muted text-center")]
-                                )
-                            ], label="计算流程", tab_id="flow-tab"),
-
-                        ], id="dependencies-tabs", active_tab="dependencies-tab")
+                        # 仅显示依赖关系视图
+                        html.Div(
+                            id="dependencies-display",
+                            style={"height": "350px", "overflowY": "auto"},
+                            children=[html.P("📊 加载依赖关系中...", className="text-muted text-center")]
+                        )
                     ], className="p-2 dropdown-container")
                 ], id="dependencies-collapse", is_open=False)
             ], className="glass-card dependencies-panel dropdown-safe-card"),
@@ -382,7 +379,8 @@ app_layout = dbc.Container([
     dcc.Store(id="selected-x-param", data=None),  # 存储选中的X轴参数
     dcc.Store(id="selected-y-param", data=None),  # 存储选中的Y轴参数
     dcc.Store(id="current-param-type", data="x"),  # 存储当前选择的参数类型
-    dcc.Interval(id="clear-highlight-timer", interval=3000, n_intervals=0, disabled=True),  # 3秒后清除高亮
+    dcc.Store(id="canvas-events", data=[]),  # 存储画布更新事件
+    dcc.Store(id="app-messages", data={"messages": [], "timestamp": 0}),  # 统一消息管理
     dcc.Download(id="download-graph"),  # 用于下载计算图文件
     dcc.Download(id="download-plot-data"),  # 新增：用于下载绘图数据
 # 移除旧的context menu，使用新的dropdown menu
@@ -643,6 +641,73 @@ app_layout = dbc.Container([
             dbc.Button("取消", id="param-select-cancel", color="secondary")
         ])
     ], id="param-select-modal", size="lg", is_open=False),
+
+    # 使用教程模态窗口
+    dbc.Modal([
+        dbc.ModalHeader([
+            dbc.ModalTitle("📚 ArchDash 使用教程")
+        ]),
+        dbc.ModalBody([
+            html.Div([
+                html.H5("🚀 快速开始", className="text-primary mb-3"),
+                html.P("ArchDash 是一个强大的架构计算工具，帮您构建和分析复杂的计算图。"),
+                
+                html.H6("1️⃣ 创建节点", className="mt-4 mb-2"),
+                html.Ul([
+                    html.Li("点击左上角 ➕ 按钮创建新节点"),
+                    html.Li("双击节点可以编辑节点名称和描述"),
+                    html.Li("使用节点标题栏的 ➕ 按钮添加参数")
+                ]),
+                
+                html.H6("2️⃣ 管理参数", className="mt-4 mb-2"),
+                html.Ul([
+                    html.Li("直接编辑参数名称和数值"),
+                    html.Li("双击参数可以打开详细编辑面板"),
+                    html.Li("在编辑面板中设置参数类型、单位、描述和计算函数"),
+                    html.Li("通过依赖关系建立参数间的计算链条")
+                ]),
+                
+                html.H6("3️⃣ 建立依赖关系", className="mt-4 mb-2"),
+                html.Ul([
+                    html.Li("在参数编辑面板中选择依赖参数"),
+                    html.Li("编写计算函数（支持 Python 语法）"),
+                    html.Li("点击 🔗 图标重新计算依赖参数"),
+                    html.Li("系统会自动检测并防止循环依赖")
+                ]),
+                
+                html.H6("4️⃣ 移动和布局", className="mt-4 mb-2"),
+                html.Ul([
+                    html.Li("使用节点菜单中的方向键移动节点"),
+                    html.Li("通过列管理按钮添加或删除画布列"),
+                    html.Li("系统会自动管理节点布局和画布大小")
+                ]),
+                
+                html.H6("5️⃣ 分析和导出", className="mt-4 mb-2"),
+                html.Ul([
+                    html.Li("使用相关性分析工具研究参数敏感性"),
+                    html.Li("支持累计绘图模式对比多个分析结果"),
+                    html.Li("通过保存按钮导出完整计算图"),
+                    html.Li("支持加载保存的图文件继续编辑")
+                ]),
+                
+                html.Hr(),
+                html.Div([
+                    html.P([
+                        html.Strong("💡 提示："),
+                        " 点击 🎯 按钮可以加载一个多核SoC示例，快速了解系统功能。"
+                    ], className="text-info"),
+                    html.P([
+                        html.Strong("⚡ 快捷键："),
+                        " 大部分操作都有工具提示，鼠标悬停即可查看详细说明。"
+                    ], className="text-success")
+                ])
+            ])
+        ]),
+        dbc.ModalFooter([
+            dbc.Button("开始使用", id="tutorial-close", color="primary", className="me-2"),
+            dbc.Button("加载示例", id="tutorial-load-example", color="warning")
+        ])
+    ], id="tutorial-modal", size="lg", is_open=False),
 ], fluid=True)
 
 app_index_string = '''
