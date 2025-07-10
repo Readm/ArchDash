@@ -391,9 +391,23 @@ h1 {
   z-index: 3;
 }
 
-/* 禁用下拉按钮的::before伪元素hover效果 */
+/* 禁用下拉按钮的::before伪元素hover效果，但保留下拉箭头 */
 .dropdown-toggle::before {
   display: none !important;
+}
+
+/* 确保下拉箭头显示 */
+.dropdown-toggle::after {
+  display: inline-block !important;
+  margin-left: 0.255em;
+  vertical-align: 0.255em;
+  content: "";
+  border-top: 0.3em solid;
+  border-right: 0.3em solid transparent;
+  border-bottom: 0;
+  border-left: 0.3em solid transparent;
+  position: relative;
+  z-index: 3;
 }
 
 /* 通用按钮hover修复 - 防止Bootstrap默认的hover变形 */
@@ -408,6 +422,14 @@ h1 {
   font-size: inherit !important;
   padding: 0.4rem 1rem !important;
   min-width: fit-content !important;
+}
+
+/* 确保下拉箭头在hover时也保持稳定 */
+.btn.dropdown-toggle:hover::after,
+.btn.dropdown-toggle:focus::after,
+.btn.dropdown-toggle:active::after {
+  border-top-color: currentColor;
+  transform: none !important;
 }
 
 .dropdown-menu.show {
