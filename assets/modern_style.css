@@ -373,15 +373,29 @@ h1 {
   box-sizing: border-box !important;
   min-width: fit-content;
   white-space: nowrap;
-  display: inline-flex !important;
+  display: inline-block;
   align-items: center;
   justify-content: center;
   position: relative;
+  /* 额外的尺寸稳定性 */
+  text-decoration: none !important;
 }
 
 /* 防止下拉按钮hover时内容偏移 */
 .dropdown-toggle:hover {
   transform: none !important;
+  text-decoration: none !important;
+  outline: none !important;
+}
+
+/* 全面的下拉按钮尺寸锁定 */
+.dropdown-toggle,
+.dropdown-toggle:hover,
+.dropdown-toggle:focus,
+.dropdown-toggle:active,
+.dropdown-toggle:visited {
+  box-sizing: border-box !important;
+  line-height: 1.5 !important;
 }
 
 /* 确保下拉按钮文本在hover时不移动 */
@@ -413,15 +427,29 @@ h1 {
 /* 通用按钮hover修复 - 防止Bootstrap默认的hover变形 */
 .btn.dropdown-toggle {
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+  /* 强制固定尺寸 */
+  font-size: 0.75rem !important;
+  padding: 0.4rem 1rem !important;
+  border-width: 1px !important;
+  line-height: 1.5 !important;
+  min-height: calc(1.5em + 0.8rem + 2px) !important;
 }
 
 .btn.dropdown-toggle:hover,
 .btn.dropdown-toggle:focus,
 .btn.dropdown-toggle:active {
   transform: none !important;
-  font-size: inherit !important;
+  font-size: 0.75rem !important;
   padding: 0.4rem 1rem !important;
   min-width: fit-content !important;
+  border-width: 1px !important;
+  line-height: 1.5 !important;
+  min-height: calc(1.5em + 0.8rem + 2px) !important;
+  /* 禁用任何可能的尺寸变化 */
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
 }
 
 /* 确保下拉箭头在hover时也保持稳定 */
