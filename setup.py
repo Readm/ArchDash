@@ -11,7 +11,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="archdash",
-    version="1.1.0",
+    version="1.1.6",
     author="Your Name",  # 请替换为您的名字
     author_email="your.email@example.com",  # 请替换为您的邮箱
     description="A powerful architectural calculation tool for building and analyzing complex calculation graphs",
