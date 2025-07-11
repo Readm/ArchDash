@@ -7,7 +7,7 @@
 
 ArchDash 是一个强大的架构计算工具，用于构建和分析复杂的计算图。通过直观的 Web 界面，您可以轻松创建节点、设置参数、建立依赖关系，并进行参数敏感性分析。
 
-![系统界面预览](screenshot.png)
+![系统界面预览](https://raw.githubusercontent.com/Readm/ArchDash/release/screenshot.png)
 
 ## ✨ 主要功能
 
