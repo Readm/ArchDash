@@ -48,6 +48,8 @@ jobs:
     needs:
     - build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
     - name: 📥 Download all the dists
@@ -67,6 +69,8 @@ jobs:
     needs:
     - build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
     - name: 📥 Download all the dists
