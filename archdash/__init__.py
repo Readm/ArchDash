@@ -5,7 +5,7 @@ A web-based application for building and analyzing complex calculation graphs
 with interactive visualization and parameter sensitivity analysis.
 """
 
-__version__ = "1.1.6"
+__version__ = "1.1.8"
 __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
