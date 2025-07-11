@@ -19,7 +19,7 @@ requirements = [
 
 setup(
     name="archdash",
-    version="1.1.8",
+    version="0.0.1",
     author="readm",
     author_email="readm@example.com",
     description="A powerful architectural calculation tool for building and analyzing complex calculation graphs",
