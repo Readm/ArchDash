@@ -21,7 +21,7 @@ setup(
     name="archdash",
     version="0.0.1",
     author="readm",
-    author_email="readm@example.com",
+    author_email="assasaki@163.com",
     description="A powerful architectural calculation tool for building and analyzing complex calculation graphs",
     long_description=long_description,
     long_description_content_type="text/markdown",
