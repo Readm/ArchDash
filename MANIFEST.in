@@ -1,0 +1,22 @@
+# Include the README
+include README.md
+
+# Include the license file
+include LICENSE
+
+# Include requirements
+include requirements.txt
+
+# Include assets directory
+recursive-include assets *
+
+# Include screenshots
+include screenshot.png
+
+# Exclude unnecessary files
+exclude .gitignore
+exclude .git*
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .DS_Store
+recursive-exclude tests *

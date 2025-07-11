@@ -109,6 +109,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+test_install/
+test_pypi_install/
 
 # Spyder project settings
 .spyderproject
@@ -128,12 +130,24 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
+# macOS
 .DS_Store
-Thumbs.db 
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Project specific
+*.json.bak
+*.log
+temp/
+tmp/
+.pytest_cache/
+node_modules/
