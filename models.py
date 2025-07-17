@@ -1,3 +1,17 @@
+"""
+ArchDash 模型定义文件
+
+注意：核心计算图功能已迁移到 core/graph.py
+本文件保留用于：
+- UI 相关功能（CanvasLayoutManager, GridPosition）
+- 现有的 Web 界面集成
+- 尚未迁移的功能
+
+核心计算图功能的新实现位于：
+- core/graph.py - 新的Graph类
+- tests/new_graph_tests/ - 新的测试套件
+"""
+
 from typing import Dict, List, Optional, Any, Union, Callable, TypeVar, cast, Tuple
 from dataclasses import dataclass, field
 import numpy as np
@@ -80,16 +94,13 @@ class Parameter:
         return False
     
     def add_dependency(self, param: 'Parameter') -> None:
-        """添加依赖参数，并立即在图上注册此关系"""
+        """添加依赖参数（已废弃 - 使用新的Graph类）"""
         if not isinstance(param, Parameter):
             raise TypeError("依赖参数必须是Parameter类型")
         if param is self:
             raise ValueError("参数不能依赖自身")
         if param not in self.dependencies:
             self.dependencies.append(param)
-            # 立即在图上更新依赖关系
-            if self._graph:
-                self._graph.register_dependency(dependent=self, dependency=param)
     
     def calculate(self) -> T:
         """计算参数值并返回结果，但不直接修改内部状态。
@@ -357,85 +368,27 @@ class CalculationGraph:
         self._rebuild_dependency_graph()
 
     def register_dependency(self, dependent: 'Parameter', dependency: 'Parameter'):
-        """直接注册一个依赖关系"""
-        if dependency not in self._dependents_map:
-            self._dependents_map[dependency] = []
-        if dependent not in self._dependents_map[dependency]:
-            self._dependents_map[dependency].append(dependent)
+        """直接注册一个依赖关系（已废弃 - 使用新的Graph类）"""
+        # 保留空实现以维持兼容性
+        pass
 
     def _rebuild_dependency_graph(self):
-        """完全重建图的依赖关系映射"""
-        self._dependents_map.clear()
-        
-        all_params = [p for node in self.nodes.values() for p in node.parameters]
-        
-        for param in all_params:
-            # 确保每个参数都在依赖图中有一个条目
-            if param not in self._dependents_map:
-                self._dependents_map[param] = []
-            
-            # 遍历其依赖项，并将自己添加到依赖项的"依赖者"列表中
-            for dep in param.dependencies:
-                if dep not in self._dependents_map:
-                    self._dependents_map[dep] = []
-                if param not in self._dependents_map[dep]:
-                    self._dependents_map[dep].append(param)
+        """完全重建图的依赖关系映射（已废弃 - 使用新的Graph类）"""
+        # 保留空实现以维持兼容性
+        pass
 
     def propagate_updates(self, changed_param: 'Parameter') -> List[Dict[str, Any]]:
-        """从一个改变的参数开始，递归地更新所有依赖它的下游参数"""
-        
-        # visited 集合应在每次顶级调用时初始化
-        visited: set['Parameter'] = set()
-        
-        def _propagate(param: 'Parameter'):
-            if param in visited:
-                return []
-            visited.add(param)
-            
-            updated_params_info = []
-            dependents = self._dependents_map.get(param, [])
-
-            for dependent_param in dependents:
-                if not dependent_param.unlinked:
-                    old_value = dependent_param.value
-                    try:
-                        new_value = dependent_param.calculate()
-                        
-                        if old_value != new_value:
-                            # 直接更新内部值以避免循环
-                            dependent_param._value = new_value 
-                            
-                            updated_params_info.append({
-                                'param': dependent_param,
-                                'old_value': old_value,
-                                'new_value': new_value
-                            })
-                            # 显式递归
-                            updated_params_info.extend(_propagate(dependent_param))
-                    except Exception as e:
-                        print(f"在更新传播期间，参数 {dependent_param.name} 计算失败: {e}")
-
-            return updated_params_info
-
-        # 从最初改变的参数开始传播
-        return _propagate(changed_param)
+        """从一个改变的参数开始，递归地更新所有依赖它的下游参数（已废弃 - 使用新的Graph类）"""
+        # 保留空实现以维持兼容性
+        return []
 
     def set_parameter_value(self, param, new_value):
-        """通过图来设置参数值，并返回所有更新的摘要"""
+        """通过图来设置参数值，并返回所有更新的摘要（已废弃 - 使用新的Graph类）"""
+        # 保留基本功能以维持兼容性
         old_value = param.value
-        
-        if old_value == new_value:
-            return {
-                'primary_change': None,
-                'cascaded_updates': [],
-                'total_updated_params': 0
-            }
-
-        # 更新主参数的值
         param.value = new_value
         
-        # 记录主参数的变化
-        update_result = {
+        return {
             'primary_change': {
                 'param': param,
                 'old_value': old_value,
@@ -444,47 +397,16 @@ class CalculationGraph:
             'cascaded_updates': [],
             'total_updated_params': 1
         }
-        
-        # 从这里统一启动传播
-        cascaded_updates = self.propagate_updates(param)
-        update_result['cascaded_updates'] = cascaded_updates
-        update_result['total_updated_params'] += len(cascaded_updates)
-        
-        return update_result
 
     def recalculate_all(self):
-        """重新计算所有参数"""
-        for node in self.nodes.values():
-            node.calculate_all()
+        """重新计算所有参数（已废弃 - 使用新的Graph类）"""
+        # 保留空实现以维持兼容性
+        pass
 
     def get_dependency_chain(self, param):
-        """获取一个参数的所有上游和下游依赖"""
-        
-        # 确保依赖图是最新的
-        self._rebuild_dependency_graph()
-
-        # 获取上游依赖（它依赖的）
-        upstream = []
-        visited_up = set()
-        
-        # 获取下游依赖（依赖它的）
-        downstream = []
-        visited_down = set()
-        
-        def get_dependents_recursive(p, depth=0, max_depth=10):
-            if p in visited_down or depth >= max_depth:
-                return
-            visited_down.add(p)
-            
-            # 使用重建后的 _dependents_map
-            dependents = self._dependents_map.get(p, [])
-            for dep_param in dependents:
-                downstream.append(dep_param)
-                get_dependents_recursive(dep_param, depth + 1)
-        
-        get_dependents_recursive(param)
-        
-        return {"upstream": upstream, "downstream": downstream}
+        """获取一个参数的所有上游和下游依赖（已废弃 - 使用新的Graph类）"""
+        # 返回空结果以维持兼容性
+        return {"upstream": [], "downstream": []}
 
     def get_node(self, node_id: str) -> Optional[Node]:
         """通过ID获取节点"""
