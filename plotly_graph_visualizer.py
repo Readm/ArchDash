@@ -25,11 +25,122 @@ class PlotlyCodeParser:
         self.dependencies = {}
         
     def parse_code(self, code: str) -> Dict:
-        """Parse code and extract Graph information with line positions"""
+        """Parse code and extract Graph information with actual execution"""
         self.graph_name = ""
         self.parameters = {}
         self.dependencies = {}
         
+        try:
+            # Try to execute the code and get real values
+            return self._execute_and_parse(code)
+        except Exception as e:
+            # Fall back to static analysis if execution fails
+            return self._static_parse(code, str(e))
+    
+    def _execute_and_parse(self, code: str) -> Dict:
+        """Execute code and extract real values from Graph instance"""
+        # Create a safe execution environment
+        import sys
+        import os
+        
+        # Add the current directory to path so core module can be imported
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+        
+        # Create execution namespace
+        exec_globals = {
+            '__builtins__': __builtins__,
+            'Graph': None,  # Will be imported
+        }
+        
+        # Import the Graph class
+        try:
+            from core.graph import Graph
+            exec_globals['Graph'] = Graph
+        except ImportError:
+            # If can't import, fall back to static analysis
+            return self._static_parse(code, "Cannot import Graph class")
+        
+        # Execute the code in a single namespace so functions can access variables
+        exec_combined = exec_globals.copy()
+        exec(code, exec_combined, exec_combined)
+        
+        # Find the Graph instance
+        graph_instance = None
+        for var_name, var_value in exec_combined.items():
+            if isinstance(var_value, Graph):
+                graph_instance = var_value
+                break
+        
+        if not graph_instance:
+            return self._static_parse(code, "No Graph instance found")
+        
+        # Extract real values from the Graph instance
+        self.graph_name = graph_instance.name
+        lines = code.split('\n')
+        
+        # Get all parameters (basic and computed)
+        for param_name in graph_instance.keys():
+            try:
+                actual_value = graph_instance[param_name]
+                
+                # Determine if it's basic or computed
+                if param_name in graph_instance._computed_parameters:
+                    param_type = "computed"
+                    # Get dependencies
+                    computed_info = graph_instance.get_computed_info(param_name)
+                    if computed_info:
+                        self.dependencies[param_name] = computed_info.get('dependencies', [])
+                else:
+                    param_type = "basic"
+                
+                # Find line number in code
+                line_num = self._find_parameter_line(code, param_name, param_type)
+                
+                self.parameters[param_name] = {
+                    "type": param_type,
+                    "value": actual_value,
+                    "line_number": line_num,
+                    "code_position": 0
+                }
+                
+            except Exception as e:
+                # If can't get value, use placeholder
+                self.parameters[param_name] = {
+                    "type": "computed",
+                    "value": f"Error: {str(e)}",
+                    "line_number": 1,
+                    "code_position": 0
+                }
+        
+        return {
+            "graph_name": self.graph_name,
+            "parameters": self.parameters,
+            "dependencies": self.dependencies,
+            "success": True,
+            "error": None
+        }
+    
+    def _find_parameter_line(self, code: str, param_name: str, param_type: str) -> int:
+        """Find the line number where a parameter is defined"""
+        lines = code.split('\n')
+        
+        if param_type == "basic":
+            # Look for g["param_name"] = value
+            pattern = rf'g\s*\[\s*["\']({re.escape(param_name)})["\']\s*\]\s*='
+            for match in re.finditer(pattern, code):
+                return code[:match.start()].count('\n') + 1
+        else:
+            # Look for add_computed("param_name", ...)
+            pattern = rf'add_computed\s*\(\s*["\']({re.escape(param_name)})["\']\s*,'
+            for match in re.finditer(pattern, code):
+                return code[:match.start()].count('\n') + 1
+        
+        return 1  # Default to line 1
+    
+    def _static_parse(self, code: str, error_msg: str) -> Dict:
+        """Fallback static analysis when execution fails"""
         try:
             lines = code.split('\n')
             
@@ -49,12 +160,23 @@ class PlotlyCodeParser:
                 # Find line number
                 line_num = code[:match.start()].count('\n') + 1
                 
-                self.parameters[param_name] = {
-                    "type": "basic",
-                    "value": param_value,
-                    "line_number": line_num,
-                    "code_position": match.start()
-                }
+                try:
+                    # Try to evaluate the value
+                    evaluated_value = eval(param_value)
+                    self.parameters[param_name] = {
+                        "type": "basic",
+                        "value": evaluated_value,
+                        "line_number": line_num,
+                        "code_position": match.start()
+                    }
+                except:
+                    # If evaluation fails, use string representation
+                    self.parameters[param_name] = {
+                        "type": "basic",
+                        "value": param_value,
+                        "line_number": line_num,
+                        "code_position": match.start()
+                    }
             
             # Parse add_computed calls with line tracking
             self._parse_add_computed(code, lines)
@@ -64,7 +186,7 @@ class PlotlyCodeParser:
                 "parameters": self.parameters,
                 "dependencies": self.dependencies,
                 "success": True,
-                "error": None
+                "error": f"Static analysis used: {error_msg}"
             }
         except Exception as e:
             return {
@@ -126,7 +248,7 @@ class PlotlyCodeParser:
             
             self.parameters[param_name] = {
                 "type": "computed",
-                "value": f"computed via {func_name}()",
+                "value": f"computed via {func_name}()",  # Static fallback
                 "line_number": line_num,
                 "function_line": function_line_nums.get(func_name, line_num),
                 "code_position": match.start()
@@ -184,10 +306,10 @@ def calculate_layout(parameters: Dict, dependencies: Dict) -> Dict:
         else:
             computed_params.append(param_name)
     
-    # Calculate layout parameters
-    node_height = 1.5  # Height spacing between nodes
-    column_width = 4.0  # Width spacing between columns
-    start_x = -2.0  # Starting X position
+    # Calculate layout parameters optimized for larger rectangles
+    node_height = 1.6  # Height spacing between nodes
+    column_width = 4.5  # Width spacing between columns for better spacing
+    start_x = -2.5  # Starting X position
     
     # Position basic parameters in left column
     for i, param_name in enumerate(basic_params):
@@ -261,21 +383,69 @@ def create_plotly_figure(graph_data: Dict):
     # Create figure
     fig = go.Figure()
     
-    # Add edges with arrows
+    # Add edges with arrows from right pin to left pin
     for param_name, deps in dependencies.items():
         if param_name in positions:
             end_pos = positions[param_name]
             for dep in deps:
                 if dep in positions:
                     start_pos = positions[dep]
-                    # Add arrow annotation
-                    fig.add_annotation(
-                        x=end_pos[0], y=end_pos[1],
-                        ax=start_pos[0], ay=start_pos[1],
-                        xref='x', yref='y',
-                        axref='x', ayref='y',
-                        arrowhead=2, arrowsize=1.5, arrowwidth=2,
-                        arrowcolor='#7f8c8d'
+                    
+                    # Calculate pin positions
+                    rect_width = 2.2
+                    rect_height = 0.8
+                    
+                    # Start from right side pin of source node
+                    start_x = start_pos[0] + rect_width/2
+                    start_y = start_pos[1]
+                    
+                    # End at left side pin of target node
+                    end_x = end_pos[0] - rect_width/2
+                    end_y = end_pos[1]
+                    
+                    # Create Bezier curve path for smooth arrows
+                    # Calculate control points for smooth curve
+                    dx = end_x - start_x
+                    dy = end_y - start_y
+                    
+                    # Control points for horizontal-leaning curves
+                    control_offset = abs(dx) * 0.6  # Adjust curve strength
+                    control1_x = start_x + control_offset
+                    control1_y = start_y
+                    control2_x = end_x - control_offset
+                    control2_y = end_y
+                    
+                    # Create SVG path for Bezier curve
+                    path = f"M {start_x},{start_y} C {control1_x},{control1_y} {control2_x},{control2_y} {end_x},{end_y}"
+                    
+                    # Add smooth curved arrow using SVG path
+                    fig.add_shape(
+                        type="path",
+                        path=path,
+                        line=dict(
+                            color='rgba(74, 144, 226, 0.85)',
+                            width=3
+                        ),
+                        layer="below"
+                    )
+                    
+                    # Add arrowhead at the end
+                    arrow_size = 0.15
+                    arrow_angle = math.atan2(control2_y - end_y, control2_x - end_x)
+                    
+                    # Calculate arrowhead points
+                    arrow_x1 = end_x + arrow_size * math.cos(arrow_angle + 2.8)
+                    arrow_y1 = end_y + arrow_size * math.sin(arrow_angle + 2.8)
+                    arrow_x2 = end_x + arrow_size * math.cos(arrow_angle - 2.8)
+                    arrow_y2 = end_y + arrow_size * math.sin(arrow_angle - 2.8)
+                    
+                    # Add filled triangle arrowhead
+                    fig.add_shape(
+                        type="path",
+                        path=f"M {end_x},{end_y} L {arrow_x1},{arrow_y1} L {arrow_x2},{arrow_y2} Z",
+                        fillcolor='rgba(74, 144, 226, 0.85)',
+                        line=dict(color='rgba(74, 144, 226, 0.85)', width=0),
+                        layer="above"
                     )
     
     # Prepare node data
@@ -291,7 +461,14 @@ def create_plotly_figure(graph_data: Dict):
         
         node_x.append(pos[0])
         node_y.append(pos[1])
-        node_text.append(param_name)
+        
+        # Format text with name and value on same line, larger font
+        value_str = str(param_info["value"])
+        if len(value_str) > 12:  # Shorter for single line display
+            value_str = value_str[:12] + "..."
+        
+        # Put name and value on same line with larger font
+        node_text.append(f"<b>{param_name}:</b> {value_str}")
         
         # Create hover info
         value_text = str(param_info["value"])
@@ -311,14 +488,11 @@ def create_plotly_figure(graph_data: Dict):
             if deps:
                 hover_text += f"<br>Dependencies: {', '.join(deps)}"
         
-        hover_text += f"<br><i>💡 Double-click to jump to code</i>"
+        hover_text += f"<br><i>💡 Click to open context menu</i>"
         node_hover.append(hover_text)
         
-        # Color coding
-        if param_info["type"] == "basic":
-            node_colors.append('#3498db')  # Blue for basic
-        else:
-            node_colors.append('#2ecc71')  # Green for computed
+        # Use same color for all parameters
+        node_colors.append('#6c757d')
             
         # Size based on dependency count
         dep_count = len(dependencies.get(param_name, []))
@@ -340,14 +514,14 @@ def create_plotly_figure(graph_data: Dict):
     for i, (param_name, pos) in enumerate(positions.items()):
         param_info = parameters[param_name]
         
-        # Rectangle dimensions
-        width = 1.8
-        height = 0.6
+        # Optimized rectangle dimensions for better text fit
+        width = 2.2
+        height = 0.8
         
-        # Color based on parameter type
-        fill_color = '#3498db' if param_info["type"] == "basic" else '#2ecc71'
+        # Modern gradient color with subtle depth
+        fill_color = 'rgba(99, 110, 125, 0.95)'
         
-        # Add rectangle shape
+        # Add modern styled rectangle with shadow effect
         fig.add_shape(
             type="rect",
             x0=pos[0] - width/2,
@@ -355,30 +529,64 @@ def create_plotly_figure(graph_data: Dict):
             x1=pos[0] + width/2,
             y1=pos[1] + height/2,
             fillcolor=fill_color,
-            opacity=0.8,
-            line=dict(color='white', width=2)
+            opacity=1.0,
+            line=dict(color='rgba(255, 255, 255, 0.9)', width=1.5),
+            layer="below"
         )
+        
+        # Add pin points for visual clarity
+        pin_size = 0.08
+        pin_color = 'rgba(74, 144, 226, 0.9)'
+        
+        # Right side pin (output)
+        fig.add_shape(
+            type="circle",
+            x0=pos[0] + width/2 - pin_size/2,
+            y0=pos[1] - pin_size/2,
+            x1=pos[0] + width/2 + pin_size/2,
+            y1=pos[1] + pin_size/2,
+            fillcolor=pin_color,
+            line=dict(color='white', width=1),
+            layer="above"
+        )
+        
+        # Left side pin (input) - only for computed parameters
+        if param_info["type"] == "computed":
+            fig.add_shape(
+                type="circle",
+                x0=pos[0] - width/2 - pin_size/2,
+                y0=pos[1] - pin_size/2,
+                x1=pos[0] - width/2 + pin_size/2,
+                y1=pos[1] + pin_size/2,
+                fillcolor=pin_color,
+                line=dict(color='white', width=1),
+                layer="above"
+            )
     
-    # Add invisible markers for text and interaction
+    # Add text labels inside rectangles
     fig.add_trace(go.Scatter(
         x=node_x, y=node_y,
         mode='text',
         text=node_text,
         textposition="middle center",
-        textfont=dict(size=10, color='white', family='Arial Black'),
+        textfont=dict(
+            size=14, 
+            color='rgba(255, 255, 255, 0.95)', 
+            family='SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif'
+        ),
         hovertemplate='%{hovertext}<extra></extra>',
         hovertext=node_hover,
         customdata=node_custom_data,
         showlegend=False,
-        name='Parameters'
+        name='NodeText'
     ))
     
-    # Add invisible clickable markers for interaction
+    # Add invisible clickable areas for interaction
     fig.add_trace(go.Scatter(
         x=node_x, y=node_y,
         mode='markers',
         marker=dict(
-            size=30,  # Larger invisible area for easier clicking
+            size=55,  # Adjusted to match new rectangle size
             color='rgba(0,0,0,0)',  # Transparent
             line=dict(width=0)
         ),
@@ -386,7 +594,7 @@ def create_plotly_figure(graph_data: Dict):
         hovertext=node_hover,
         customdata=node_custom_data,
         showlegend=False,
-        name='Clickable Areas'
+        name='ClickableAreas'
     ))
     
     # Update layout for interactivity
@@ -397,7 +605,7 @@ def create_plotly_figure(graph_data: Dict):
             showgrid=False,
             zeroline=False,
             showticklabels=False,
-            range=[-4, 8]  # Adjusted for columnar layout
+            range=[-5, 10]  # Adjusted for larger rectangles and spacing
         ),
         yaxis=dict(
             showgrid=False,
@@ -405,9 +613,9 @@ def create_plotly_figure(graph_data: Dict):
             showticklabels=False,
             range=[-6, 6]  # Adjusted for vertical spacing
         ),
-        plot_bgcolor='white',
-        paper_bgcolor='#f8f9fa',
-        showlegend=True,
+        plot_bgcolor='rgba(250, 251, 252, 0.9)',
+        paper_bgcolor='rgba(255, 255, 255, 0.98)',
+        showlegend=False,
         legend=dict(
             x=1.02,
             y=1,
@@ -416,69 +624,14 @@ def create_plotly_figure(graph_data: Dict):
             borderwidth=1
         ),
         margin=dict(l=20, r=120, t=80, b=50),
-        dragmode='pan'  # Enable panning by default
+        dragmode='zoom'  # Allow both clicking and dragging
     )
     
-    # Add manual legend
-    fig.add_trace(go.Scatter(
-        x=[None], y=[None],
-        mode='markers',
-        marker=dict(size=15, color='#3498db'),
-        legendgroup='legend',
-        showlegend=True,
-        name='Basic Parameters'
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=[None], y=[None],
-        mode='markers',
-        marker=dict(size=15, color='#2ecc71'),
-        legendgroup='legend',
-        showlegend=True,
-        name='Computed Parameters'
-    ))
     
     # Calculate statistics first
     basic_count = sum(1 for p in parameters.values() if p["type"] == "basic")
     computed_count = sum(1 for p in parameters.values() if p["type"] == "computed")
     
-    # Add column headers
-    if basic_count > 0 and positions:
-        fig.add_annotation(
-            text="<b>Basic Parameters</b>",
-            x=-2.0, y=max(pos[1] for pos in positions.values()) + 1.0,
-            showarrow=False,
-            font=dict(size=12, color='#3498db'),
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="#3498db",
-            borderwidth=1
-        )
-    
-    if computed_count > 0 and positions:
-        fig.add_annotation(
-            text="<b>Computed Parameters</b>",
-            x=2.0, y=max(pos[1] for pos in positions.values()) + 1.0,
-            showarrow=False,
-            font=dict(size=12, color='#2ecc71'),
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="#2ecc71",
-            borderwidth=1
-        )
-    
-    # Add statistics annotation
-    
-    fig.add_annotation(
-        text=f"📊 {len(parameters)} total parameters<br>"
-             f"🔵 {basic_count} basic<br>"
-             f"🟢 {computed_count} computed",
-        x=0.02, y=0.98,
-        xref="paper", yref="paper",
-        showarrow=False,
-        font=dict(size=10),
-        bgcolor="rgba(255,255,255,0.8)",
-        bordercolor="#bdc3c7",
-        borderwidth=1
-    )
     
     return fig
 
@@ -528,7 +681,7 @@ def run_online_mode():
                         dbc.CardBody([
                             dcc.Graph(
                                 id='dependency-graph',
-                                style={'height': '600px'},
+                                style={'height': '600px', 'borderRadius': '8px'},
                                 config={
                                     'displayModeBar': True,
                                     'displaylogo': False,
@@ -670,7 +823,7 @@ def run_online_mode():
                     html.Strong("✅ Graph updated successfully! "),
                     f"Found {len(params)} parameters: {basic_count} basic, {computed_count} computed. ",
                     html.Br(),
-                    html.Small("💡 Drag to pan, scroll to zoom, hover for details, double-click to jump to code.")
+                    html.Small("💡 Drag to pan, scroll to zoom, hover for details, click node for context menu.")
                 ], color="success")
             elif graph_data:
                 status = dbc.Alert([
@@ -714,6 +867,8 @@ def run_online_mode():
         app.clientside_callback(
             """
             function(clickData, graphData) {
+                console.log('Click callback triggered:', clickData);
+                
                 if (!clickData || !clickData.points || clickData.points.length === 0) {
                     // Hide menu if clicked elsewhere
                     const menu = document.getElementById('context-menu');
@@ -724,12 +879,15 @@ def run_online_mode():
                 }
                 
                 const point = clickData.points[0];
+                console.log('Point data:', point);
                 
-                // Only show menu for nodes (points with text and customdata)
-                if (point.text && point.customdata) {
+                // Check if this is a clickable node (with customdata)
+                if (point.customdata) {
                     const paramName = point.customdata.name || point.text;
                     const lineNumber = point.customdata.line_number || 'Unknown';
                     const graphDataParsed = JSON.parse(graphData || '{}');
+                    
+                    console.log('Found clickable node:', paramName, 'Line:', lineNumber);
                     
                     let paramInfo = '';
                     if (graphDataParsed.parameters && graphDataParsed.parameters[paramName]) {
@@ -748,11 +906,14 @@ def run_online_mode():
                         menu.style.left = (rect.left + 200) + 'px';
                         menu.style.top = (rect.top + 100) + 'px';
                         menu.style.display = 'block';
+                        
+                        console.log('Context menu displayed at:', menu.style.left, menu.style.top);
                     }
                     
                     return [paramName, paramInfo, JSON.stringify(point.customdata), window.dash_clientside.no_update];
                 }
                 
+                console.log('Click was not on a node with customdata');
                 return [window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update, window.dash_clientside.no_update];
             }
             """,
@@ -834,6 +995,34 @@ def run_online_mode():
             Output('copy-name-btn', 'n_clicks'),
             [Input('copy-name-btn', 'n_clicks')],
             [State('menu-node-name', 'children')]
+        )
+        
+        # Add hover effect for nodes
+        app.clientside_callback(
+            """
+            function(hoverData) {
+                // Handle hover effects on nodes
+                if (hoverData && hoverData.points && hoverData.points.length > 0) {
+                    const point = hoverData.points[0];
+                    if (point.customdata) {
+                        // Add subtle highlight effect
+                        const graphDiv = document.getElementById('dependency-graph');
+                        if (graphDiv) {
+                            graphDiv.style.cursor = 'pointer';
+                        }
+                    }
+                } else {
+                    // Reset cursor when not hovering
+                    const graphDiv = document.getElementById('dependency-graph');
+                    if (graphDiv) {
+                        graphDiv.style.cursor = 'default';
+                    }
+                }
+                return window.dash_clientside.no_update;
+            }
+            """,
+            Output('dependency-graph', 'hoverData'),
+            [Input('dependency-graph', 'hoverData')]
         )
         
         # Initialize Monaco Editor
@@ -935,12 +1124,12 @@ print(f"Efficiency: {g['efficiency']}")`;
         )
         
         # Auto-open browser
-        Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:8051')).start()
+        Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:8054')).start()
         
-        print("🌐 Opening browser at: http://127.0.0.1:8051")
+        print("🌐 Opening browser at: http://127.0.0.1:8054")
         print("💡 Tip: Try editing code in real-time!")
         
-        app.run(debug=False, host='127.0.0.1', port=8051)
+        app.run(debug=False, host='127.0.0.1', port=8054)
         
     except ImportError as e:
         print(f"❌ Online mode requires: dash, plotly, dash-bootstrap-components")

@@ -1,133 +1,154 @@
-# 参数计算与可视化系统
+# ArchDash - Interactive Graph Visualizer
 
-这是一个基于Python的Web应用，用于可视化配置多组数据，计算复杂中间变量，并展示它们之间的依赖关系。系统支持参数扫描、数据可视化、计算过程追踪和数据导出等功能。
+一个强大的Python图形参数可视化和代码编辑系统，提供实时的参数依赖关系可视化和专业的代码编辑体验。
 
-![系统界面预览](screenshot.png)
+## 🌟 主要功能
 
-## 主要功能
+### 🎯 交互式图形可视化
+- **矩形节点布局**: 基础参数和计算参数分列显示
+- **实时依赖关系**: 清晰显示参数间的依赖箭头
+- **点击交互**: 点击节点弹出上下文菜单
+- **一键跳转**: 从图形直接跳转到对应代码行
 
-- 参数配置与验证
-- 复杂计算依赖管理
-- 实时计算更新
-- 参数扫描功能
-- 数据可视化（包括VF曲线等）
-- 计算过程追踪
-- 数据导出到Excel
+### 💻 专业代码编辑
+- **Monaco Editor**: VS Code同款编辑器核心
+- **Python语法高亮**: 完整的Python语法着色支持
+- **智能自动补全**: Graph API专用代码提示
+- **实时同步**: 代码修改后图形自动更新
 
-## 技术栈
+### 🔄 实时更新系统
+- **参数计算**: 支持基础参数和计算参数
+- **依赖追踪**: 自动解析函数依赖关系
+- **即时反馈**: 代码变更立即反映在图形中
 
-- Python 3.8+
-- Dash (Web框架)
-- Pandas (数据处理)
-- Plotly (数据可视化)
-- Pytest (测试框架)
+## 🚀 快速开始
 
-## 安装
-
-1. 克隆仓库：
+### 安装依赖
 ```bash
-git clone https://github.com/Readm/ArchDash.git
-cd ArchDash
+pip install dash plotly dash-bootstrap-components
 ```
 
-2. 安装依赖：
+### 启动应用
 ```bash
-pip install -r requirements.txt
+python plotly_graph_visualizer.py --mode online
 ```
 
-## 运行测试
+### 访问应用
+打开浏览器访问: http://127.0.0.1:8053
 
-我们采用分层的测试组织结构，详细说明请参考 [测试组织指南](ai/testing/TEST_ORGANIZATION.md)。
+## 📖 使用指南
+
+### 基本操作
+1. **编写代码**: 在Monaco Editor中编写Graph代码
+2. **查看图形**: 左侧面板实时显示参数依赖关系
+3. **节点交互**: 点击节点查看详细信息和操作菜单
+4. **代码跳转**: 使用"Jump to Code"直接定位到代码行
+
+### 代码示例
+```python
+from core import Graph
+
+# 创建图形
+g = Graph("Circuit Analysis")
+
+# 基础参数
+g["voltage"] = 12.0
+g["current"] = 2.0
+g["resistance"] = 6.0
+
+# 计算函数
+def power_calculation():
+    return g["voltage"] * g["current"]
+
+# 添加计算参数
+g.add_computed("power", power_calculation, "Power calculation")
+```
+
+### 功能特点
+- 🔵 **基础参数**: 左列显示，蓝色背景
+- 🟫 **计算参数**: 右列显示，灰色背景
+- 🎯 **上下文菜单**: 单击节点显示操作选项
+- 📍 **精确定位**: 一键跳转到代码对应行
+- 🔄 **实时更新**: 代码修改即时反映
+
+## 🛠️ 技术栈
+
+- **Python 3.8+**: 核心运行环境
+- **Dash**: Web应用框架
+- **Plotly**: 交互式图形可视化
+- **Monaco Editor**: 专业代码编辑器
+- **Bootstrap**: 现代UI设计
+
+## 📁 项目结构
+
+```
+ArchDash/
+├── plotly_graph_visualizer.py  # 主应用文件
+├── core/                       # 核心Graph类
+│   ├── __init__.py
+│   └── graph.py
+├── assets/                     # 静态资源
+│   ├── modern_style.css
+│   └── tab-sid.js
+├── tests/                      # 测试文件
+└── README.md                   # 项目说明
+```
+
+## 🎮 交互说明
+
+### 图形操作
+- **拖拽**: 平移视图
+- **滚轮**: 缩放图形
+- **点击节点**: 显示上下文菜单
+- **悬停**: 查看参数详细信息
+
+### 菜单选项
+- **🔍 Jump to Code**: 跳转到代码对应行
+- **📋 Copy Name**: 复制参数名称
+- **❌ Close**: 关闭菜单
+
+### 代码编辑
+- **语法高亮**: 自动Python语法着色
+- **自动补全**: Graph API智能提示
+- **错误检查**: 实时语法错误提示
+- **快捷键**: 支持VS Code标准快捷键
+
+## 🔧 开发模式
+
+支持两种运行模式:
+
+1. **在线模式** (推荐): 
+   ```bash
+   python plotly_graph_visualizer.py --mode online
+   ```
+   
+2. **离线模式**:
+   ```bash
+   python plotly_graph_visualizer.py --mode offline
+   ```
+
+## 🧪 运行测试
 
 ```bash
+# 运行核心测试
+pytest tests/new_graph_tests/
+
 # 运行所有测试
-python tests/run_tests.py
-
-# 运行特定类别的测试
-python tests/run_tests.py --type core      # 核心功能测试
-python tests/run_tests.py --type features  # 功能特性测试
-python tests/run_tests.py --type examples  # 示例功能测试
-python tests/run_tests.py --type integration  # 集成测试
+pytest tests/
 ```
 
-## 项目结构
-
-- `models.py`: 参数和节点类定义
-- `app.py`: Web应用主文件
-- `scanner.py`: 扫描功能实现
-- `plotter.py`: 绘图功能实现
-- `test_models.py`: 单元测试文件
-
-## 项目进度
-
-- models.py（参数和节点类定义）已完成
-- test_models.py（数据模型测试用例）已完成
-- app.py（Web界面）已完成基础功能
-  - 参数编辑功能
-  - 依赖关系管理
-  - 实时计算更新
-  - 参数敏感性分析
-  - 累计绘图功能
-- 布局管理优化已完成
-  - 响应式设计
-  - 列管理功能
-  - 节点位置控制
-
-## 开发状态
-
-当前处于功能完善阶段，已完成：
-- 基础数据模型设计
-- 参数验证系统
-- 计算依赖管理
-- 单元测试框架
-- Web界面基础功能
-- 参数敏感性分析
-- 累计绘图功能
-- 依赖删除限制
-- 布局管理优化
-
-## 下一步计划
-
-- 优化用户界面体验
-- 完善数据导出功能
-- 添加更多图表类型
-- 支持3D参数分析
-- 添加批量分析功能
-- 实现报告生成功能
-
-## 开发约定
-
-- 每次代码修改后必须执行测试，确保主要功能不被破坏。
-
-## 测试说明
-
-测试已经按照功能模块进行了重组，分为以下几个主要类别：
-
-- `tests/core/`: 核心功能测试（数据模型、文件操作等）
-- `tests/features/`: 功能特性测试（unlink功能、布局管理等）
-- `tests/examples/`: 示例功能测试（示例计算图等）
-- `tests/integration/`: 集成测试（完整应用功能）
-
-运行Dash Web应用测试需要以下准备：
-- 安装Chrome浏览器和ChromeDriver
-- 确保ChromeDriver在PATH中或项目根目录
-- 在CI环境中会自动使用headless模式
-
-更多测试相关信息，请参考：
-- [测试组织指南](ai/testing/TEST_ORGANIZATION.md)
-- [测试覆盖率报告](ai/testing/TEST_COVERAGE_SUMMARY.md)
-- [Headless测试指南](ai/testing/headless_testing_guide.md)
-
-## 贡献指南
-
-欢迎提交Issue和Pull Request。请确保遵循以下步骤：
+## 🤝 贡献指南
 
 1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建Pull Request
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启Pull Request
 
-## 许可证
+## 📄 许可证
 
-MIT License 
+MIT License - 详见 [LICENSE](LICENSE) 文件
+
+---
+
+**🎯 现在就开始体验专业级的图形参数可视化！**
