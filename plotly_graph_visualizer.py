@@ -289,50 +289,128 @@ print(f"Energy: {g['energy']} Wh")
 print(f"Efficiency: {g['efficiency']}")'''
 
 
+def calculate_dependency_levels(parameters: Dict, dependencies: Dict) -> Dict:
+    """Calculate dependency level for each node using topological analysis"""
+    levels = {}
+    
+    # Identify basic parameters (level 0)
+    basic_params = set()
+    for param_name, param_info in parameters.items():
+        if param_info["type"] == "basic":
+            basic_params.add(param_name)
+            levels[param_name] = 0
+    
+    # Build reverse dependency graph for easier traversal
+    dependents = {}  # param -> [nodes that depend on it]
+    for param, deps in dependencies.items():
+        for dep in deps:
+            if dep not in dependents:
+                dependents[dep] = []
+            dependents[dep].append(param)
+    
+    # Use BFS to assign levels
+    from collections import deque
+    queue = deque(basic_params)
+    
+    while queue:
+        current_param = queue.popleft()
+        current_level = levels[current_param]
+        
+        # Process all nodes that depend on current_param
+        if current_param in dependents:
+            for dependent in dependents[current_param]:
+                # Calculate the maximum level requirement for this dependent
+                required_level = current_level + 1
+                
+                # Check if all dependencies of this dependent have been processed
+                all_deps_processed = True
+                max_dependency_level = 0
+                
+                if dependent in dependencies:
+                    for dep in dependencies[dependent]:
+                        if dep not in levels:
+                            all_deps_processed = False
+                            break
+                        max_dependency_level = max(max_dependency_level, levels[dep])
+                
+                # If all dependencies are processed, assign level
+                if all_deps_processed:
+                    final_level = max_dependency_level + 1
+                    if dependent not in levels or levels[dependent] < final_level:
+                        levels[dependent] = final_level
+                        queue.append(dependent)
+    
+    # Handle any remaining unprocessed nodes (circular dependencies or isolated nodes)
+    for param_name in parameters:
+        if param_name not in levels:
+            if param_name in dependencies and dependencies[param_name]:
+                # Try to assign based on maximum dependency level
+                max_dep_level = 0
+                for dep in dependencies[param_name]:
+                    if dep in levels:
+                        max_dep_level = max(max_dep_level, levels[dep])
+                levels[param_name] = max_dep_level + 1
+            else:
+                # Isolated node or no dependencies
+                levels[param_name] = 0
+    
+    return levels
+
 def calculate_layout(parameters: Dict, dependencies: Dict) -> Dict:
-    """Calculate node positions using columnar layout"""
+    """Calculate node positions using dependency-level-based columnar layout"""
     positions = {}
     
     if not parameters:
         return positions
     
-    # Separate basic and computed parameters
-    basic_params = []
-    computed_params = []
+    # Calculate dependency levels for each node
+    levels = calculate_dependency_levels(parameters, dependencies)
     
-    for param_name, param_info in parameters.items():
-        if param_info["type"] == "basic":
-            basic_params.append(param_name)
-        else:
-            computed_params.append(param_name)
+    # Group nodes by level
+    level_groups = {}
+    max_level = max(levels.values()) if levels else 0
     
-    # Calculate layout parameters optimized for larger rectangles
+    for param_name, level in levels.items():
+        if level not in level_groups:
+            level_groups[level] = []
+        level_groups[level].append(param_name)
+    
+    # Calculate layout parameters
     node_height = 1.6  # Height spacing between nodes
-    column_width = 4.5  # Width spacing between columns for better spacing
+    column_width = 4.5  # Width spacing between columns
     start_x = -2.5  # Starting X position
     
-    # Position basic parameters in left column
-    for i, param_name in enumerate(basic_params):
-        x = start_x
-        y = -(len(basic_params) - 1) * node_height / 2 + i * node_height
-        positions[param_name] = (x, y)
-    
-    # Position computed parameters in right column(s)
-    # If there are many computed parameters, use multiple columns
-    computed_per_column = max(6, len(basic_params))  # Keep columns balanced
-    
-    for i, param_name in enumerate(computed_params):
-        column = i // computed_per_column
-        row = i % computed_per_column
+    # Position nodes level by level (column by column)
+    for level in range(max_level + 1):
+        if level not in level_groups:
+            continue
+            
+        nodes_in_level = level_groups[level]
+        column_x = start_x + level * column_width
         
-        x = start_x + column_width * (column + 1)
-        # Center the column vertically
-        column_size = min(computed_per_column, len(computed_params) - column * computed_per_column)
-        y = -(column_size - 1) * node_height / 2 + row * node_height
-        positions[param_name] = (x, y)
+        # Center nodes vertically in each column
+        for i, param_name in enumerate(nodes_in_level):
+            y = -(len(nodes_in_level) - 1) * node_height / 2 + i * node_height
+            positions[param_name] = (column_x, y)
     
     return positions
 
+
+def calculate_node_width(param_name: str, param_info: Dict) -> float:
+    """Calculate dynamic rectangle width based on text content"""
+    value_str = str(param_info["value"])
+    if len(value_str) > 12:
+        value_str = value_str[:12] + "..."
+    
+    # Calculate text content length: "param_name: value"
+    text_content = f"{param_name}: {value_str}"
+    text_length = len(text_content)
+    
+    # Dynamic width calculation: base width + character-based scaling
+    base_width = 2.5
+    char_width_factor = 0.08  # Adjust this for different font sizes
+    calculated_width = base_width + (text_length * char_width_factor)
+    return max(2.5, min(5.0, calculated_width))  # Constrain between 2.5 and 5.0
 
 def create_plotly_figure(graph_data: Dict):
     """Create interactive Plotly figure"""
@@ -391,16 +469,17 @@ def create_plotly_figure(graph_data: Dict):
                 if dep in positions:
                     start_pos = positions[dep]
                     
-                    # Calculate pin positions
-                    rect_width = 2.2
+                    # Calculate dynamic pin positions based on node widths
+                    start_width = calculate_node_width(dep, parameters[dep])
+                    end_width = calculate_node_width(param_name, parameters[param_name])
                     rect_height = 0.8
                     
                     # Start from right side pin of source node
-                    start_x = start_pos[0] + rect_width/2
+                    start_x = start_pos[0] + start_width/2
                     start_y = start_pos[1]
                     
                     # End at left side pin of target node
-                    end_x = end_pos[0] - rect_width/2
+                    end_x = end_pos[0] - end_width/2
                     end_y = end_pos[1]
                     
                     # Create Bezier curve path for smooth arrows
@@ -514,8 +593,9 @@ def create_plotly_figure(graph_data: Dict):
     for i, (param_name, pos) in enumerate(positions.items()):
         param_info = parameters[param_name]
         
-        # Optimized rectangle dimensions for better text fit
-        width = 2.2
+        # Calculate dynamic rectangle width based on text content
+        width = calculate_node_width(param_name, param_info)
+        
         height = 0.8
         
         # Modern gradient color with subtle depth
