@@ -728,11 +728,12 @@ def run_online_mode():
         
         print("🌐 Starting Online Mode (Dash Web Application)...")
         print("📊 Features:")
-        print("   • Real-time code editing")
-        print("   • Interactive node dragging") 
-        print("   • Hover effects and tooltips")
-        print("   • Modern responsive UI")
-        print("   • Auto-refresh on code changes")
+        print("   • Monaco Editor with Python syntax highlighting")
+        print("   • Interactive node dragging and context menus") 
+        print("   • Hover effects and detailed tooltips")
+        print("   • Smart dependency-level layout")
+        print("   • Bezier curve arrows and dynamic node sizing")
+        print("   • Manual graph updates (auto-update disabled)")
         print("")
         
         # Create Dash app
@@ -817,11 +818,19 @@ def run_online_mode():
             dbc.Row([
                 dbc.Col([
                     html.Div(id="status-info", children=[
-                        dbc.Alert("🚀 Online Mode: Real-time interactive visualization with full Plotly features!", 
+                        dbc.Alert("🚀 Online Mode: Interactive visualization with Monaco Editor. Use 'Refresh Graph' button to update!", 
                                 color="info", className="mb-0")
                     ])
                 ])
             ]),
+            
+            # Real-time preview control (currently disabled)
+            dcc.Interval(
+                id='realtime-interval',
+                interval=1000,  # Check every second
+                n_intervals=0,
+                disabled=True  # Disabled - manual updates only
+            ),
             
             # Context menu for node actions
             html.Div([
@@ -846,7 +855,8 @@ def run_online_mode():
             
             # Hidden storage for graph data and selected node
             html.Div(id='graph-data-store', style={'display': 'none'}),
-            html.Div(id='selected-node-store', style={'display': 'none'})
+            html.Div(id='selected-node-store', style={'display': 'none'}),
+            html.Div(id='current-code-store', style={'display': 'none'})
             
         ], fluid=True, style={'backgroundColor': '#ecf0f1', 'minHeight': '100vh', 'padding': '20px'})
         
@@ -858,21 +868,41 @@ def run_online_mode():
             [Input('refresh-btn', 'n_clicks'),
              Input('sample-btn', 'n_clicks'),
              Input('clear-btn', 'n_clicks'),
-             Input('save-btn', 'n_clicks')],
+             Input('save-btn', 'n_clicks'),
+             Input('realtime-interval', 'n_intervals'),
+             Input('current-code-store', 'children')],  # Monaco Editor code
             [State('code-editor', 'value')]
         )
-        def update_graph(refresh_clicks, sample_clicks, clear_clicks, save_clicks, code_value):
+        def update_graph(refresh_clicks, sample_clicks, clear_clicks, save_clicks, realtime_intervals, monaco_code, code_value):
             ctx = callback_context
+            
+            # Initialize debouncing storage if it doesn't exist
+            if not hasattr(update_graph, 'last_code'):
+                update_graph.last_code = ""
+                update_graph.last_update_time = 0
+            
+            import time
+            current_time = time.time()
+            
+            # Initialize trigger_id to avoid UnboundLocalError
+            trigger_id = 'initial'
+            force_update = True
             
             if not ctx.triggered:
                 code = code_value or get_sample_code()
+                trigger_id = 'initial'
             else:
                 trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+                force_update = trigger_id != 'realtime-interval'
                 
                 if trigger_id == 'sample-btn':
                     code = get_sample_code()
+                    # Force update for manual actions
+                    update_graph.last_code = ""  # Reset to force update
                 elif trigger_id == 'clear-btn':
                     code = ""
+                    # Force update for manual actions
+                    update_graph.last_code = "non-empty"  # Reset to force update
                 elif trigger_id == 'save-btn':
                     # Save current graph as HTML
                     code = code_value or ""
@@ -886,7 +916,33 @@ def run_online_mode():
                         return fig, dbc.Alert(f"✅ Graph saved to: {html_file}", color="success"), json.dumps(graph_data)
                     else:
                         return create_plotly_figure(graph_data), dbc.Alert("❌ Cannot save - fix parse errors first", color="danger"), json.dumps(graph_data)
+                elif trigger_id == 'refresh-btn' or trigger_id == 'current-code-store':
+                    # Force update for manual refresh - use Monaco Editor code directly
+                    code = monaco_code or code_value or ""
+                    # Force complete reset of debouncing state 
+                    update_graph.last_code = None  # Force different value
+                    update_graph.last_update_time = 0  # Reset time
+                elif trigger_id == 'realtime-interval':
+                    # Real-time update with smart debouncing (disabled)
+                    code = code_value or ""
+                    
+                    # Smart debouncing: only update if code actually changed
+                    if code == update_graph.last_code:
+                        # Code hasn't changed, no need to update
+                        from dash import no_update
+                        return no_update, no_update, no_update
+                    
+                    # Additional time-based debouncing for rapid changes
+                    if current_time - update_graph.last_update_time < 2.0:
+                        # Too soon since last update, wait longer
+                        from dash import no_update
+                        return no_update, no_update, no_update
+                    
+                    # Code has changed and enough time passed - proceed with update
+                    update_graph.last_code = code
+                    update_graph.last_update_time = current_time
                 else:
+                    # Handle other manual updates
                     code = code_value or ""
             
             # Parse and create figure
@@ -899,10 +955,13 @@ def run_online_mode():
                 basic_count = sum(1 for p in params.values() if p["type"] == "basic")
                 computed_count = sum(1 for p in params.values() if p["type"] == "computed")
                 
+                # Show update status (real-time disabled)
+                update_type = "Real-time preview" if trigger_id == 'realtime-interval' else "Manual update"
                 status = dbc.Alert([
-                    html.Strong("✅ Graph updated successfully! "),
+                    html.Strong(f"✅ Graph updated successfully! "),
                     f"Found {len(params)} parameters: {basic_count} basic, {computed_count} computed. ",
                     html.Br(),
+                    html.Small("🔄 Edit code and click 'Refresh Graph' to update visualization. "),
                     html.Small("💡 Drag to pan, scroll to zoom, hover for details, click node for context menu.")
                 ], color="success")
             elif graph_data:
@@ -913,8 +972,40 @@ def run_online_mode():
             else:
                 status = dbc.Alert("Enter Graph code to visualize dependencies.", color="info")
             
+            # Update last_code for future debouncing (except for refresh-btn which resets it)
+            if trigger_id != 'refresh-btn':
+                update_graph.last_code = code
+            
             import json
             return fig, status, json.dumps(graph_data)
+        
+        # Handle refresh button with direct Monaco Editor access
+        app.clientside_callback(
+            """
+            function(refresh_clicks) {
+                if (refresh_clicks && window.monacoEditor) {
+                    // Get current code from Monaco Editor
+                    const currentCode = window.monacoEditor.getValue();
+                    
+                    // Store in a global variable for server access
+                    window.currentMonacoCode = currentCode;
+                    
+                    // Force sync to hidden textarea
+                    const hiddenTextarea = document.getElementById('code-editor');
+                    if (hiddenTextarea) {
+                        hiddenTextarea.value = currentCode;
+                        hiddenTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    
+                    // Trigger a manual refresh by updating a dummy store
+                    return currentCode;
+                }
+                return window.dash_clientside.no_update;
+            }
+            """,
+            Output('current-code-store', 'children'),
+            [Input('refresh-btn', 'n_clicks')]
+        )
         
         # Handle sample and clear buttons with Monaco Editor
         app.clientside_callback(
@@ -1170,7 +1261,46 @@ print(f"Efficiency: {g['efficiency']}")`;
                                 }
                             }
                             
-                            window.monacoEditor.onDidChangeModelContent(syncWithTextarea);
+                            // Real-time content sync with smart change detection
+                            let syncTimeout;
+                            let lastContentHash = '';
+                            
+                            function getContentHash(content) {
+                                // Simple hash function for content comparison
+                                let hash = 0;
+                                for (let i = 0; i < content.length; i++) {
+                                    const char = content.charCodeAt(i);
+                                    hash = ((hash << 5) - hash) + char;
+                                    hash = hash & hash; // Convert to 32-bit integer
+                                }
+                                return hash.toString();
+                            }
+                            
+                            window.monacoEditor.onDidChangeModelContent(function() {
+                                // Immediate sync for Dash state
+                                syncWithTextarea();
+                                
+                                // Check if content actually changed meaningfully
+                                const currentContent = window.monacoEditor.getValue();
+                                const currentHash = getContentHash(currentContent.trim());
+                                
+                                if (currentHash !== lastContentHash) {
+                                    lastContentHash = currentHash;
+                                    
+                                    // Visual feedback for code changes (manual update mode)
+                                    const statusElement = document.querySelector('#status-info .alert');
+                                    if (statusElement && !statusElement.classList.contains('alert-warning')) {
+                                        statusElement.innerHTML = '<strong>📝 Code changed - click "Refresh Graph" to update visualization</strong>';
+                                        statusElement.className = statusElement.className.replace('alert-success', 'alert-warning').replace('alert-danger', 'alert-warning');
+                                        
+                                        clearTimeout(syncTimeout);
+                                        syncTimeout = setTimeout(() => {
+                                            // Reset visual feedback after delay
+                                            statusElement.className = statusElement.className.replace('alert-warning', 'alert-info');
+                                        }, 5000);  // Longer timeout for manual mode
+                                    }
+                                }
+                            });
                             
                             // Helper functions
                             window.jumpToLine = function(lineNumber) {
@@ -1204,12 +1334,17 @@ print(f"Efficiency: {g['efficiency']}")`;
         )
         
         # Auto-open browser
-        Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:8054')).start()
+        Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:8055')).start()
         
-        print("🌐 Opening browser at: http://127.0.0.1:8054")
-        print("💡 Tip: Try editing code in real-time!")
+        print("🌐 Opening browser at: http://127.0.0.1:8055")
+        print("🔧 Manual update mode ENABLED!")
+        print("💡 Tips:")
+        print("   - Edit code in Monaco Editor with syntax highlighting")
+        print("   - Click 'Refresh Graph' button to update visualization")
+        print("   - Click nodes for context menu, hover for details")
+        print("   - Use 'Load Sample' and 'Clear Code' for quick actions")
         
-        app.run(debug=False, host='127.0.0.1', port=8054)
+        app.run(debug=False, host='127.0.0.1', port=8055)
         
     except ImportError as e:
         print(f"❌ Online mode requires: dash, plotly, dash-bootstrap-components")
