@@ -257,37 +257,312 @@ class PlotlyCodeParser:
             self.dependencies[param_name] = dependencies
 
 
-def get_sample_code():
-    """Get sample code for demonstration"""
-    return '''from core import Graph
+def get_sample_examples():
+    """Get all available sample examples organized by category"""
+    return {
+        "basic": {
+            "name": {"en": "📐 Basic Math", "zh": "📐 基础数学"},
+            "examples": {
+                "geometry": {
+                    "name": {"en": "Circle Geometry", "zh": "圆形几何"},
+                    "description": {"en": "Calculate circle properties", "zh": "计算圆形属性"},
+                    "code": '''from core import Graph
 
-# Create graph
-g = Graph("Circuit Analysis")
+# Circle Geometry Analysis
+g = Graph("Circle Properties")
 
 # Basic parameters
-g["voltage"] = 12.0
-g["current"] = 2.0
-g["resistance"] = 6.0
-g["time"] = 1.0
+g["radius"] = 5.0      # 半径 (m)
+g["pi"] = 3.14159      # 圆周率
+
+# Calculation functions
+def diameter_calc():
+    return 2 * g["radius"]
+
+def circumference_calc():
+    return 2 * g["pi"] * g["radius"]
+
+def area_calc():
+    return g["pi"] * g["radius"] ** 2
+
+# Add computed parameters
+g.add_computed("diameter", diameter_calc, "Diameter calculation")
+g.add_computed("circumference", circumference_calc, "Circumference calculation") 
+g.add_computed("area", area_calc, "Area calculation")
+
+print(f"Diameter: {g['diameter']:.2f} m")
+print(f"Circumference: {g['circumference']:.2f} m")
+print(f"Area: {g['area']:.2f} m²")'''
+                }
+            }
+        },
+        "finance": {
+            "name": {"en": "💰 Finance", "zh": "💰 金融投资"},
+            "examples": {
+                "investment": {
+                    "name": {"en": "Investment Returns", "zh": "投资收益计算"},
+                    "description": {"en": "Calculate compound interest and ROI", "zh": "计算复利和投资回报率"},
+                    "code": '''from core import Graph
+
+# Investment Analysis
+g = Graph("Investment Calculator")
+
+# Basic parameters
+g["principal"] = 10000.0    # 本金 ($)
+g["annual_rate"] = 0.08     # 年利率 (8%)
+g["years"] = 5              # 投资年限
+g["monthly_contribution"] = 500.0  # 月定投 ($)
+
+# Calculation functions
+def compound_amount():
+    return g["principal"] * (1 + g["annual_rate"]) ** g["years"]
+
+def total_contributions():
+    return g["monthly_contribution"] * 12 * g["years"]
+
+def final_value():
+    return g["compound_amount"] + g["total_contributions"] * 1.06  # 定投复利
+
+def total_return():
+    return g["final_value"] - g["principal"] - g["total_contributions"]
+
+def roi_percentage():
+    return (g["total_return"] / (g["principal"] + g["total_contributions"])) * 100
+
+# Add computed parameters
+g.add_computed("compound_amount", compound_amount, "Compound interest on principal")
+g.add_computed("total_contributions", total_contributions, "Total monthly contributions")
+g.add_computed("final_value", final_value, "Final investment value")
+g.add_computed("total_return", total_return, "Total profit")
+g.add_computed("roi_percentage", roi_percentage, "Return on investment %")
+
+print(f"Final Value: ${g['final_value']:,.2f}")
+print(f"Total Return: ${g['total_return']:,.2f}")
+print(f"ROI: {g['roi_percentage']:.2f}%")'''
+                }
+            }
+        },
+        "physics": {
+            "name": {"en": "⚡ Physics", "zh": "⚡ 物理工程"},
+            "examples": {
+                "mechanics": {
+                    "name": {"en": "Projectile Motion", "zh": "抛物运动"},
+                    "description": {"en": "Calculate trajectory and motion parameters", "zh": "计算轨迹和运动参数"},
+                    "code": '''from core import Graph
+import math
+
+# Projectile Motion Analysis
+g = Graph("Projectile Motion")
+
+# Basic parameters
+g["initial_velocity"] = 50.0    # 初始速度 (m/s)
+g["launch_angle"] = 45.0        # 发射角度 (度)
+g["gravity"] = 9.81             # 重力加速度 (m/s²)
+g["mass"] = 2.0                 # 质量 (kg)
+
+# Calculation functions
+def angle_radians():
+    return g["launch_angle"] * math.pi / 180
+
+def velocity_x():
+    return g["initial_velocity"] * math.cos(g["angle_radians"])
+
+def velocity_y():
+    return g["initial_velocity"] * math.sin(g["angle_radians"])
+
+def time_of_flight():
+    return 2 * g["velocity_y"] / g["gravity"]
+
+def max_height():
+    return (g["velocity_y"] ** 2) / (2 * g["gravity"])
+
+def range_distance():
+    return g["velocity_x"] * g["time_of_flight"]
+
+def kinetic_energy():
+    return 0.5 * g["mass"] * g["initial_velocity"] ** 2
+
+# Add computed parameters
+g.add_computed("angle_radians", angle_radians, "Angle in radians")
+g.add_computed("velocity_x", velocity_x, "Horizontal velocity component")
+g.add_computed("velocity_y", velocity_y, "Vertical velocity component")
+g.add_computed("time_of_flight", time_of_flight, "Total flight time")
+g.add_computed("max_height", max_height, "Maximum height reached")
+g.add_computed("range_distance", range_distance, "Horizontal range")
+g.add_computed("kinetic_energy", kinetic_energy, "Initial kinetic energy")
+
+print(f"Max Height: {g['max_height']:.2f} m")
+print(f"Range: {g['range_distance']:.2f} m")
+print(f"Flight Time: {g['time_of_flight']:.2f} s")'''
+                },
+                "circuit": {
+                    "name": {"en": "Electric Circuit", "zh": "电路分析"},
+                    "description": {"en": "Analyze electrical circuit parameters", "zh": "分析电路参数"},
+                    "code": '''from core import Graph
+
+# Circuit Analysis
+g = Graph("Electric Circuit")
+
+# Basic parameters
+g["voltage"] = 12.0         # 电压 (V)
+g["current"] = 2.0          # 电流 (A)
+g["resistance"] = 6.0       # 电阻 (Ω)
+g["time"] = 3600.0          # 时间 (s) - 1小时
 
 # Calculation functions
 def power_calculation():
     return g["voltage"] * g["current"]
 
 def energy_calculation():
-    return g["power"] * g["time"]
+    return g["power"] * g["time"] / 3600  # Convert to Wh
 
 def efficiency_calculation():
-    return g["power"] / (g["voltage"] * g["current"])
+    ideal_power = g["voltage"] * g["current"]
+    return (g["power"] / ideal_power) * 100
+
+def cost_calculation():
+    # Electricity cost at $0.12 per kWh
+    return (g["energy"] / 1000) * 0.12
 
 # Add computed parameters
-g.add_computed("power", power_calculation, "Power calculation")
-g.add_computed("energy", energy_calculation, "Energy calculation")
-g.add_computed("efficiency", efficiency_calculation, "Efficiency calculation")
+g.add_computed("power", power_calculation, "Power consumption")
+g.add_computed("energy", energy_calculation, "Energy consumed")
+g.add_computed("efficiency", efficiency_calculation, "Circuit efficiency")
+g.add_computed("cost", cost_calculation, "Electricity cost")
 
-print(f"Power: {g['power']} W")
-print(f"Energy: {g['energy']} Wh")
-print(f"Efficiency: {g['efficiency']}")'''
+print(f"Power: {g['power']:.2f} W")
+print(f"Energy: {g['energy']:.2f} Wh") 
+print(f"Cost: ${g['cost']:.4f}")'''
+                }
+            }
+        },
+        "engineering": {
+            "name": {"en": "🏗️ Engineering", "zh": "🏗️ 工程计算"},
+            "examples": {
+                "beam": {
+                    "name": {"en": "Beam Analysis", "zh": "梁受力分析"},
+                    "description": {"en": "Structural analysis of a simply supported beam", "zh": "简支梁结构分析"},
+                    "code": '''from core import Graph
+
+# Simply Supported Beam Analysis
+g = Graph("Beam Structural Analysis")
+
+# Basic parameters
+g["length"] = 6.0           # 梁长度 (m)
+g["load"] = 10000.0         # 均布荷载 (N/m)
+g["elastic_modulus"] = 200000000000.0  # 弹性模量 (Pa)
+g["moment_of_inertia"] = 0.0001  # 惯性矩 (m⁴)
+g["material_density"] = 7850.0   # 材料密度 (kg/m³)
+g["cross_section_area"] = 0.01   # 截面积 (m²)
+
+# Calculation functions
+def max_moment():
+    # Maximum bending moment for uniformly distributed load
+    return g["load"] * g["length"] ** 2 / 8
+
+def max_shear():
+    # Maximum shear force
+    return g["load"] * g["length"] / 2
+
+def max_deflection():
+    # Maximum deflection at mid-span
+    return (5 * g["load"] * g["length"] ** 4) / (384 * g["elastic_modulus"] * g["moment_of_inertia"])
+
+def beam_weight():
+    # Self weight of beam
+    return g["material_density"] * g["cross_section_area"] * g["length"] * 9.81
+
+def max_stress():
+    # Maximum bending stress (assuming rectangular section)
+    section_modulus = g["moment_of_inertia"] / 0.05  # assuming height = 0.1m
+    return g["max_moment"] / section_modulus
+
+def safety_factor():
+    # Assuming material yield strength of 250 MPa
+    yield_strength = 250000000.0
+    return yield_strength / g["max_stress"]
+
+# Add computed parameters
+g.add_computed("max_moment", max_moment, "Maximum bending moment")
+g.add_computed("max_shear", max_shear, "Maximum shear force")
+g.add_computed("max_deflection", max_deflection, "Maximum deflection")
+g.add_computed("beam_weight", beam_weight, "Beam self weight")
+g.add_computed("max_stress", max_stress, "Maximum bending stress")
+g.add_computed("safety_factor", safety_factor, "Safety factor")
+
+print(f"Max Moment: {g['max_moment']:,.0f} N·m")
+print(f"Max Deflection: {g['max_deflection']:.4f} m")
+print(f"Safety Factor: {g['safety_factor']:.2f}")'''
+                }
+            }
+        },
+        "chemistry": {
+            "name": {"en": "🧪 Chemistry", "zh": "🧪 化学计算"},
+            "examples": {
+                "reaction": {
+                    "name": {"en": "Chemical Reaction", "zh": "化学反应"},
+                    "description": {"en": "Calculate reaction rates and concentrations", "zh": "计算反应速率和浓度"},
+                    "code": '''from core import Graph
+import math
+
+# Chemical Reaction Kinetics
+g = Graph("Chemical Reaction Analysis")
+
+# Basic parameters
+g["initial_concentration"] = 2.0     # 初始浓度 (mol/L)
+g["rate_constant"] = 0.05            # 反应速率常数 (1/s)
+g["time"] = 60.0                     # 反应时间 (s)
+g["temperature"] = 298.15            # 温度 (K)
+g["activation_energy"] = 50000.0     # 活化能 (J/mol)
+g["gas_constant"] = 8.314            # 气体常数 (J/mol·K)
+
+# Calculation functions
+def concentration_remaining():
+    # First-order reaction kinetics: C = C₀ * e^(-kt)
+    return g["initial_concentration"] * math.exp(-g["rate_constant"] * g["time"])
+
+def concentration_consumed():
+    return g["initial_concentration"] - g["concentration_remaining"]
+
+def half_life():
+    # Half-life for first-order reaction
+    return math.log(2) / g["rate_constant"]
+
+def reaction_rate():
+    # Instantaneous reaction rate
+    return g["rate_constant"] * g["concentration_remaining"]
+
+def arrhenius_factor():
+    # Temperature dependence factor
+    return math.exp(-g["activation_energy"] / (g["gas_constant"] * g["temperature"]))
+
+def percent_completion():
+    return (g["concentration_consumed"] / g["initial_concentration"]) * 100
+
+# Add computed parameters
+g.add_computed("concentration_remaining", concentration_remaining, "Remaining concentration")
+g.add_computed("concentration_consumed", concentration_consumed, "Consumed concentration")
+g.add_computed("half_life", half_life, "Reaction half-life")
+g.add_computed("reaction_rate", reaction_rate, "Current reaction rate")
+g.add_computed("arrhenius_factor", arrhenius_factor, "Arrhenius temperature factor")
+g.add_computed("percent_completion", percent_completion, "Reaction completion percentage")
+
+print(f"Remaining: {g['concentration_remaining']:.3f} mol/L")
+print(f"Half-life: {g['half_life']:.1f} s")
+print(f"Completion: {g['percent_completion']:.1f}%")'''
+                }
+            }
+        }
+    }
+
+def get_sample_code(category="physics", example="circuit"):
+    """Get sample code by category and example name"""
+    examples = get_sample_examples()
+    try:
+        return examples[category]["examples"][example]["code"]
+    except KeyError:
+        # Default fallback to circuit example
+        return examples["physics"]["examples"]["circuit"]["code"]
 
 
 def calculate_dependency_levels(parameters: Dict, dependencies: Dict) -> Dict:
@@ -803,6 +1078,25 @@ def run_online_mode():
                             html.H4(id="editor-title", children="Code Editor", className="mb-0", style={'color': '#34495e'})
                         ]),
                         dbc.CardBody([
+                            # Controls at the top
+                            html.Div([
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Button("Refresh Graph", id="refresh-btn", color="primary", className="me-2"),
+                                        dbc.Button("Clear Code", id="clear-btn", color="warning", className="me-2"),
+                                        dbc.Button("Save HTML", id="save-btn", color="info")
+                                    ], width=7),
+                                    dbc.Col([
+                                        html.Label(id="examples-label", children="📚 Examples", className="mb-1", style={'fontSize': '14px', 'fontWeight': 'bold'}),
+                                        dcc.Dropdown(
+                                            id='example-selector',
+                                            placeholder="Select an example...",
+                                            clearable=False,
+                                            style={'fontSize': '13px'}
+                                        )
+                                    ], width=5)
+                                ])
+                            ], className="mb-3"),
                             # Monaco Editor container
                             html.Div(
                                 id='monaco-editor-container',
@@ -818,13 +1112,7 @@ def run_online_mode():
                                 id='code-editor',
                                 value=get_sample_code(),
                                 style={'display': 'none'}
-                            ),
-                            html.Div([
-                                dbc.Button("Refresh Graph", id="refresh-btn", color="primary", className="me-2"),
-                                dbc.Button("Load Sample", id="sample-btn", color="success", className="me-2"),
-                                dbc.Button("Clear Code", id="clear-btn", color="warning", className="me-2"),
-                                dbc.Button("Save HTML", id="save-btn", color="info")
-                            ], className="mt-3")
+                            )
                         ])
                     ], style={'border': '2px solid #95a5a6'})
                 ], width=5)
@@ -869,10 +1157,25 @@ def run_online_mode():
                 'top': '0px'
             }),
             
+            # Confirmation modal for example switching
+            dbc.Modal([
+                dbc.ModalHeader([
+                    dbc.ModalTitle(id="confirm-modal-title", children="Overwrite Current Code?")
+                ]),
+                dbc.ModalBody([
+                    html.P(id="confirm-modal-message", children="Loading this example will replace your current code. Are you sure you want to continue?")
+                ]),
+                dbc.ModalFooter([
+                    dbc.Button(id="confirm-yes-btn", children="Yes, Replace Code", color="primary", className="me-2"),
+                    dbc.Button(id="confirm-no-btn", children="Cancel", color="secondary")
+                ])
+            ], id="confirm-modal", is_open=False),
+            
             # Hidden storage for graph data and selected node
             html.Div(id='graph-data-store', style={'display': 'none'}),
             html.Div(id='selected-node-store', style={'display': 'none'}),
             html.Div(id='current-code-store', style={'display': 'none'}),
+            html.Div(id='pending-example-store', style={'display': 'none'}),  # Store pending example selection
             dcc.Store(id='language-store', data='en')  # Default language
             
         ], fluid=True, style={'backgroundColor': '#ecf0f1', 'minHeight': '100vh', 'padding': '20px'})
@@ -890,8 +1193,9 @@ def run_online_mode():
             [Output('app-title', 'children'),
              Output('graph-title', 'children'),
              Output('editor-title', 'children'),
+             Output('examples-label', 'children'),
+             Output('example-selector', 'placeholder'),
              Output('refresh-btn', 'children'),
-             Output('sample-btn', 'children'),
              Output('clear-btn', 'children'),
              Output('save-btn', 'children')],
             [Input('language-store', 'data')]
@@ -901,8 +1205,9 @@ def run_online_mode():
                 get_translation('app_title', language),
                 get_translation('dependency_graph', language),
                 get_translation('code_editor', language),
+                f"📚 {get_translation('examples', language)}",
+                get_translation('select_example', language),
                 get_translation('refresh_graph', language),
-                get_translation('load_sample', language),
                 get_translation('clear_code', language),
                 get_translation('save_html', language)
             )
@@ -920,6 +1225,47 @@ def run_online_mode():
                 get_translation('copy_name', language),
                 get_translation('close', language)
             )
+        
+        # Update confirmation modal text
+        @app.callback(
+            [Output('confirm-modal-title', 'children'),
+             Output('confirm-modal-message', 'children'),
+             Output('confirm-yes-btn', 'children'),
+             Output('confirm-no-btn', 'children')],
+            [Input('language-store', 'data')]
+        )
+        def update_modal_text(language):
+            return (
+                get_translation('confirm_example_title', language),
+                get_translation('confirm_example_message', language),
+                get_translation('confirm_yes', language),
+                get_translation('confirm_no', language)
+            )
+        
+        # Update example selector options based on language
+        @app.callback(
+            Output('example-selector', 'options'),
+            [Input('language-store', 'data')]
+        )
+        def update_example_options(language):
+            language = language or 'en'
+            examples = get_sample_examples()
+            options = []
+            
+            for category_key, category_data in examples.items():
+                category_name = category_data["name"][language]
+                
+                for example_key, example_data in category_data["examples"].items():
+                    example_name = example_data["name"][language]
+                    example_desc = example_data["description"][language]
+                    
+                    options.append({
+                        'label': f"{category_name} → {example_name}",
+                        'value': f"{category_key}:{example_key}",
+                        'title': example_desc  # Tooltip description
+                    })
+            
+            return options
 
         # Callbacks
         @app.callback(
@@ -927,7 +1273,6 @@ def run_online_mode():
              Output('status-info', 'children'),
              Output('graph-data-store', 'children')],
             [Input('refresh-btn', 'n_clicks'),
-             Input('sample-btn', 'n_clicks'),
              Input('clear-btn', 'n_clicks'),
              Input('save-btn', 'n_clicks'),
              Input('realtime-interval', 'n_intervals'),
@@ -935,7 +1280,7 @@ def run_online_mode():
             [State('code-editor', 'value'),
              State('language-store', 'data')]
         )
-        def update_graph(refresh_clicks, sample_clicks, clear_clicks, save_clicks, realtime_intervals, monaco_code, code_value, language):
+        def update_graph(refresh_clicks, clear_clicks, save_clicks, realtime_intervals, monaco_code, code_value, language):
             ctx = callback_context
             
             # Initialize debouncing storage if it doesn't exist
@@ -957,11 +1302,7 @@ def run_online_mode():
                 trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
                 force_update = trigger_id != 'realtime-interval'
                 
-                if trigger_id == 'sample-btn':
-                    code = get_sample_code()
-                    # Force update for manual actions
-                    update_graph.last_code = ""  # Reset to force update
-                elif trigger_id == 'clear-btn':
+                if trigger_id == 'clear-btn':
                     code = ""
                     # Force update for manual actions
                     update_graph.last_code = "non-empty"  # Reset to force update
@@ -1069,31 +1410,150 @@ def run_online_mode():
             [Input('refresh-btn', 'n_clicks')]
         )
         
-        # Handle sample and clear buttons with Monaco Editor
+        # Handle example selection - show confirmation dialog
+        @app.callback(
+            [Output('confirm-modal', 'is_open'),
+             Output('pending-example-store', 'children')],
+            [Input('example-selector', 'value')],
+            [State('confirm-modal', 'is_open')],
+            prevent_initial_call=True
+        )
+        def show_confirmation_dialog(example_value, is_open):
+            if example_value and not is_open:
+                # Store the pending example selection and show modal
+                return True, example_value
+            return False, ""
+        
+        # Handle modal close and code loading
+        @app.callback(
+            [Output('confirm-modal', 'is_open', allow_duplicate=True),
+             Output('code-editor', 'value')],
+            [Input('confirm-yes-btn', 'n_clicks'),
+             Input('confirm-no-btn', 'n_clicks')],
+            [State('pending-example-store', 'children'),
+             State('code-editor', 'value')],
+            prevent_initial_call=True
+        )
+        def handle_modal_response(yes_clicks, no_clicks, pending_example, current_code):
+            from dash import no_update
+            ctx = callback_context
+            if not ctx.triggered:
+                return no_update, no_update
+            
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            
+            if trigger_id == 'confirm-yes-btn' and pending_example:
+                # User confirmed - load the example code and close modal
+                try:
+                    category, example = pending_example.split(':')
+                    example_code = get_sample_code(category, example)
+                    return False, example_code  # Close modal, load code
+                except (ValueError, KeyError):
+                    return False, get_sample_code()  # Close modal, load default
+                    
+            elif trigger_id == 'confirm-no-btn':
+                # User cancelled - close modal, keep current code
+                return False, no_update  # Close modal, keep current code
+            
+            return no_update, no_update
+        
+        
+        # Handle dropdown reset when cancelled
         app.clientside_callback(
             """
-            function(sample_clicks, clear_clicks) {
-                const ctx = window.dash_clientside.callback_context;
-                
-                if (!ctx.triggered || ctx.triggered.length === 0) {
-                    return window.dash_clientside.no_update;
+            function(no_clicks) {
+                if (no_clicks) {
+                    // Reset dropdown selection when user cancels
+                    return null;
                 }
-                
-                const trigger_id = ctx.triggered[0].prop_id.split('.')[0];
-                
-                if (trigger_id === 'sample-btn' && window.setMonacoValue) {
-                    const sampleCode = `""" + get_sample_code().replace('`', '\\`').replace('${', '\\${') + """`;
-                    window.setMonacoValue(sampleCode);
-                } else if (trigger_id === 'clear-btn' && window.setMonacoValue) {
-                    window.setMonacoValue('');
-                }
-                
                 return window.dash_clientside.no_update;
             }
             """,
-            Output('sample-btn', 'n_clicks'),
-            [Input('sample-btn', 'n_clicks'),
-             Input('clear-btn', 'n_clicks')]
+            Output('example-selector', 'value'),
+            [Input('confirm-no-btn', 'n_clicks')]
+        )
+        
+        # Handle confirmed example loading with Monaco Editor
+        app.clientside_callback(
+            """
+            function(code_value) {
+                if (code_value && window.monacoEditor) {
+                    // Get the code from Python backend via hidden textarea
+                    const hiddenTextarea = document.getElementById('code-editor');
+                    if (hiddenTextarea && hiddenTextarea.value !== window.monacoEditor.getValue()) {
+                        // Only update if the code is different to avoid unnecessary changes
+                        window.monacoEditor.setValue(hiddenTextarea.value);
+                    }
+                }
+                return window.dash_clientside.no_update;
+            }
+            """,
+            Output('example-selector', 'style'),
+            [Input('code-editor', 'value')]
+        )
+        
+        # Auto-refresh after example confirmation
+        app.clientside_callback(
+            """
+            function(code_value) {
+                // Check if this is from example loading (code change after confirmation)
+                if (code_value && window.autoRefreshPending) {
+                    window.autoRefreshPending = false;
+                    
+                    setTimeout(() => {
+                        // Store current code for refresh
+                        if (window.monacoEditor) {
+                            const currentCode = window.monacoEditor.getValue();
+                            window.currentMonacoCode = currentCode;
+                            
+                            // Force sync to hidden textarea
+                            const hiddenTextarea = document.getElementById('code-editor');
+                            if (hiddenTextarea) {
+                                hiddenTextarea.value = currentCode;
+                                hiddenTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                            
+                            // Auto-click refresh button
+                            const refreshBtn = document.getElementById('refresh-btn');
+                            if (refreshBtn) {
+                                refreshBtn.click();
+                            }
+                        }
+                    }, 100);
+                }
+                return window.dash_clientside.no_update;
+            }
+            """,
+            Output('confirm-yes-btn', 'style'),
+            [Input('code-editor', 'value')]
+        )
+        
+        # Set auto-refresh pending flag when user confirms
+        app.clientside_callback(
+            """
+            function(yes_clicks) {
+                if (yes_clicks) {
+                    window.autoRefreshPending = true;
+                }
+                return window.dash_clientside.no_update;
+            }
+            """,
+            Output('pending-example-store', 'style'),
+            [Input('confirm-yes-btn', 'n_clicks')]
+        )
+        
+        # Handle clear button with Monaco Editor
+        app.clientside_callback(
+            """
+            function(clear_clicks) {
+                if (clear_clicks && window.monacoEditor) {
+                    window.monacoEditor.setValue('');
+                }
+                return window.dash_clientside.no_update;
+            }
+            """,
+            Output('clear-btn', 'style'),
+            [Input('clear-btn', 'n_clicks')]
         )
         
         # Handle node click to show context menu

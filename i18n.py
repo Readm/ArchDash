@@ -23,6 +23,8 @@ LANGUAGES = {
             'code_editor': 'Code Editor',
             'dependency_graph': 'Interactive Dependency Graph',
             'language': 'Language',
+            'examples': 'Examples',
+            'select_example': 'Select an example...',
             
             # 状态消息
             'graph_updated_success': 'Graph updated successfully!',
@@ -66,6 +68,12 @@ LANGUAGES = {
             'mode_offline': 'offline',
             'browser_opening': 'Opening browser at:',
             'manual_update_enabled': 'Manual update mode ENABLED!',
+            
+            # 示例切换确认对话框
+            'confirm_example_title': 'Overwrite Current Code?',
+            'confirm_example_message': 'Loading this example will replace your current code. Are you sure you want to continue?',
+            'confirm_yes': 'Yes, Replace Code',
+            'confirm_no': 'Cancel',
         }
     },
     'zh': {
@@ -86,6 +94,8 @@ LANGUAGES = {
             'code_editor': '代码编辑器',
             'dependency_graph': '交互式依赖关系图',
             'language': '语言',
+            'examples': '示例',
+            'select_example': '选择示例...',
             
             # 状态消息
             'graph_updated_success': '图表更新成功！',
@@ -129,6 +139,12 @@ LANGUAGES = {
             'mode_offline': '离线',
             'browser_opening': '正在打开浏览器：',
             'manual_update_enabled': '手动更新模式已启用！',
+            
+            # 示例切换确认对话框
+            'confirm_example_title': '覆盖当前代码？',
+            'confirm_example_message': '加载此示例将替换您当前的代码。您确定要继续吗？',
+            'confirm_yes': '是的，替换代码',
+            'confirm_no': '取消',
         }
     },
 }
