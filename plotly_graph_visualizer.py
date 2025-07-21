@@ -8,6 +8,7 @@ Usage:
 
 import re
 import math
+from i18n import get_translation, get_available_languages
 import argparse
 import sys
 import tempfile
@@ -742,14 +743,29 @@ def run_online_mode():
         
         # App layout
         app.layout = dbc.Container([
-            # Header
+            # Header with language selector
             dbc.Row([
                 dbc.Col([
-                    html.H1("Plotly Graph Visualizer - Online Mode", 
+                    html.H1(id="app-title", children="Plotly Graph Visualizer - Online Mode", 
                            className="text-center mb-4",
                            style={'color': '#2c3e50', 'fontWeight': 'bold'})
-                ])
-            ]),
+                ], width=8),
+                dbc.Col([
+                    html.Div([
+                        html.Label("🌐", className="me-2", style={'fontSize': '20px'}),
+                        dcc.Dropdown(
+                            id='language-selector',
+                            options=[
+                                {'label': f"{lang['flag']} {lang['name']}", 'value': lang['code']}
+                                for lang in get_available_languages()
+                            ],
+                            value='en',
+                            clearable=False,
+                            style={'minWidth': '150px', 'fontSize': '14px'}
+                        )
+                    ], style={'textAlign': 'right', 'marginTop': '20px'})
+                ], width=4)
+            ], className="mb-3"),
             
             # Main content
             dbc.Row([
@@ -757,7 +773,7 @@ def run_online_mode():
                 dbc.Col([
                     dbc.Card([
                         dbc.CardHeader([
-                            html.H4("Interactive Dependency Graph", className="mb-0", style={'color': '#34495e'})
+                            html.H4(id="graph-title", children="Interactive Dependency Graph", className="mb-0", style={'color': '#34495e'})
                         ]),
                         dbc.CardBody([
                             dcc.Graph(
@@ -784,7 +800,7 @@ def run_online_mode():
                 dbc.Col([
                     dbc.Card([
                         dbc.CardHeader([
-                            html.H4("Code Editor", className="mb-0", style={'color': '#34495e'})
+                            html.H4(id="editor-title", children="Code Editor", className="mb-0", style={'color': '#34495e'})
                         ]),
                         dbc.CardBody([
                             # Monaco Editor container
@@ -856,10 +872,55 @@ def run_online_mode():
             # Hidden storage for graph data and selected node
             html.Div(id='graph-data-store', style={'display': 'none'}),
             html.Div(id='selected-node-store', style={'display': 'none'}),
-            html.Div(id='current-code-store', style={'display': 'none'})
+            html.Div(id='current-code-store', style={'display': 'none'}),
+            dcc.Store(id='language-store', data='en')  # Default language
             
         ], fluid=True, style={'backgroundColor': '#ecf0f1', 'minHeight': '100vh', 'padding': '20px'})
         
+        # Language selector callback
+        @app.callback(
+            Output('language-store', 'data'),
+            [Input('language-selector', 'value')]
+        )
+        def update_language(selected_language):
+            return selected_language or 'en'
+        
+        # Update UI text based on language
+        @app.callback(
+            [Output('app-title', 'children'),
+             Output('graph-title', 'children'),
+             Output('editor-title', 'children'),
+             Output('refresh-btn', 'children'),
+             Output('sample-btn', 'children'),
+             Output('clear-btn', 'children'),
+             Output('save-btn', 'children')],
+            [Input('language-store', 'data')]
+        )
+        def update_ui_text(language):
+            return (
+                get_translation('app_title', language),
+                get_translation('dependency_graph', language),
+                get_translation('code_editor', language),
+                get_translation('refresh_graph', language),
+                get_translation('load_sample', language),
+                get_translation('clear_code', language),
+                get_translation('save_html', language)
+            )
+        
+        # Update context menu text
+        @app.callback(
+            [Output('jump-to-code-btn', 'children'),
+             Output('copy-name-btn', 'children'),
+             Output('close-menu-btn', 'children')],
+            [Input('language-store', 'data')]
+        )
+        def update_context_menu_text(language):
+            return (
+                get_translation('jump_to_code', language),
+                get_translation('copy_name', language),
+                get_translation('close', language)
+            )
+
         # Callbacks
         @app.callback(
             [Output('dependency-graph', 'figure'),
@@ -871,9 +932,10 @@ def run_online_mode():
              Input('save-btn', 'n_clicks'),
              Input('realtime-interval', 'n_intervals'),
              Input('current-code-store', 'children')],  # Monaco Editor code
-            [State('code-editor', 'value')]
+            [State('code-editor', 'value'),
+             State('language-store', 'data')]
         )
-        def update_graph(refresh_clicks, sample_clicks, clear_clicks, save_clicks, realtime_intervals, monaco_code, code_value):
+        def update_graph(refresh_clicks, sample_clicks, clear_clicks, save_clicks, realtime_intervals, monaco_code, code_value, language):
             ctx = callback_context
             
             # Initialize debouncing storage if it doesn't exist
@@ -913,9 +975,9 @@ def run_online_mode():
                         import json
                         html_file = os.path.join(tempfile.gettempdir(), "graph_visualizer_online.html")
                         pyo.plot(fig, filename=html_file, auto_open=False)
-                        return fig, dbc.Alert(f"✅ Graph saved to: {html_file}", color="success"), json.dumps(graph_data)
+                        return fig, dbc.Alert(f"✅ {get_translation('graph_saved', language or 'en')} {html_file}", color="success"), json.dumps(graph_data)
                     else:
-                        return create_plotly_figure(graph_data), dbc.Alert("❌ Cannot save - fix parse errors first", color="danger"), json.dumps(graph_data)
+                        return create_plotly_figure(graph_data), dbc.Alert(f"❌ {get_translation('cannot_save', language or 'en')}", color="danger"), json.dumps(graph_data)
                 elif trigger_id == 'refresh-btn' or trigger_id == 'current-code-store':
                     # Force update for manual refresh - use Monaco Editor code directly
                     code = monaco_code or code_value or ""
@@ -949,28 +1011,28 @@ def run_online_mode():
             graph_data = parser.parse_code(code)
             fig = create_plotly_figure(graph_data)
             
-            # Status message
+            # Status message with i18n
+            language = language or 'en'
             if graph_data and graph_data.get("success", False):
                 params = graph_data["parameters"]
                 basic_count = sum(1 for p in params.values() if p["type"] == "basic")
                 computed_count = sum(1 for p in params.values() if p["type"] == "computed")
                 
-                # Show update status (real-time disabled)
-                update_type = "Real-time preview" if trigger_id == 'realtime-interval' else "Manual update"
                 status = dbc.Alert([
-                    html.Strong(f"✅ Graph updated successfully! "),
-                    f"Found {len(params)} parameters: {basic_count} basic, {computed_count} computed. ",
+                    html.Strong(f"✅ {get_translation('graph_updated_success', language)} "),
+                    get_translation('found_parameters', language, 
+                                  count=len(params), basic=basic_count, computed=computed_count),
                     html.Br(),
-                    html.Small("🔄 Edit code and click 'Refresh Graph' to update visualization. "),
-                    html.Small("💡 Drag to pan, scroll to zoom, hover for details, click node for context menu.")
+                    html.Small(f"🔄 {get_translation('edit_code_hint', language)} "),
+                    html.Small(f"💡 {get_translation('interaction_hints', language)}")
                 ], color="success")
             elif graph_data:
                 status = dbc.Alert([
-                    html.Strong("❌ Parse Error: "),
+                    html.Strong(f"❌ {get_translation('parse_error', language)}: "),
                     graph_data.get("error", "Unknown error")
                 ], color="danger")
             else:
-                status = dbc.Alert("Enter Graph code to visualize dependencies.", color="info")
+                status = dbc.Alert(get_translation('enter_graph_code', language), color="info")
             
             # Update last_code for future debouncing (except for refresh-btn which resets it)
             if trigger_id != 'refresh-btn':
@@ -1334,9 +1396,9 @@ print(f"Efficiency: {g['efficiency']}")`;
         )
         
         # Auto-open browser
-        Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:8055')).start()
+        Timer(1.5, lambda: webbrowser.open('http://127.0.0.1:8056')).start()
         
-        print("🌐 Opening browser at: http://127.0.0.1:8055")
+        print("🌐 Opening browser at: http://127.0.0.1:8056")
         print("🔧 Manual update mode ENABLED!")
         print("💡 Tips:")
         print("   - Edit code in Monaco Editor with syntax highlighting")
@@ -1344,7 +1406,7 @@ print(f"Efficiency: {g['efficiency']}")`;
         print("   - Click nodes for context menu, hover for details")
         print("   - Use 'Load Sample' and 'Clear Code' for quick actions")
         
-        app.run(debug=False, host='127.0.0.1', port=8055)
+        app.run(debug=False, host='127.0.0.1', port=8056)
         
     except ImportError as e:
         print(f"❌ Online mode requires: dash, plotly, dash-bootstrap-components")
