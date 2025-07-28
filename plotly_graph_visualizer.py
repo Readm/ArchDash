@@ -24,12 +24,16 @@ class PlotlyCodeParser:
         self.graph_name = ""
         self.parameters = {}
         self.dependencies = {}
+        self.groups = {}  # group_name -> {name, description, parameters: []}
+        self.parameter_groups = {}  # parameter_name -> group_name
         
     def parse_code(self, code: str) -> Dict:
         """Parse code and extract Graph information with actual execution"""
         self.graph_name = ""
         self.parameters = {}
         self.dependencies = {}
+        self.groups = {}
+        self.parameter_groups = {}
         
         try:
             # Try to execute the code and get real values
@@ -81,6 +85,18 @@ class PlotlyCodeParser:
         self.graph_name = graph_instance.name
         lines = code.split('\n')
         
+        # Extract groups if the Graph instance supports them
+        if hasattr(graph_instance, '_groups'):
+            for group_name, group_info in graph_instance._groups.items():
+                self.groups[group_name] = {
+                    'name': group_name,
+                    'description': group_info.get('description', group_name),
+                    'parameters': []
+                }
+        
+        if hasattr(graph_instance, '_parameter_groups'):
+            self.parameter_groups = graph_instance._parameter_groups.copy()
+        
         # Get all parameters (basic and computed)
         for param_name in graph_instance.keys():
             try:
@@ -103,7 +119,8 @@ class PlotlyCodeParser:
                     "type": param_type,
                     "value": actual_value,
                     "line_number": line_num,
-                    "code_position": 0
+                    "code_position": 0,
+                    "group": self.parameter_groups.get(param_name, None)
                 }
                 
             except Exception as e:
@@ -112,13 +129,23 @@ class PlotlyCodeParser:
                     "type": "computed",
                     "value": f"Error: {str(e)}",
                     "line_number": 1,
-                    "code_position": 0
+                    "code_position": 0,
+                    "group": self.parameter_groups.get(param_name, None)
                 }
+        
+        # Populate groups with their parameters
+        for param_name, param_info in self.parameters.items():
+            group_name = param_info.get("group")
+            if group_name and group_name in self.groups:
+                if param_name not in self.groups[group_name]["parameters"]:
+                    self.groups[group_name]["parameters"].append(param_name)
         
         return {
             "graph_name": self.graph_name,
             "parameters": self.parameters,
             "dependencies": self.dependencies,
+            "groups": self.groups,
+            "parameter_groups": self.parameter_groups,
             "success": True,
             "error": None
         }
@@ -168,7 +195,8 @@ class PlotlyCodeParser:
                         "type": "basic",
                         "value": evaluated_value,
                         "line_number": line_num,
-                        "code_position": match.start()
+                        "code_position": match.start(),
+                        "group": None  # Will be filled by _parse_groups
                     }
                 except:
                     # If evaluation fails, use string representation
@@ -176,16 +204,29 @@ class PlotlyCodeParser:
                         "type": "basic",
                         "value": param_value,
                         "line_number": line_num,
-                        "code_position": match.start()
+                        "code_position": match.start(),
+                        "group": None  # Will be filled by _parse_groups
                     }
             
             # Parse add_computed calls with line tracking
             self._parse_add_computed(code, lines)
             
+            # Parse group-related calls
+            self._parse_groups(code)
+            
+            # Populate groups with their parameters
+            for param_name, param_info in self.parameters.items():
+                group_name = param_info.get("group")
+                if group_name and group_name in self.groups:
+                    if param_name not in self.groups[group_name]["parameters"]:
+                        self.groups[group_name]["parameters"].append(param_name)
+            
             return {
                 "graph_name": self.graph_name,
                 "parameters": self.parameters,
                 "dependencies": self.dependencies,
+                "groups": self.groups,
+                "parameter_groups": self.parameter_groups,
                 "success": True,
                 "error": f"Static analysis used: {error_msg}"
             }
@@ -194,6 +235,8 @@ class PlotlyCodeParser:
                 "graph_name": "",
                 "parameters": {},
                 "dependencies": {},
+                "groups": {},
+                "parameter_groups": {},
                 "success": False,
                 "error": str(e)
             }
@@ -252,9 +295,36 @@ class PlotlyCodeParser:
                 "value": f"computed via {func_name}()",  # Static fallback
                 "line_number": line_num,
                 "function_line": function_line_nums.get(func_name, line_num),
-                "code_position": match.start()
+                "code_position": match.start(),
+                "group": None  # Will be filled by _parse_groups
             }
             self.dependencies[param_name] = dependencies
+
+    def _parse_groups(self, code: str):
+        """Parse group-related function calls"""
+        lines = code.split('\n')
+        
+        # Parse create_group calls: g.create_group("group_name", "Group Description")
+        create_group_pattern = r'g\.create_group\s*\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']*)["\']'
+        for match in re.finditer(create_group_pattern, code):
+            group_name = match.group(1)
+            group_description = match.group(2)
+            self.groups[group_name] = {
+                'name': group_name,
+                'description': group_description,
+                'parameters': []
+            }
+        
+        # Parse set_group calls: g.set_group("param_name", "group_name")
+        set_group_pattern = r'g\.set_group\s*\(\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\']'
+        for match in re.finditer(set_group_pattern, code):
+            param_name = match.group(1)
+            group_name = match.group(2)
+            self.parameter_groups[param_name] = group_name
+            
+            # Update parameter info if it exists
+            if param_name in self.parameters:
+                self.parameters[param_name]["group"] = group_name
 
 
 def get_sample_examples():
@@ -271,9 +341,15 @@ def get_sample_examples():
 # Circle Geometry Analysis
 g = Graph("Circle Properties")
 
-# Basic parameters
+# Create parameter groups
+g.create_group("inputs", "Input Parameters")
+g.create_group("results", "Calculation Results")
+
+# Basic parameters with groups
 g["radius"] = 5.0      # 半径 (m)
 g["pi"] = 3.14159      # 圆周率
+g.set_group("radius", "inputs")
+g.set_group("pi", "inputs")
 
 # Calculation functions
 def diameter_calc():
@@ -285,10 +361,13 @@ def circumference_calc():
 def area_calc():
     return g["pi"] * g["radius"] ** 2
 
-# Add computed parameters
+# Add computed parameters with groups
 g.add_computed("diameter", diameter_calc, "Diameter calculation")
 g.add_computed("circumference", circumference_calc, "Circumference calculation") 
 g.add_computed("area", area_calc, "Area calculation")
+g.set_group("diameter", "results")
+g.set_group("circumference", "results")
+g.set_group("area", "results")
 
 print(f"Diameter: {g['diameter']:.2f} m")
 print(f"Circumference: {g['circumference']:.2f} m")
@@ -307,11 +386,22 @@ print(f"Area: {g['area']:.2f} m²")'''
 # Investment Analysis
 g = Graph("Investment Calculator")
 
-# Basic parameters
+# Create logical parameter groups
+g.create_group("inputs", "📊 Investment Inputs")
+g.create_group("calculations", "🔢 Intermediate Calculations") 
+g.create_group("results", "💎 Final Results")
+
+# Basic parameters with groups
 g["principal"] = 10000.0    # 本金 ($)
 g["annual_rate"] = 0.08     # 年利率 (8%)
 g["years"] = 5              # 投资年限
 g["monthly_contribution"] = 500.0  # 月定投 ($)
+
+# Assign inputs to group
+g.set_group("principal", "inputs")
+g.set_group("annual_rate", "inputs")
+g.set_group("years", "inputs")
+g.set_group("monthly_contribution", "inputs")
 
 # Calculation functions
 def compound_amount():
@@ -329,12 +419,19 @@ def total_return():
 def roi_percentage():
     return (g["total_return"] / (g["principal"] + g["total_contributions"])) * 100
 
-# Add computed parameters
+# Add computed parameters with groups
 g.add_computed("compound_amount", compound_amount, "Compound interest on principal")
 g.add_computed("total_contributions", total_contributions, "Total monthly contributions")
 g.add_computed("final_value", final_value, "Final investment value")
 g.add_computed("total_return", total_return, "Total profit")
 g.add_computed("roi_percentage", roi_percentage, "Return on investment %")
+
+# Assign calculated parameters to appropriate groups
+g.set_group("compound_amount", "calculations")
+g.set_group("total_contributions", "calculations")
+g.set_group("final_value", "results")
+g.set_group("total_return", "results")
+g.set_group("roi_percentage", "results")
 
 print(f"Final Value: ${g['final_value']:,.2f}")
 print(f"Total Return: ${g['total_return']:,.2f}")
@@ -354,11 +451,23 @@ import math
 # Projectile Motion Analysis
 g = Graph("Projectile Motion")
 
+# Create parameter groups for better organization
+g.create_group("launch_params", "🚀 Launch Parameters")
+g.create_group("constants", "⚖️ Physical Constants")
+g.create_group("velocity_components", "📐 Velocity Components")
+g.create_group("motion_results", "🎯 Motion Results")
+
 # Basic parameters
 g["initial_velocity"] = 50.0    # 初始速度 (m/s)
 g["launch_angle"] = 45.0        # 发射角度 (度)
 g["gravity"] = 9.81             # 重力加速度 (m/s²)
 g["mass"] = 2.0                 # 质量 (kg)
+
+# Assign basic parameters to groups
+g.set_group("initial_velocity", "launch_params")
+g.set_group("launch_angle", "launch_params")
+g.set_group("mass", "launch_params")
+g.set_group("gravity", "constants")
 
 # Calculation functions
 def angle_radians():
@@ -390,6 +499,15 @@ g.add_computed("time_of_flight", time_of_flight, "Total flight time")
 g.add_computed("max_height", max_height, "Maximum height reached")
 g.add_computed("range_distance", range_distance, "Horizontal range")
 g.add_computed("kinetic_energy", kinetic_energy, "Initial kinetic energy")
+
+# Assign computed parameters to logical groups
+g.set_group("angle_radians", "constants")
+g.set_group("velocity_x", "velocity_components")
+g.set_group("velocity_y", "velocity_components")
+g.set_group("time_of_flight", "motion_results")
+g.set_group("max_height", "motion_results")
+g.set_group("range_distance", "motion_results")
+g.set_group("kinetic_energy", "motion_results")
 
 print(f"Max Height: {g['max_height']:.2f} m")
 print(f"Range: {g['range_distance']:.2f} m")
@@ -632,8 +750,116 @@ def calculate_dependency_levels(parameters: Dict, dependencies: Dict) -> Dict:
     
     return levels
 
-def calculate_layout(parameters: Dict, dependencies: Dict) -> Dict:
-    """Calculate node positions using dependency-level-based columnar layout"""
+def calculate_layout(parameters: Dict, dependencies: Dict, groups: Dict = None, parameter_groups: Dict = None) -> Dict:
+    """Calculate node positions using dependency-level-based columnar layout with group support"""
+    positions = {}
+    group_positions = {}  # Store group container positions
+    
+    if not parameters:
+        return positions
+    
+    # If no groups are defined, use the original layout
+    if not groups or not parameter_groups:
+        return calculate_layout_original(parameters, dependencies)
+    
+    # Calculate dependency levels for each node
+    levels = calculate_dependency_levels(parameters, dependencies)
+    
+    # Separate grouped and ungrouped parameters
+    grouped_params = {}  # group_name -> [param_names]
+    ungrouped_params = []
+    
+    for param_name in parameters:
+        group_name = parameter_groups.get(param_name)
+        if group_name and group_name in groups:
+            if group_name not in grouped_params:
+                grouped_params[group_name] = []
+            grouped_params[group_name].append(param_name)
+        else:
+            ungrouped_params.append(param_name)
+    
+    # Group nodes by level, considering groups as single units
+    level_groups = {}
+    max_level = max(levels.values()) if levels else 0
+    
+    # Add groups to level_groups based on their parameters' levels
+    for group_name, param_names in grouped_params.items():
+        # Find the minimum level of all parameters in the group
+        group_level = min(levels[param] for param in param_names)
+        if group_level not in level_groups:
+            level_groups[group_level] = []
+        level_groups[group_level].append(('group', group_name, param_names))
+    
+    # Add ungrouped parameters
+    for param_name in ungrouped_params:
+        level = levels[param_name]
+        if level not in level_groups:
+            level_groups[level] = []
+        level_groups[level].append(('param', param_name, None))
+    
+    # Calculate layout parameters
+    node_height = 1.8  # Height spacing between individual nodes (increased to prevent overlap)
+    group_padding = 0.4  # Padding inside groups
+    group_margin = 0.8  # Margin between groups and individual nodes (increased)
+    column_width = 5.5  # Width spacing between columns (increased for wider nodes)
+    start_x = -2.5  # Starting X position
+    
+    # Position nodes level by level (column by column)
+    for level in range(max_level + 1):
+        if level not in level_groups:
+            continue
+            
+        items_in_level = level_groups[level]
+        column_x = start_x + level * column_width
+        
+        # Calculate total height needed for this column
+        total_height = 0
+        for item_type, item_name, param_names in items_in_level:
+            if item_type == 'group':
+                # Group height = number of parameters * node_height + padding
+                group_height = len(param_names) * node_height + 2 * group_padding
+                total_height += group_height + group_margin
+            else:
+                # Individual parameter
+                total_height += node_height + group_margin
+        
+        # Remove the last margin
+        total_height -= group_margin
+        
+        # Start positioning from the top
+        current_y = total_height / 2
+        
+        for item_type, item_name, param_names in items_in_level:
+            if item_type == 'group':
+                # Position group parameters vertically within the group
+                group_height = len(param_names) * node_height + 2 * group_padding
+                group_center_y = current_y - group_height / 2
+                
+                # Store group position for visual rendering
+                group_positions[item_name] = {
+                    'x': column_x,
+                    'y': group_center_y,
+                    'width': 3.0,  # Will be calculated based on content
+                    'height': group_height
+                }
+                
+                # Position individual parameters within the group
+                param_start_y = current_y - group_padding
+                for i, param_name in enumerate(param_names):
+                    param_y = param_start_y - (i + 0.5) * node_height
+                    positions[param_name] = (column_x, param_y)
+                
+                current_y -= group_height + group_margin
+            else:
+                # Individual parameter
+                param_y = current_y - node_height / 2
+                positions[item_name] = (column_x, param_y)
+                current_y -= node_height + group_margin
+    
+    return positions, group_positions
+
+def calculate_layout_original(parameters: Dict, dependencies: Dict) -> Dict:
+    """Original layout algorithm for backward compatibility"""
     positions = {}
     
     if not parameters:
@@ -688,6 +914,85 @@ def calculate_node_width(param_name: str, param_info: Dict) -> float:
     calculated_width = base_width + (text_length * char_width_factor)
     return max(2.5, min(5.0, calculated_width))  # Constrain between 2.5 and 5.0
 
+def calculate_shared_widths(parameters: Dict, groups: Dict, parameter_groups: Dict, positions: Dict) -> Dict:
+    """Calculate shared widths for parameters in same group or same column"""
+    widths = {}
+    
+    # Calculate individual widths first
+    individual_widths = {}
+    for param_name, param_info in parameters.items():
+        individual_widths[param_name] = calculate_node_width(param_name, param_info)
+    
+    # Group parameters by column (same X position)
+    columns = {}
+    for param_name, (x, y) in positions.items():
+        if x not in columns:
+            columns[x] = []
+        columns[x].append(param_name)
+    
+    # Group parameters by group
+    grouped_params = {}
+    for param_name, group_name in parameter_groups.items():
+        if group_name not in grouped_params:
+            grouped_params[group_name] = []
+        grouped_params[group_name].append(param_name)
+    
+    # Calculate shared widths
+    for param_name in parameters:
+        max_width = individual_widths[param_name]
+        
+        # Find parameters in same group
+        group_name = parameter_groups.get(param_name)
+        if group_name and group_name in grouped_params:
+            for group_param in grouped_params[group_name]:
+                if group_param in individual_widths:
+                    max_width = max(max_width, individual_widths[group_param])
+        
+        # Find parameters in same column
+        param_x = positions[param_name][0]
+        for column_param in columns.get(param_x, []):
+            if column_param in individual_widths:
+                max_width = max(max_width, individual_widths[column_param])
+        
+        widths[param_name] = max_width
+    
+    return widths
+
+def get_group_colors():
+    """Return a list of distinct colors for different groups"""
+    return [
+        'rgba(74, 144, 226, 0.95)',   # Blue
+        'rgba(231, 76, 60, 0.95)',    # Red  
+        'rgba(46, 204, 113, 0.95)',   # Green
+        'rgba(241, 196, 15, 0.95)',   # Yellow
+        'rgba(155, 89, 182, 0.95)',   # Purple
+        'rgba(230, 126, 34, 0.95)',   # Orange
+        'rgba(52, 152, 219, 0.95)',   # Light Blue
+        'rgba(26, 188, 156, 0.95)',   # Turquoise
+        'rgba(192, 57, 43, 0.95)',    # Dark Red
+        'rgba(142, 68, 173, 0.95)',   # Dark Purple
+    ]
+
+def assign_group_colors(groups: Dict, parameter_groups: Dict) -> Dict:
+    """Assign colors to groups and return color mapping for parameters"""
+    colors = get_group_colors()
+    group_color_map = {}
+    param_color_map = {}
+    
+    # Assign colors to groups
+    for i, group_name in enumerate(groups.keys()):
+        group_color_map[group_name] = colors[i % len(colors)]
+    
+    # Assign colors to parameters based on their groups
+    for param_name, group_name in parameter_groups.items():
+        if group_name in group_color_map:
+            param_color_map[param_name] = group_color_map[group_name]
+        else:
+            param_color_map[param_name] = 'rgba(99, 110, 125, 0.95)'  # Default color
+    
+    # Assign default color to ungrouped parameters
+    return param_color_map, group_color_map
+
 def create_plotly_figure(graph_data: Dict):
     """Create interactive Plotly figure"""
     import plotly.graph_objects as go
@@ -731,11 +1036,77 @@ def create_plotly_figure(graph_data: Dict):
         )
         return fig
     
-    # Calculate positions
-    positions = calculate_layout(parameters, dependencies)
+    # Calculate positions with group support
+    groups = graph_data.get("groups", {})
+    parameter_groups = graph_data.get("parameter_groups", {})
+    
+    if groups and parameter_groups:
+        positions, group_positions = calculate_layout(parameters, dependencies, groups, parameter_groups)
+        # Calculate shared widths and colors for grouped parameters
+        shared_widths = calculate_shared_widths(parameters, groups, parameter_groups, positions)
+        param_colors, group_colors = assign_group_colors(groups, parameter_groups)
+    else:
+        positions = calculate_layout_original(parameters, dependencies)
+        group_positions = {}
+        # Use individual widths and default colors for ungrouped parameters
+        shared_widths = {name: calculate_node_width(name, info) for name, info in parameters.items()}
+        param_colors = {name: 'rgba(99, 110, 125, 0.95)' for name in parameters}
+        group_colors = {}
     
     # Create figure
     fig = go.Figure()
+    
+    # Add group containers first (behind everything)
+    for group_name, group_pos in group_positions.items():
+        group_info = groups.get(group_name, {})
+        group_description = group_info.get('description', group_name)
+        
+        # Calculate group width based on shared width of contained parameters
+        group_width = 3.5  # Base width
+        for param_name in group_info.get('parameters', []):
+            if param_name in shared_widths:
+                param_width = shared_widths[param_name]
+                group_width = max(group_width, param_width + 0.8)  # Add padding
+        
+        # Get group color (lighter version for background)
+        group_color = group_colors.get(group_name, 'rgba(100, 150, 200, 0.6)')
+        # Convert to lighter background color
+        if group_color.startswith('rgba('):
+            # Extract RGB values and make lighter
+            rgb_part = group_color[5:-1].split(',')
+            r, g, b = int(rgb_part[0]), int(rgb_part[1]), int(rgb_part[2])
+            # Lighten the color for background
+            bg_color = f'rgba({r}, {g}, {b}, 0.15)'
+            border_color = f'rgba({r}, {g}, {b}, 0.6)'
+            text_color = f'rgba({max(0, r-30)}, {max(0, g-30)}, {max(0, b-30)}, 0.9)'
+        else:
+            bg_color = 'rgba(220, 230, 240, 0.15)'
+            border_color = 'rgba(100, 150, 200, 0.6)'
+            text_color = 'rgba(70, 120, 170, 0.9)'
+        
+        # Draw group container rectangle
+        fig.add_shape(
+            type="rect",
+            x0=group_pos['x'] - group_width/2,
+            y0=group_pos['y'] - group_pos['height']/2,
+            x1=group_pos['x'] + group_width/2,
+            y1=group_pos['y'] + group_pos['height']/2,
+            fillcolor=bg_color,
+            line=dict(color=border_color, width=2, dash='dash'),
+            layer="below"
+        )
+        
+        # Add group title
+        fig.add_annotation(
+            x=group_pos['x'],
+            y=group_pos['y'] + group_pos['height']/2 + 0.3,
+            text=f"<b>{group_description}</b>",
+            showarrow=False,
+            font=dict(size=13, color=text_color),
+            bgcolor='rgba(255, 255, 255, 0.9)',
+            bordercolor=border_color,
+            borderwidth=1
+        )
     
     # Add edges with arrows from right pin to left pin
     for param_name, deps in dependencies.items():
@@ -745,9 +1116,9 @@ def create_plotly_figure(graph_data: Dict):
                 if dep in positions:
                     start_pos = positions[dep]
                     
-                    # Calculate dynamic pin positions based on node widths
-                    start_width = calculate_node_width(dep, parameters[dep])
-                    end_width = calculate_node_width(param_name, parameters[param_name])
+                    # Calculate dynamic pin positions based on shared widths
+                    start_width = shared_widths.get(dep, 3.0)
+                    end_width = shared_widths.get(param_name, 3.0)
                     rect_height = 0.8
                     
                     # Start from right side pin of source node
@@ -869,15 +1240,14 @@ def create_plotly_figure(graph_data: Dict):
     for i, (param_name, pos) in enumerate(positions.items()):
         param_info = parameters[param_name]
         
-        # Calculate dynamic rectangle width based on text content
-        width = calculate_node_width(param_name, param_info)
-        
+        # Use shared width for consistent appearance
+        width = shared_widths.get(param_name, 3.0)
         height = 0.8
         
-        # Modern gradient color with subtle depth
-        fill_color = 'rgba(99, 110, 125, 0.95)'
+        # Get color based on group membership
+        fill_color = param_colors.get(param_name, 'rgba(99, 110, 125, 0.95)')
         
-        # Add modern styled rectangle with shadow effect
+        # Add modern styled rectangle with group-based colors
         fig.add_shape(
             type="rect",
             x0=pos[0] - width/2,
