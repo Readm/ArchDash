@@ -35,10 +35,9 @@ def test_nonexistent_parameter_dependency():
     def calculation_with_nonexistent_dep():
         return g["nonexistent_param"] * 2
     
-    g.add_computed("dependent_param", calculation_with_nonexistent_dep, "依赖不存在参数")
-    
-    # 测试访问依赖不存在参数的计算参数时，系统返回0（错误处理）
-    assert g["dependent_param"] == 0
+    # 测试添加依赖不存在参数的计算参数时，应该抛出异常
+    with pytest.raises(ValueError, match="参数 'nonexistent_param' 不存在"):
+        g.add_computed("dependent_param", calculation_with_nonexistent_dep, "依赖不存在参数")
 
 def test_missing_dependency_in_chain():
     """测试依赖链中缺失依赖的情况"""

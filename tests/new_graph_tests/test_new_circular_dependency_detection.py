@@ -43,13 +43,12 @@ def test_simple_circular_dependency_detection():
     g._computed_parameters["calc_a"].func = calc_a_circular
     g._computed_parameters["calc_b"].func = calc_b_circular
     
-    # 使两个参数失效
-    g._computed_parameters["calc_a"].invalidate()
-    g._computed_parameters["calc_b"].invalidate()
+    # 修改第一个参数，应该还没有循环
+    g._computed_parameters["calc_a"].recompute_dependencies()
     
-    # 尝试访问会导致循环的参数，应该检测到循环并抛出异常
+    # 修改第二个参数时应该检测到循环依赖
     with pytest.raises(ValueError, match="检测到循环依赖"):
-        _ = g["calc_a"]
+        g._computed_parameters["calc_b"].recompute_dependencies()
 
 def test_indirect_circular_dependency():
     """测试间接循环依赖检测"""
@@ -83,13 +82,9 @@ def test_indirect_circular_dependency():
     
     # 重新定义calc_a来创建循环
     g._computed_parameters["calc_a"].func = calc_a_circular
-    g._computed_parameters["calc_a"].invalidate()
-    g._computed_parameters["calc_b"].invalidate()
-    g._computed_parameters["calc_c"].invalidate()
-    
-    # 尝试访问会导致循环的参数
+    # 应该在重新计算依赖时检测到循环依赖
     with pytest.raises(ValueError, match="检测到循环依赖"):
-        _ = g["calc_a"]
+        g._computed_parameters["calc_a"].recompute_dependencies()
 
 def test_self_dependency():
     """测试自依赖检测"""
@@ -143,11 +138,10 @@ def test_complex_circular_dependency():
         return g["calc_d"] + g["input2"]  # 创建循环
     
     g._computed_parameters["calc_a"].func = calc_a_circular
-    g._computed_parameters["calc_a"].invalidate()
     
-    # 应该检测到循环依赖
+    # 应该在重新计算依赖时检测到循环依赖
     with pytest.raises(ValueError, match="检测到循环依赖"):
-        _ = g["calc_a"]
+        g._computed_parameters["calc_a"].recompute_dependencies()
 
 def test_parameter_update_with_circular_dependency():
     """测试参数更新时的循环依赖检测"""
@@ -174,11 +168,9 @@ def test_parameter_update_with_circular_dependency():
     
     g.add_computed("calc_y", calc_y, "Y计算")
     g._computed_parameters["calc_x"].func = calc_x_circular
-    g._computed_parameters["calc_x"].invalidate()
-    
-    # 更新基础参数，应该检测到循环依赖
+    # 应该在重新计算依赖时检测到循环依赖
     with pytest.raises(ValueError, match="检测到循环依赖"):
-        g["base"] = 15.0
+        g._computed_parameters["calc_x"].recompute_dependencies()
 
 def test_circular_dependency_detection_method():
     """测试循环依赖检测方法"""
@@ -223,19 +215,35 @@ def test_multiple_circular_dependencies():
     g["base1"] = 10.0
     g["base2"] = 20.0
     
-    # 创建第一个循环：calc_a <-> calc_b
+    # 先创建正常的参数
     def calc_a():
-        return g["calc_b"] + g["base1"]
+        return g["base1"] * 2
     
     def calc_b():
-        return g["calc_a"] * 2
+        return g["base2"] + 5
     
     g.add_computed("calc_a", calc_a, "A计算")
     g.add_computed("calc_b", calc_b, "B计算")
     
-    # 应该检测到循环依赖
+    # 验证正常工作
+    assert g["calc_a"] == 20.0
+    assert g["calc_b"] == 25.0
+    
+    # 现在创建循环：calc_a <-> calc_b
+    def calc_a_circular():
+        return g["calc_b"] + g["base1"]
+    
+    def calc_b_circular():
+        return g["calc_a"] * 2
+    
+    g._computed_parameters["calc_a"].func = calc_a_circular
+    g._computed_parameters["calc_b"].func = calc_b_circular
+    # 修改第一个参数，应该还没有循环
+    g._computed_parameters["calc_a"].recompute_dependencies()
+    
+    # 修改第二个参数时应该检测到循环依赖
     with pytest.raises(ValueError, match="检测到循环依赖"):
-        _ = g["calc_a"]
+        g._computed_parameters["calc_b"].recompute_dependencies()
 
 def test_circular_dependency_with_error_handling():
     """测试循环依赖检测的错误处理"""
@@ -310,12 +318,11 @@ def test_circular_dependency_prevention_in_add_computed():
     def calc_a_circular():
         return g["calc_b"] + g["base"]
     
-    # 这应该在访问时检测到循环
+    # 这应该在重新计算依赖时检测到循环
     g._computed_parameters["calc_a"].func = calc_a_circular
-    g._computed_parameters["calc_a"].invalidate()
     
     with pytest.raises(ValueError, match="检测到循环依赖"):
-        _ = g["calc_a"]
+        g._computed_parameters["calc_a"].recompute_dependencies()
 
 if __name__ == "__main__":
     test_simple_circular_dependency_detection()

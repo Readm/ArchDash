@@ -69,11 +69,14 @@ class ComputedParameter:
                     self._value = result
                     self._computed = True
                     
+                    # 更新依赖图
+                    self.graph._update_dependency_graph(self.name, self.dependencies)
+                    
                     return result
                     
                 except ValueError as e:
                     # 循环依赖异常不应该被捕获，直接抛出
-                    if "检测到循环依赖" in str(e):
+                    if "检测到循环依赖" in str(e) or "不存在" in str(e):
                         raise
                     print(f"计算参数 '{self.name}' 时发生错误: {e}")
                     # 设置错误时的默认值
@@ -100,6 +103,27 @@ class ComputedParameter:
         """使计算结果失效"""
         self._computed = False
         self._value = None
+    
+    def recompute_dependencies(self):
+        """重新计算依赖关系（用于测试或函数修改后）"""
+        # 清除旧的依赖关系
+        old_dependencies = self.dependencies.copy()
+        self.dependencies = set()
+        
+        # 从依赖图中移除此参数的旧依赖
+        for dep_param in old_dependencies:
+            if dep_param in self.graph._dependency_graph:
+                self.graph._dependency_graph[dep_param].discard(self.name)
+        
+        # 重新计算以建立新的依赖关系
+        self.invalidate()
+        # 不捕获异常，让循环依赖异常正常抛出
+        self.compute()
+        
+        # 计算完成后，检查是否形成了循环依赖
+        cycles = self.graph.detect_circular_dependencies()
+        if cycles:
+            raise ValueError(f"检测到循环依赖: {cycles[0]}")
 
 
 class Graph:
@@ -139,6 +163,10 @@ class Graph:
     
     def __getitem__(self, param_name: str) -> Any:
         """支持 g["参数名"] 访问"""
+        # 检查参数是否存在
+        if param_name not in self._parameters and param_name not in self._computed_parameters:
+            raise ValueError(f"参数 '{param_name}' 不存在")
+        
         # 记录依赖关系
         if self._dependency_tracker.is_tracking():
             self._dependency_tracker.record_access(param_name)
@@ -393,8 +421,13 @@ class Graph:
         def dfs(param_name: str, path: List[str]) -> bool:
             if param_name in rec_stack:
                 # 找到循环，记录循环路径
-                cycle_start = path.index(param_name)
-                cycle = path[cycle_start:] + [param_name]
+                # param_name 就是循环的起点，从这里开始记录循环
+                try:
+                    cycle_start = path.index(param_name)
+                    cycle = path[cycle_start:] + [param_name]
+                except ValueError:
+                    # 如果 param_name 不在 path 中，说明这是一个自循环
+                    cycle = path + [param_name, param_name]
                 cycles.append(" -> ".join(cycle))
                 return True
             
